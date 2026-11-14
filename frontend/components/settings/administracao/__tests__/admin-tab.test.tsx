@@ -53,7 +53,9 @@ function mockAdminFetch(): void {
               vectora_token_masked: "",
               vectora_token_configured: false,
             }
-          : {};
+          : url.includes("/admin/traces")
+            ? { traces: [] }
+            : {};
       return new Response(JSON.stringify(body), { status: 200 });
     }),
   );
