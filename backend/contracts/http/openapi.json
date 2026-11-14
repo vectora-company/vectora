@@ -14890,6 +14890,35 @@
         ]
       }
     },
+    "/auth/secrets/keys": {
+      "get": {
+        "description": "Lista somente os nomes das credenciais do usuário autenticado.",
+        "operationId": "list_secret_keys_auth_secrets_keys_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "title": "Response List Secret Keys Auth Secrets Keys Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Secret Keys",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
     "/auth/setup-local": {
       "post": {
         "description": "Configura a instância pra modo local (uso no próprio PC, sem conta).\n\nSó permitido no primeiro acesso (instância ainda sem nenhum usuário) —\nevita que a rota pública sirva de vetor pra desligar auth numa instância\nmulti-usuário já configurada. Persiste ``auth_required=false`` e o\nnome/empresa do usuário local em ``app_settings`` (SQLite,\n`backend/workspace/runtime_settings.py`) — nunca no ``.env``, que fica só\npra segredos. Não cria linha na tabela `users` — daqui pra frente o\n`AuthMiddleware` libera todas as rotas e os handlers usam o fallback\n`\"local\"` (ver `chat.py::_user_id_from_request`) como user_id.",

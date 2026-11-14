@@ -106,6 +106,7 @@ class InternalSecretsProvider:
         await db.commit()
 
     async def list_keys(self, user_id: str) -> list[str]:
+        self._get_key(user_id)
         db = await _get_db()
         async with db.execute(
             "SELECT key FROM secrets WHERE user_id = ?", (user_id,)
