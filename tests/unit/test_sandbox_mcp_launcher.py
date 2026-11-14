@@ -135,7 +135,9 @@ async def test_programa_fora_do_sistema_tem_a_pasta_de_instalacao_somente_leitur
 
 
 @pytest.mark.asyncio
-async def test_programa_inexistente_e_recusado_com_mensagem_clara():
+async def test_programa_inexistente_e_recusado_com_mensagem_clara(monkeypatch):
+    # Isola a validação do comando da disponibilidade de bwrap no runner.
+    monkeypatch.setattr(mcp_launcher, "jail_available", lambda: True)
     with pytest.raises(McpSandboxUnavailableError, match="não encontrado"):
         await build_jailed_launch("srv", "programa-que-nao-existe-xyz", [])
 
