@@ -6,8 +6,12 @@ paralelos não-destrutivos, e interrupção HITL no meio de um lote misto.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import replace
+from types import SimpleNamespace
+from typing import Any
+from unittest.mock import AsyncMock, Mock
 
 import aiosqlite
 import pytest
@@ -20,6 +24,7 @@ from backend.engine.conversation_loop import (
     _load_persistent_context_memories,
     _persist_decision_model_record,
     _preserve_latest_tool_result,
+    _record_turn_telemetry,
     resume_conversation,
     run_conversation,
 )
@@ -39,6 +44,7 @@ from backend.engine.stream_events import (
     WorkbenchInvalidate,
 )
 from backend.persistence.native.session_store import SessionStore
+from backend.persistence.telemetry import telemetry
 from backend.scheduling.dag import DAGStore
 from backend.services.context_planner import compute_transcript_hash
 from backend.services.policy_compiler import PolicySnapshot, compile_policy_snapshot
@@ -56,6 +62,56 @@ from backend.vtypes.message import (
     VMessage,
     VMessageChunk,
 )
+
+
+@pytest.mark.parametrize(
+    ("outcome", "expected_status"),
+    [("success", "completed"), ("error", "error"), ("cancel", "cancelled")],
+)
+async def test_harness_telemetry_records_complete_turn_lifecycle(
+    monkeypatch, outcome: str, expected_status: str
+) -> None:
+    start = AsyncMock()
+    end = AsyncMock()
+    record_error = Mock()
+    monkeypatch.setattr(telemetry, "turn_start", start)
+    monkeypatch.setattr(telemetry, "turn_end", end)
+    monkeypatch.setattr(telemetry, "record_error", record_error)
+
+    async def invoke(*, config: Any, thread_id: str) -> Any:
+        if outcome == "error":
+            raise ValueError("prompt and credential payload")
+        if outcome == "cancel":
+            raise asyncio.CancelledError
+        return SimpleNamespace(stopped_reason="completed")
+
+    decorated = _record_turn_telemetry(invoke)
+    config = SimpleNamespace(run_id="run-stable")
+    if outcome == "success":
+        result = await decorated(config=config, thread_id="thread-1")
+        assert result.stopped_reason == "completed"
+    else:
+        exception = (
+            ValueError
+            if outcome == "error"
+            else asyncio.CancelledError
+        )
+        with pytest.raises(exception):
+            await decorated(config=config, thread_id="thread-1")
+
+    start.assert_awaited_once_with(None, "run-stable")
+    end.assert_awaited_once()
+    end_call = end.await_args
+    assert end_call is not None
+    assert end_call.args[1:3] == ("run-stable", expected_status)
+    assert end_call.args[3] >= 0
+    if outcome == "success":
+        record_error.assert_not_called()
+    else:
+        record_error.assert_called_once()
+        assert record_error.call_args.kwargs["turn_id"] == "run-stable"
+        assert record_error.call_args.kwargs["thread_id"] == "thread-1"
+        assert record_error.call_args.kwargs["include_message"] is False
 
 
 def _register(registry: ToolRegistry, nome: str) -> None:
