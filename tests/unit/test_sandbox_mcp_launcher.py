@@ -92,7 +92,8 @@ def test_pasta_do_servidor_fica_em_vectora_home_e_o_nome_e_sanitizado(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_comando_roda_o_bwrap_pelo_lancador_com_ambiente_herdado():
+async def test_comando_roda_o_bwrap_pelo_lancador_com_ambiente_herdado(monkeypatch):
+    monkeypatch.setattr(mcp_launcher, "jail_available", lambda: True)
     try:
         launch = await build_jailed_launch(
             "srv", sys.executable, ["-m", "algo"], allow_hosts=("x.com",)
@@ -115,8 +116,9 @@ async def test_comando_roda_o_bwrap_pelo_lancador_com_ambiente_herdado():
 
 @pytest.mark.asyncio
 async def test_programa_fora_do_sistema_tem_a_pasta_de_instalacao_somente_leitura(
-    tmp_path,
+    monkeypatch, tmp_path
 ):
+    monkeypatch.setattr(mcp_launcher, "jail_available", lambda: True)
     instalacao = tmp_path / "ferramentas" / "node-20"
     (instalacao / "bin").mkdir(parents=True)
     programa = instalacao / "bin" / "meu-servidor"
@@ -151,7 +153,8 @@ async def test_sem_bwrap_falha_antes_de_iniciar(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_release_encerra_o_proxy_do_servidor():
+async def test_release_encerra_o_proxy_do_servidor(monkeypatch):
+    monkeypatch.setattr(mcp_launcher, "jail_available", lambda: True)
     launch = await build_jailed_launch("srv", sys.executable, [])
     assert egress_registry.get("mcp:srv") is not None
 
