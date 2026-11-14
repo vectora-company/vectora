@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import {
   Download,
   Loader2,
@@ -11,7 +11,10 @@ import {
 } from "lucide-react";
 
 import { useContextGraph } from "@/lib/hooks/use-context-graph";
-import type { ContextGraphExportFormat } from "@/lib/hooks/use-context-graph";
+import type {
+  ContextGraphExportFormat,
+  FalkorDBPushResult,
+} from "@/lib/hooks/use-context-graph";
 import { useWorkspacesStore } from "@/lib/stores/workspaces-store";
 import { useContextGraphSettingsStore } from "@/lib/stores/context-graph-settings-store";
 import { WorkbenchSettingsSurface } from "@/components/workbench/settings/workbench-settings-surface";
@@ -52,6 +55,9 @@ export function ContextGraphTab({
     fetchGraphData,
     pathBetween,
     exportGraph,
+    falkordbConfig,
+    saveFalkordbConfig,
+    pushToFalkordb,
   } = useContextGraph(workspaceId);
   const [showReport, setShowReport] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -59,6 +65,14 @@ export function ContextGraphTab({
     useState<ContextGraphExportFormat>("graphml");
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState(false);
+  const [showFalkordb, setShowFalkordb] = useState(false);
+  const [falkordbHost, setFalkordbHost] = useState("");
+  const [falkordbPort, setFalkordbPort] = useState("6379");
+  const [falkordbGraph, setFalkordbGraph] = useState("context graph");
+  const [falkordbUsername, setFalkordbUsername] = useState("");
+  const [falkordbPassword, setFalkordbPassword] = useState("");
+  const [falkordbBusy, setFalkordbBusy] = useState(false);
+  const [falkordbMessage, setFalkordbMessage] = useState<string | null>(null);
   const fileTypes = useContextGraphSettingsStore((s) => s.fileTypes);
   const graphMode = useContextGraphSettingsStore((s) => s.mode);
 
@@ -93,6 +107,60 @@ export function ContextGraphTab({
       setExportError(true);
     } finally {
       setExporting(false);
+    }
+  }
+
+  async function handleSaveFalkordb(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setFalkordbBusy(true);
+    setFalkordbMessage(null);
+    try {
+      await saveFalkordbConfig({
+        host: falkordbHost,
+        port: Number(falkordbPort),
+        graph_name: falkordbGraph,
+        username: falkordbUsername,
+        password: falkordbPassword,
+      });
+      setFalkordbPassword("");
+      setFalkordbMessage(m.graph_falkordb_saved());
+    } catch (error) {
+      setFalkordbMessage(
+        error instanceof Error ? error.message : m.graph_falkordb_failed(),
+      );
+    } finally {
+      setFalkordbBusy(false);
+    }
+  }
+
+  async function handleFalkordbPush() {
+    const destination = `${falkordbConfig.host}:${falkordbConfig.port}/${falkordbConfig.graph_name}`;
+    const nodeCount = status.node_count ?? 0;
+    const edgeCount = status.edge_count ?? 0;
+    if (
+      !window.confirm(
+        m.graph_falkordb_confirm({
+          destination,
+          nodes: nodeCount,
+          edges: edgeCount,
+        }),
+      )
+    ) {
+      return;
+    }
+    setFalkordbBusy(true);
+    setFalkordbMessage(null);
+    try {
+      const result: FalkorDBPushResult = await pushToFalkordb();
+      setFalkordbMessage(
+        m.graph_falkordb_success({ nodes: result.nodes, edges: result.edges }),
+      );
+    } catch (error) {
+      setFalkordbMessage(
+        error instanceof Error ? error.message : m.graph_falkordb_failed(),
+      );
+    } finally {
+      setFalkordbBusy(false);
     }
   }
 
@@ -184,6 +252,22 @@ export function ContextGraphTab({
           </>
         )}
 
+        {isBuilt && (
+          <button
+            type="button"
+            onClick={() => {
+              setFalkordbHost(falkordbConfig.host ?? "");
+              setFalkordbPort(String(falkordbConfig.port ?? 6379));
+              setFalkordbGraph(falkordbConfig.graph_name ?? "context graph");
+              setShowFalkordb((value) => !value);
+              setFalkordbMessage(null);
+            }}
+            className="text-xs px-2.5 py-1 rounded border border-border text-muted-foreground hover:text-foreground"
+          >
+            {m.graph_falkordb_title()}
+          </button>
+        )}
+
         {/* Configurações do grafo: tipos de arquivo + modo. */}
         <button
           onClick={() => setShowSettings((v) => !v)}
@@ -202,6 +286,98 @@ export function ContextGraphTab({
         <p role="alert" className="px-3 py-1 text-xs text-destructive">
           {m.graph_export_failed()}
         </p>
+      )}
+
+      {showFalkordb && isBuilt && (
+        <form
+          onSubmit={handleSaveFalkordb}
+          className="grid grid-cols-2 gap-2 p-3 border-b border-border/60 text-xs"
+        >
+          <label className="flex flex-col gap-1">
+            {m.graph_falkordb_host()}
+            <input
+              required
+              value={falkordbHost}
+              onChange={(event) => setFalkordbHost(event.target.value)}
+              autoComplete="off"
+              className="rounded border border-border bg-background px-2 py-1"
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            {m.graph_falkordb_port()}
+            <input
+              required
+              type="number"
+              min="1"
+              max="65535"
+              value={falkordbPort}
+              onChange={(event) => setFalkordbPort(event.target.value)}
+              className="rounded border border-border bg-background px-2 py-1"
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            {m.graph_falkordb_graph()}
+            <input
+              required
+              maxLength={128}
+              value={falkordbGraph}
+              onChange={(event) => setFalkordbGraph(event.target.value)}
+              className="rounded border border-border bg-background px-2 py-1"
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            {m.graph_falkordb_username()}
+            <input
+              value={falkordbUsername}
+              onChange={(event) => setFalkordbUsername(event.target.value)}
+              placeholder={
+                falkordbConfig.has_username
+                  ? m.graph_falkordb_saved_credential()
+                  : ""
+              }
+              autoComplete="off"
+              className="rounded border border-border bg-background px-2 py-1"
+            />
+          </label>
+          <label className="col-span-2 flex flex-col gap-1">
+            {m.graph_falkordb_password()}
+            <input
+              type="password"
+              value={falkordbPassword}
+              onChange={(event) => setFalkordbPassword(event.target.value)}
+              placeholder={
+                falkordbConfig.has_password
+                  ? m.graph_falkordb_saved_credential()
+                  : ""
+              }
+              autoComplete="new-password"
+              className="rounded border border-border bg-background px-2 py-1"
+            />
+          </label>
+          <div className="col-span-2 flex items-center gap-2">
+            <button
+              type="submit"
+              disabled={falkordbBusy}
+              className="rounded bg-primary px-2.5 py-1 text-primary-foreground disabled:opacity-50"
+            >
+              {m.graph_falkordb_save()}
+            </button>
+            {falkordbConfig.configured && (
+              <button
+                type="button"
+                onClick={() => void handleFalkordbPush()}
+                disabled={falkordbBusy}
+                className="rounded border border-border px-2.5 py-1 disabled:opacity-50"
+              >
+                {m.graph_falkordb_send()}
+              </button>
+            )}
+            {falkordbMessage && <span role="status">{falkordbMessage}</span>}
+          </div>
+          <p className="col-span-2 text-muted-foreground">
+            {m.graph_falkordb_description()}
+          </p>
+        </form>
       )}
 
       <WorkbenchSettingsSurface

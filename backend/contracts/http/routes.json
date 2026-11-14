@@ -2073,6 +2073,22 @@
   },
   {
     "methods": [
+      "DELETE",
+      "GET",
+      "PUT"
+    ],
+    "name": "get_falkordb_config_workspaces__workspace_id__context_graph_falkordb_config_get",
+    "path": "/workspaces/{workspace_id}/context-graph/falkordb/config"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "name": "push_graph_to_falkordb_workspaces__workspace_id__context_graph_falkordb_push_post",
+    "path": "/workspaces/{workspace_id}/context-graph/falkordb/push"
+  },
+  {
+    "methods": [
       "GET"
     ],
     "name": "get_html_workspaces__workspace_id__context_graph_html_get",

@@ -21,9 +21,11 @@ vi.mock("@/lib/paraglide/messages", () => ({
   m: new Proxy(
     {},
     {
-      get: (_t, prop) => (args?: { n?: number }) => {
+      get: (_t, prop) => (args?: { n?: number; destination?: string }) => {
         if (prop === "graph_nodes_count") return `${args?.n ?? 0} nós`;
         if (prop === "graph_edges_count") return `${args?.n ?? 0} arestas`;
+        if (prop === "graph_falkordb_confirm")
+          return `Confirmar ${args?.destination ?? ""}`;
         return String(prop);
       },
     },
@@ -49,6 +51,10 @@ const mockExportGraph = vi.fn(() => Promise.resolve(new Blob(["graph"])));
 const mockPathBetween = vi.fn(() =>
   Promise.resolve({ answer: "", nodes: [], edges: [] }),
 );
+const mockSaveFalkordbConfig = vi.fn(() =>
+  Promise.resolve({ configured: true }),
+);
+const mockPushToFalkordb = vi.fn(() => Promise.resolve({ nodes: 2, edges: 1 }));
 const mockUseContextGraph = vi.fn();
 
 vi.mock("@/lib/hooks/use-context-graph", () => ({
@@ -75,6 +81,7 @@ function setup(
     status?: object;
     report?: string | null;
     loading?: boolean;
+    falkordbConfig?: object;
   } = {},
 ) {
   mockUseContextGraph.mockReturnValue({
@@ -91,6 +98,13 @@ function setup(
     fetchGraphData: mockFetchGraphData,
     exportGraph: mockExportGraph,
     pathBetween: mockPathBetween,
+    falkordbConfig: {
+      configured: false,
+      has_username: false,
+      has_password: false,
+    },
+    saveFalkordbConfig: mockSaveFalkordbConfig,
+    pushToFalkordb: mockPushToFalkordb,
     ...overrides,
   });
 }
@@ -117,6 +131,59 @@ import {
 // ── testes ───────────────────────────────────────────────────────────────────
 
 describe("ContextGraphTab", () => {
+  describe("destino FalkorDB", () => {
+    it("mostra o destino e pede confirmação antes de enviar", async () => {
+      setup({
+        status: { status: "done", node_count: 2, edge_count: 1 },
+        falkordbConfig: {
+          configured: true,
+          host: "graph.example.com",
+          port: 6380,
+          graph_name: "project",
+          has_username: true,
+          has_password: true,
+        },
+      });
+      const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+      render(<ContextGraphTab threadId="t1" />);
+      fireEvent.click(
+        screen.getByRole("button", { name: "graph_falkordb_title" }),
+      );
+      fireEvent.click(
+        screen.getByRole("button", { name: "graph_falkordb_send" }),
+      );
+      await act(async () => Promise.resolve());
+      expect(confirm).toHaveBeenCalledWith(
+        "Confirmar graph.example.com:6380/project",
+      );
+      expect(mockPushToFalkordb).toHaveBeenCalledOnce();
+      confirm.mockRestore();
+    });
+
+    it("não envia quando a confirmação é recusada", () => {
+      setup({
+        status: { status: "done", node_count: 1, edge_count: 0 },
+        falkordbConfig: {
+          configured: true,
+          host: "graph.example.com",
+          port: 6379,
+          graph_name: "project",
+          has_username: false,
+          has_password: false,
+        },
+      });
+      vi.spyOn(window, "confirm").mockReturnValue(false);
+      render(<ContextGraphTab threadId="t1" />);
+      fireEvent.click(
+        screen.getByRole("button", { name: "graph_falkordb_title" }),
+      );
+      fireEvent.click(
+        screen.getByRole("button", { name: "graph_falkordb_send" }),
+      );
+      expect(mockPushToFalkordb).not.toHaveBeenCalled();
+    });
+  });
+
   describe("exportação", () => {
     it("baixa o formato selecionado quando o grafo está pronto", async () => {
       setup({ status: { status: "done", node_count: 2 } });

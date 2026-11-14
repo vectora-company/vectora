@@ -61,6 +61,20 @@ export interface GraphQueryResult {
 export type ContextGraphExportFormat =
   "graphml" | "cypher" | "canvas" | "svg" | "obsidian";
 
+export interface FalkorDBConfig {
+  configured: boolean;
+  host?: string | null;
+  port?: number | null;
+  graph_name?: string | null;
+  has_username: boolean;
+  has_password: boolean;
+}
+
+export interface FalkorDBPushResult {
+  nodes: number;
+  edges: number;
+}
+
 function base(workspaceId: string): string {
   return `/workspaces/${encodeURIComponent(workspaceId)}/context-graph`;
 }
@@ -78,6 +92,77 @@ export function useContextGraph(workspaceId: string | null | undefined) {
   const [status, setStatus] = useState<GraphStatus>({ status: "unknown" });
   const [report, setReport] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [falkordbConfig, setFalkordbConfig] = useState<FalkorDBConfig>({
+    configured: false,
+    has_username: false,
+    has_password: false,
+  });
+
+  const fetchFalkordbConfig = useCallback(async () => {
+    if (!workspaceId) return;
+    const res = await fetch(`${base(workspaceId)}/falkordb/config`).catch(
+      () => null,
+    );
+    if (!res?.ok) return;
+    setFalkordbConfig(
+      (await asJson<FalkorDBConfig>(res, {
+        configured: false,
+        has_username: false,
+        has_password: false,
+      })) ?? { configured: false, has_username: false, has_password: false },
+    );
+  }, [workspaceId]);
+
+  const saveFalkordbConfig = useCallback(
+    async (config: {
+      host: string;
+      port: number;
+      graph_name: string;
+      username?: string;
+      password?: string;
+    }) => {
+      if (!workspaceId) throw new Error("Workspace indisponível");
+      const res = await fetch(`${base(workspaceId)}/falkordb/config`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          host: config.host,
+          port: config.port,
+          graph_name: config.graph_name,
+          ...(config.username ? { username: config.username } : {}),
+          ...(config.password ? { password: config.password } : {}),
+        }),
+      });
+      if (!res.ok) {
+        const detail = await res.json().catch(() => null);
+        throw new Error(
+          (detail as { detail?: string } | null)?.detail ??
+            `Falha ao salvar a conexão (${res.status})`,
+        );
+      }
+      const saved = (await res.json()) as FalkorDBConfig;
+      setFalkordbConfig(saved);
+      return saved;
+    },
+    [workspaceId],
+  );
+
+  const pushToFalkordb = useCallback(async () => {
+    if (!workspaceId) throw new Error("Workspace indisponível");
+    const res = await fetch(`${base(workspaceId)}/falkordb/push`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirmed: true }),
+    });
+    if (!res.ok) {
+      const detail = await res.json().catch(() => null);
+      throw new Error(
+        (detail as { detail?: string } | null)?.detail ??
+          `Falha ao enviar o grafo (${res.status})`,
+      );
+    }
+    return (await res.json()) as FalkorDBPushResult;
+  }, [workspaceId]);
 
   const fetchStatus = useCallback(async () => {
     if (!workspaceId) return;
@@ -104,6 +189,11 @@ export function useContextGraph(workspaceId: string | null | undefined) {
     // oxlint-disable-next-line react/set-state-in-effect
     fetchStatus();
   }, [fetchStatus]);
+
+  useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect
+    fetchFalkordbConfig();
+  }, [fetchFalkordbConfig]);
 
   useEffect(() => {
     // oxlint-disable-next-line react/set-state-in-effect
@@ -301,5 +391,9 @@ export function useContextGraph(workspaceId: string | null | undefined) {
     explainNode,
     queryGraph,
     pathBetween,
+    falkordbConfig,
+    fetchFalkordbConfig,
+    saveFalkordbConfig,
+    pushToFalkordb,
   };
 }

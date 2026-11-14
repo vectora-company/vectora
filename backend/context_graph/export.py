@@ -1475,6 +1475,8 @@ def push_to_falkordb(
     password: str | None = None,
     communities: dict[int, list[str]] | None = None,
     graph_name: str = "context graph",
+    ssl: bool = False,
+    pinned_ip: str | None = None,
 ) -> dict[str, int]:
     """Push graph directly to a running FalkorDB instance via the Python SDK.
 
@@ -1527,48 +1529,99 @@ def push_to_falkordb(
     # user. Credentials embedded in the URI take precedence over the args.
     connect_user = parsed.username or (user if password else None)
     connect_password = parsed.password or (password or None)
-    db = FalkorDB(
-        host=parsed.hostname or "localhost",
-        port=parsed.port or 6379,
-        username=connect_user,
-        password=connect_password,
-    )
-    graph = db.select_graph(graph_name)
-    nodes_pushed = 0
-    edges_pushed = 0
+    host = parsed.hostname or "localhost"
+    port = parsed.port or 6379
+    if ssl and pinned_ip:
+        # Connect to the IP that passed the SSRF and egress checks while keeping
+        # the original hostname for TLS SNI and certificate hostname validation.
+        import socket
 
-    for node_id, data in G.nodes(data=True):
-        props = {
-            k: v
-            for k, v in data.items()
-            if isinstance(v, (str, int, float, bool)) and not k.startswith("_")
-        }
-        props["id"] = node_id
-        cid = node_community.get(node_id)
-        if cid is not None:
-            props["community"] = cid
-        ftype = _safe_label(data.get("file_type", "Entity").capitalize())
-        graph.query(
-            f"MERGE (n:{ftype} {{id: $id}}) SET n += $props",
-            {"id": node_id, "props": props},
+        from redis.connection import ConnectionPool, SSLConnection
+
+        class PinnedSSLConnection(SSLConnection):
+            def __init__(self, validated_ip: str, **kwargs):
+                self._validated_ip = validated_ip
+                super().__init__(**kwargs)
+
+            def _connect(self):
+                sock = socket.create_connection(
+                    (self._validated_ip, self.port),
+                    self.socket_connect_timeout,
+                    self.source_address,
+                )
+                try:
+                    wrap_socket = getattr(self, "_wrap_socket_with_ssl", None)
+                    if wrap_socket is None:
+                        wrap_socket = self._wrap_socket
+                    return wrap_socket(sock)
+                except Exception:
+                    sock.close()
+                    raise
+
+        connection_pool = ConnectionPool(
+            connection_class=PinnedSSLConnection,
+            validated_ip=pinned_ip,
+            host=host,
+            port=port,
+            username=connect_user,
+            password=connect_password,
+            ssl=True,
+            ssl_cert_reqs="required",
+            ssl_check_hostname=True,
+            socket_connect_timeout=5,
+            socket_timeout=30,
         )
-        nodes_pushed += 1
-
-    for u, v, data in G.edges(data=True):
-        rel = _safe_rel(data.get("relation", "RELATED_TO"))
-        props = {
-            k: v
-            for k, v in data.items()
-            if isinstance(v, (str, int, float, bool)) and not k.startswith("_")
-        }
-        graph.query(
-            f"MATCH (a {{id: $src}}), (b {{id: $tgt}}) "
-            f"MERGE (a)-[r:{rel}]->(b) SET r += $props",
-            {"src": u, "tgt": v, "props": props},
+        db = FalkorDB(connection_pool=connection_pool)
+    else:
+        db = FalkorDB(
+            host=host,
+            port=port,
+            username=connect_user,
+            password=connect_password,
+            ssl=ssl,
+            ssl_cert_reqs="required",
+            socket_connect_timeout=5,
+            socket_timeout=30,
         )
-        edges_pushed += 1
+    try:
+        graph = db.select_graph(graph_name)
+        nodes_pushed = 0
+        edges_pushed = 0
 
-    return {"nodes": nodes_pushed, "edges": edges_pushed}
+        for node_id, data in G.nodes(data=True):
+            props = {
+                k: v
+                for k, v in data.items()
+                if isinstance(v, (str, int, float, bool)) and not k.startswith("_")
+            }
+            props["id"] = node_id
+            cid = node_community.get(node_id)
+            if cid is not None:
+                props["community"] = cid
+            ftype = _safe_label(data.get("file_type", "Entity").capitalize())
+            graph.query(
+                f"MERGE (n:{ftype} {{id: $id}}) SET n += $props",
+                {"id": node_id, "props": props},
+            )
+            nodes_pushed += 1
+
+        for u, v, data in G.edges(data=True):
+            rel = _safe_rel(data.get("relation", "RELATED_TO"))
+            props = {
+                k: v
+                for k, v in data.items()
+                if isinstance(v, (str, int, float, bool)) and not k.startswith("_")
+            }
+            graph.query(
+                f"MATCH (a {{id: $src}}), (b {{id: $tgt}}) "
+                f"MERGE (a)-[r:{rel}]->(b) SET r += $props",
+                {"src": u, "tgt": v, "props": props},
+            )
+            edges_pushed += 1
+
+        return {"nodes": nodes_pushed, "edges": edges_pushed}
+    finally:
+        db.close()
 
 
 def to_graphml(
