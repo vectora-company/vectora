@@ -7,6 +7,13 @@ export type IsolationState = "effective" | "partial" | "off" | "unknown";
 export type IsolationLevel = "effective" | "partial" | "soft" | "off";
 export type SandboxNetwork = "off" | "filtered" | "open";
 
+export interface SandboxCredentialBinding {
+  name: string;
+  host: string;
+  header: string;
+  prefix: string;
+}
+
 export interface IsolationDimension {
   name: string;
   state: IsolationState;
@@ -37,6 +44,7 @@ export interface SandboxPolicy {
   require_full_isolation: boolean;
   network: SandboxNetwork;
   allow_hosts: string[];
+  credential_bindings: SandboxCredentialBinding[];
   registry_hosts: boolean;
   max_file_mb: number;
   memory_limit_mb: number | null;
@@ -106,6 +114,52 @@ export async function putSandboxPolicy(
   });
   if (!res.ok) throw await failure(res);
   return res.json() as Promise<SandboxPolicy>;
+}
+
+export async function getSandboxCredentials(
+  workspaceId: string,
+): Promise<SandboxCredentialBinding[]> {
+  const res = await fetch(`${base(workspaceId)}/credentials`);
+  if (!res.ok) throw await failure(res);
+  return ((await res.json()) as { credentials: SandboxCredentialBinding[] })
+    .credentials;
+}
+
+export async function unlockSandboxCredentials(
+  workspaceId: string,
+  password: string,
+): Promise<void> {
+  const res = await fetch(`${base(workspaceId)}/credentials/unlock`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password }),
+  });
+  if (!res.ok) throw await failure(res);
+}
+
+export async function putSandboxCredential(
+  workspaceId: string,
+  credential: SandboxCredentialBinding & { value: string; password: string },
+): Promise<void> {
+  const res = await fetch(`${base(workspaceId)}/credentials`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(credential),
+  });
+  if (!res.ok) throw await failure(res);
+}
+
+export async function deleteSandboxCredential(
+  workspaceId: string,
+  name: string,
+  password: string,
+): Promise<void> {
+  const res = await fetch(`${base(workspaceId)}/credentials`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, password }),
+  });
+  if (!res.ok) throw await failure(res);
 }
 
 export async function getSandboxAudit(

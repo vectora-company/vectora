@@ -28,6 +28,34 @@ DEFAULT_MASK = (".env", "**/*.pem", "**/.ssh/**", "**/.aws/**")
 
 
 NetworkMode = Literal["off", "filtered", "open"]
+RESERVED_CREDENTIAL_NAMES = frozenset(
+    {
+        "ALL_PROXY",
+        "CURL_CA_BUNDLE",
+        "GIT_SSL_CAINFO",
+        "HOME",
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "NODE_EXTRA_CA_CERTS",
+        "NO_PROXY",
+        "PATH",
+        "PYTHONPATH",
+        "REQUESTS_CA_BUNDLE",
+        "SSL_CERT_FILE",
+        "TMPDIR",
+        "USER",
+    }
+)
+
+
+@dataclass(frozen=True)
+class CredentialBinding:
+    """Regra confiável que injeta um segredo num cabeçalho para um host."""
+
+    name: str
+    host: str
+    header: str
+    prefix: str = ""
 
 
 @dataclass(frozen=True)
@@ -57,6 +85,7 @@ class SandboxPolicy:
     network: NetworkMode = "filtered"
     #: Destinos extras (`host` ou `*.dominio`) liberados no modo `filtered`.
     allow_hosts: tuple[str, ...] = ()
+    credential_bindings: tuple[CredentialBinding, ...] = ()
     #: Inclui os registries de pacotes (pip, npm, cargo, go, maven, composer e
     #: GitHub) na lista do modo `filtered`.
     registry_hosts: bool = True
@@ -76,6 +105,7 @@ HOST_PATTERN = re.compile(
     r"(\*\.)?[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+",
     re.IGNORECASE,
 )
+CREDENTIAL_NAME_PATTERN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
 NETWORK_MODES: tuple[str, ...] = ("off", "filtered", "open")
 
@@ -170,6 +200,46 @@ def _network_field(section: dict[str, Any]) -> NetworkMode:
     return cast("NetworkMode", value)
 
 
+def _credential_bindings_field(
+    section: dict[str, Any],
+) -> tuple[CredentialBinding, ...]:
+    """Lê bindings sem aceitar valores de segredo na política persistida."""
+    raw = section.get("credential_bindings", [])
+    if not isinstance(raw, list):
+        raise TypeError("[sandbox].credential_bindings deve ser uma lista")
+    bindings: list[CredentialBinding] = []
+    names: set[str] = set()
+    for item in raw:
+        if not isinstance(item, dict) or set(item) - {
+            "name",
+            "host",
+            "header",
+            "prefix",
+        }:
+            raise TypeError("binding de credencial inválido")
+        name, host, header = item.get("name"), item.get("host"), item.get("header")
+        prefix = item.get("prefix", "")
+        if (
+            not isinstance(name, str)
+            or not CREDENTIAL_NAME_PATTERN.fullmatch(name)
+            or name.upper() in RESERVED_CREDENTIAL_NAMES
+            or not isinstance(host, str)
+            or len(host) > 253
+            or "*" in host
+            or not HOST_PATTERN.fullmatch(host)
+            or not isinstance(header, str)
+            or not re.fullmatch(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+", header)
+            or not isinstance(prefix, str)
+            or "\r" in prefix
+            or "\n" in prefix
+            or name in names
+        ):
+            raise ValueError("binding de credencial inválido")
+        names.add(name)
+        bindings.append(CredentialBinding(name, host.lower(), header, prefix))
+    return tuple(bindings)
+
+
 def parse_policy(vectora_toml_path: Path) -> SandboxPolicy:
     """Lê `[sandbox]` de `vectora.toml`.
 
@@ -218,6 +288,7 @@ def parse_policy(vectora_toml_path: Path) -> SandboxPolicy:
             env_pass=_list_field(section, "env_pass", str),
             network=_network_field(section),
             allow_hosts=_list_field(section, "allow_hosts", str),
+            credential_bindings=_credential_bindings_field(section),
             registry_hosts=bool(section.get("registry_hosts", True)),
             max_file_mb=_positive_int(section, "max_file_mb", 4096),
             memory_limit_mb=(
@@ -301,6 +372,17 @@ def policy_to_toml(policy: SandboxPolicy) -> str:
         for name in optional
         if getattr(policy, name) is not None
     )
+    for binding in policy.credential_bindings:
+        lines.extend(
+            [
+                "",
+                "[[sandbox.credential_bindings]]",
+                f"name = {_toml_value(binding.name)}",
+                f"host = {_toml_value(binding.host)}",
+                f"header = {_toml_value(binding.header)}",
+                f"prefix = {_toml_value(binding.prefix)}",
+            ]
+        )
     return "\n".join(lines) + "\n"
 
 
@@ -393,6 +475,8 @@ def resolve_policy(root: Path) -> SandboxPolicy:
         return replace(base, enabled=True, lockdown=True, rw_paths=())
 
     ignored: list[str] = []
+    if "credential_bindings" in section:
+        ignored.append("credential_bindings")
     if "enabled" in section and not repo.enabled and base.enabled:
         ignored.append("enabled")
     ignored.extend(
@@ -471,6 +555,7 @@ def resolve_policy(root: Path) -> SandboxPolicy:
             if "allow_hosts" in section
             else base.allow_hosts
         ),
+        credential_bindings=base.credential_bindings,
         registry_hosts=(
             base.registry_hosts and repo.registry_hosts
             if "registry_hosts" in section

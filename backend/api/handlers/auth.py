@@ -320,6 +320,11 @@ async def signout_endpoint(
     token = body.refresh_token or request.cookies.get(_REFRESH_COOKIE, "")
     if token:
         await auth_svc.signout(token)
+    user_id = str(getattr(getattr(request.state, "user", None), "id", "") or "")
+    if user_id:
+        from backend.secrets import lock_secrets
+
+        await lock_secrets(user_id)
     _clear_auth_cookies(response)
     return {}
 

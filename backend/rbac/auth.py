@@ -602,6 +602,16 @@ async def signin(email: str, password: str, *, ip: str = "") -> tuple[User, str,
     return user, access_token, refresh_token
 
 
+async def verify_user_password(user_id: str, password: str) -> bool:
+    """Confere a senha atual sem emitir tokens nem alterar a sessão."""
+    db = await _get_db()
+    async with db.execute(
+        "SELECT password_hash FROM users WHERE id = ?", (user_id,)
+    ) as cur:
+        row = await cur.fetchone()
+    return row is not None and verify_password(password, str(row["password_hash"]))
+
+
 async def provision_or_login_sso(email: str, name: str = "") -> tuple[User, str, str]:
     """Autentica via SSO/OIDC (`backend.rbac.oidc`) — sem senha, o IDP já
     verificou a identidade. Usuário existente por `email` faz login direto;

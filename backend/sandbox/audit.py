@@ -31,6 +31,7 @@ EVENTS = frozenset(
         "worker_started",
         "worker_refused",
         "egress",
+        "credential_injected",
         "policy_changed",
     }
 )

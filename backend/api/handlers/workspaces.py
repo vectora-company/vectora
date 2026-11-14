@@ -1286,6 +1286,13 @@ async def workspace_sandbox_status(workspace_id: str) -> SandboxStatusResponse:
     )
 
 
+class SandboxCredentialBinding(BaseModel):
+    name: str
+    host: str
+    header: str
+    prefix: str = ""
+
+
 class SandboxPolicyBody(BaseModel):
     """O que o usuário define para o sandbox do workspace (fora do repositório)."""
 
@@ -1302,12 +1309,31 @@ class SandboxPolicyBody(BaseModel):
     #: `off`, `filtered` (só os destinos permitidos) ou `open`.
     network: Literal["off", "filtered", "open"] = "filtered"
     allow_hosts: list[str] = Field(default_factory=list)
+    credential_bindings: list[SandboxCredentialBinding] = Field(default_factory=list)
     registry_hosts: bool = True
     #: Maior arquivo gravável (MB), teto de memória por processo (MB, vazio não
     #: limita) e tamanho dos tmpfs do jail (MB).
     max_file_mb: int = Field(default=4096, ge=1, le=1_048_576)
     memory_limit_mb: int | None = Field(default=None, ge=128, le=1_048_576)
     tmp_size_mb: int = Field(default=1024, ge=16, le=65_536)
+
+
+class SandboxCredentialWrite(BaseModel):
+    name: str
+    host: str
+    header: str = "Authorization"
+    prefix: str = "Bearer "
+    value: str
+    password: str
+
+
+class SandboxCredentialVaultRequest(BaseModel):
+    password: str
+
+
+class SandboxCredentialDelete(BaseModel):
+    name: str
+    password: str
 
 
 class SandboxPolicyResponse(SandboxPolicyBody):
@@ -1336,6 +1362,15 @@ def _sandbox_policy_payload(root: Path) -> SandboxPolicyResponse:
         require_full_isolation=policy.require_full_isolation,
         network=policy.network,
         allow_hosts=list(policy.allow_hosts),
+        credential_bindings=[
+            SandboxCredentialBinding(
+                name=binding.name,
+                host=binding.host,
+                header=binding.header,
+                prefix=binding.prefix,
+            )
+            for binding in policy.credential_bindings
+        ],
         registry_hosts=policy.registry_hosts,
         max_file_mb=policy.max_file_mb,
         memory_limit_mb=policy.memory_limit_mb,
@@ -1402,6 +1437,7 @@ async def update_workspace_sandbox_policy(
             detail="Destino inválido: use `dominio.com` ou `*.dominio.com`.",
         )
     root = Path(ws.cwd)
+    trusted_policy = await asyncio.to_thread(_trusted_sandbox_policy, root)
     policy = SandboxPolicy(
         enabled=body.enabled,
         rw_paths=tuple(body.rw_paths),
@@ -1415,6 +1451,7 @@ async def update_workspace_sandbox_policy(
         require_full_isolation=body.require_full_isolation,
         network=body.network,
         allow_hosts=tuple(body.allow_hosts),
+        credential_bindings=trusted_policy.credential_bindings,
         registry_hosts=body.registry_hosts,
         max_file_mb=body.max_file_mb,
         memory_limit_mb=body.memory_limit_mb,
@@ -1430,6 +1467,224 @@ async def update_workspace_sandbox_policy(
         {"policy_digest": policy_digest(policy), "network": policy.network},
     )
     return await asyncio.to_thread(_sandbox_policy_payload, root)
+
+
+def _require_workspace_credential_owner(request: Request, workspace: Any) -> str:
+    """Exige usuário autenticado que confiou o workspace ou modo local."""
+    user = getattr(request.state, "user", None)
+    user_id = str(getattr(user, "id", "") or "local")
+    trusted_by = str(getattr(workspace, "trusted_by", "") or "")
+    if not bool(getattr(workspace, "trusted", False)) or trusted_by != user_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Somente quem confiou este workspace pode gerenciar credenciais.",
+        )
+    return user_id
+
+
+def _trusted_sandbox_policy(root: Path) -> SandboxPolicy:
+    from backend.sandbox.policy import SandboxPolicy, parse_policy, trusted_policy_path
+
+    path = trusted_policy_path(root)
+    if path.is_file():
+        return parse_policy(path)
+    return SandboxPolicy(enabled=True)
+
+
+@workspace_scoped_router.get("/sandbox/credentials")
+async def list_sandbox_credentials(
+    workspace_id: str, request: Request
+) -> dict[str, list[dict[str, str]]]:
+    from backend.sandbox.policy import resolve_policy
+    from backend.workspace.workspace import workspace_registry
+
+    workspace = workspace_registry.get(workspace_id)
+    if workspace is None:
+        raise HTTPException(status_code=404, detail="Workspace não encontrado.")
+    _require_workspace_credential_owner(request, workspace)
+    policy = await asyncio.to_thread(resolve_policy, Path(workspace.cwd))
+    return {
+        "credentials": [
+            {
+                "name": item.name,
+                "host": item.host,
+                "header": item.header,
+                "prefix": item.prefix,
+            }
+            for item in policy.credential_bindings
+        ]
+    }
+
+
+@workspace_scoped_router.post("/sandbox/credentials/unlock")
+async def unlock_sandbox_credentials(
+    workspace_id: str, body: SandboxCredentialVaultRequest, request: Request
+) -> dict[str, bool]:
+    from backend.secrets import get_secrets_provider
+    from backend.workspace.workspace import workspace_registry
+
+    workspace = workspace_registry.get(workspace_id)
+    if workspace is None:
+        raise HTTPException(status_code=404, detail="Workspace não encontrado.")
+    user_id = _require_workspace_credential_owner(request, workspace)
+    if not body.password:
+        raise HTTPException(status_code=400, detail="Senha obrigatória.")
+    if user_id != "local":
+        from backend.rbac.auth import verify_user_password
+
+        if not await verify_user_password(user_id, body.password):
+            raise HTTPException(status_code=401, detail="Senha atual inválida.")
+    try:
+        await get_secrets_provider().unlock(user_id, body.password)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=401, detail="Não foi possível abrir o cofre."
+        ) from exc
+    return {"unlocked": True}
+
+
+@workspace_scoped_router.put("/sandbox/credentials")
+async def put_sandbox_credential(
+    workspace_id: str, body: SandboxCredentialWrite, request: Request
+) -> dict[str, str]:
+    import re
+    import shutil
+    import sys
+    from dataclasses import replace
+
+    from backend.sandbox.policy import (
+        CREDENTIAL_NAME_PATTERN,
+        HOST_PATTERN,
+        RESERVED_CREDENTIAL_NAMES,
+        CredentialBinding,
+        effective_allow_hosts,
+        effective_network,
+        resolve_policy,
+        write_trusted_policy,
+    )
+    from backend.secrets import get_secrets_provider
+    from backend.services.egress_policy import _matches_pattern
+    from backend.workspace.workspace import workspace_registry
+
+    workspace = workspace_registry.get(workspace_id)
+    if workspace is None:
+        raise HTTPException(status_code=404, detail="Workspace não encontrado.")
+    user_id = _require_workspace_credential_owner(request, workspace)
+    host = body.host.lower()
+    if (
+        not CREDENTIAL_NAME_PATTERN.fullmatch(body.name)
+        or not body.value
+        or "\r" in body.value
+        or "\n" in body.value
+        or len(host) > 253
+        or "*" in host
+        or not HOST_PATTERN.fullmatch(host)
+        or not re.fullmatch(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+", body.header)
+        or "\r" in body.prefix
+        or "\n" in body.prefix
+    ):
+        raise HTTPException(status_code=400, detail="Binding de credencial inválido.")
+    root = Path(workspace.cwd)
+    policy = await asyncio.to_thread(resolve_policy, root)
+    if (
+        sys.platform != "linux"
+        or shutil.which("bwrap") is None
+        or policy.backend != "local"
+        or effective_network(policy) != "filtered"
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="Credenciais vinculadas exigem jail local Linux com rede filtrada.",
+        )
+    if body.name.upper() in RESERVED_CREDENTIAL_NAMES:
+        raise HTTPException(
+            status_code=400,
+            detail="Esse nome conflita com o ambiente reservado do jail.",
+        )
+    if not any(
+        _matches_pattern(host, allowed_host)
+        for allowed_host in effective_allow_hosts(policy)
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="O host precisa constar na lista de destinos permitidos do sandbox.",
+        )
+    if user_id != "local":
+        from backend.rbac.auth import verify_user_password
+
+        if not await verify_user_password(user_id, body.password):
+            raise HTTPException(status_code=401, detail="Senha atual inválida.")
+    provider = get_secrets_provider()
+    try:
+        await provider.unlock(user_id, body.password)
+        key = f"sandbox:{workspace_id}:{body.name}"
+        previous_secret = await provider.get(user_id, key)
+        await provider.set(user_id, f"sandbox:{workspace_id}:{body.name}", body.value)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503, detail="Não foi possível gravar no cofre de credenciais."
+        ) from exc
+    base_policy = await asyncio.to_thread(_trusted_sandbox_policy, root)
+    bindings = [
+        item for item in base_policy.credential_bindings if item.name != body.name
+    ]
+    bindings.append(CredentialBinding(body.name, host, body.header, body.prefix))
+    try:
+        await asyncio.to_thread(
+            write_trusted_policy,
+            root,
+            replace(base_policy, credential_bindings=tuple(bindings)),
+        )
+    except Exception as exc:
+        try:
+            if previous_secret is None:
+                await provider.delete(user_id, key)
+            else:
+                await provider.set(user_id, key, previous_secret)
+        except Exception:
+            logger.exception("sandbox: falha ao reverter credencial sem política")
+        raise HTTPException(
+            status_code=500, detail="Não foi possível salvar a política da credencial."
+        ) from exc
+    return {"name": body.name, "host": body.host.lower()}
+
+
+@workspace_scoped_router.delete("/sandbox/credentials")
+async def delete_sandbox_credential(
+    workspace_id: str, body: SandboxCredentialDelete, request: Request
+) -> dict[str, bool]:
+    from dataclasses import replace
+
+    from backend.sandbox.policy import write_trusted_policy
+    from backend.secrets import get_secrets_provider
+    from backend.workspace.workspace import workspace_registry
+
+    workspace = workspace_registry.get(workspace_id)
+    if workspace is None:
+        raise HTTPException(status_code=404, detail="Workspace não encontrado.")
+    user_id = _require_workspace_credential_owner(request, workspace)
+    if user_id != "local":
+        from backend.rbac.auth import verify_user_password
+
+        if not await verify_user_password(user_id, body.password):
+            raise HTTPException(status_code=401, detail="Senha atual inválida.")
+    try:
+        provider = get_secrets_provider()
+        await provider.unlock(user_id, body.password)
+        await provider.delete(user_id, f"sandbox:{workspace_id}:{body.name}")
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503, detail="Não foi possível atualizar o cofre."
+        ) from exc
+    root = Path(workspace.cwd)
+    policy = await asyncio.to_thread(_trusted_sandbox_policy, root)
+    bindings = tuple(
+        item for item in policy.credential_bindings if item.name != body.name
+    )
+    await asyncio.to_thread(
+        write_trusted_policy, root, replace(policy, credential_bindings=bindings)
+    )
+    return {"deleted": True}
 
 
 async def _isolation_payload(

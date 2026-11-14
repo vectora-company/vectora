@@ -3,18 +3,28 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
+from typing import cast
 
 import pytest
 from fastapi import HTTPException
+from starlette.requests import Request
 
 from backend.api.handlers.workspaces import (
+    SandboxCredentialWrite,
     SandboxPolicyBody,
+    put_sandbox_credential,
     update_workspace_sandbox_policy,
     workspace_sandbox_policy,
     workspace_sandbox_status,
 )
 from backend.sandbox import policy as policy_module
-from backend.sandbox.policy import trusted_policy_path
+from backend.sandbox.policy import (
+    SandboxPolicy,
+    parse_policy,
+    trusted_policy_path,
+    write_trusted_policy,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -187,6 +197,69 @@ async def test_put_grava_rede_e_destinos_e_get_devolve(
     assert resp.network == lida.network == "filtered"
     assert lida.allow_hosts == ["api.exemplo.com", "*.cdn.exemplo.com"]
     assert lida.registry_hosts is False
+
+
+@pytest.mark.asyncio
+async def test_credencial_fica_no_cofre_e_binding_na_politica_confiavel(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from backend.vtypes import Workspace
+    from backend.workspace import workspace as ws_mod
+
+    workspace = Workspace(
+        id="ws-1",
+        name="ws-1",
+        cwd=str(tmp_path),
+        created_at="2024-01-01T00:00:00+00:00",
+        trusted=True,
+        trusted_by="local",
+    )
+    monkeypatch.setattr(ws_mod.workspace_registry, "get", lambda _: workspace)
+    monkeypatch.setattr("shutil.which", lambda _: "/usr/bin/bwrap")
+    write_trusted_policy(
+        tmp_path,
+        SandboxPolicy(
+            enabled=True, network="filtered", allow_hosts=("api.example.com",)
+        ),
+    )
+
+    class Vault:
+        values: dict[str, str] = {}
+
+        async def unlock(self, user_id: str, password: str) -> None:
+            assert (user_id, password) == ("local", "senha")
+
+        async def get(self, user_id: str, key: str) -> str | None:
+            return self.values.get(key)
+
+        async def set(self, user_id: str, key: str, value: str) -> None:
+            self.values[key] = value
+
+        async def delete(self, user_id: str, key: str) -> None:
+            self.values.pop(key, None)
+
+    vault = Vault()
+    monkeypatch.setattr("backend.secrets.get_secrets_provider", lambda: vault)
+    request = cast("Request", SimpleNamespace(state=SimpleNamespace(user=None)))
+
+    result = await put_sandbox_credential(
+        "ws-1",
+        SandboxCredentialWrite(
+            name="API_TOKEN",
+            host="api.example.com",
+            header="Authorization",
+            prefix="Bearer ",
+            value="credential-value",
+            password="senha",
+        ),
+        request,
+    )
+
+    saved = parse_policy(trusted_policy_path(tmp_path))
+    assert result == {"name": "API_TOKEN", "host": "api.example.com"}
+    assert vault.values == {"sandbox:ws-1:API_TOKEN": "credential-value"}
+    assert saved.credential_bindings[0].host == "api.example.com"
+    assert "credential-value" not in trusted_policy_path(tmp_path).read_text()
 
 
 @pytest.mark.asyncio

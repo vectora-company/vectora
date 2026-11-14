@@ -20,6 +20,10 @@ const api = vi.hoisted(() => ({
   putSandboxPolicy: vi.fn(),
   getSandboxAudit: vi.fn(),
   getSandboxDryRun: vi.fn(),
+  getSandboxCredentials: vi.fn(),
+  unlockSandboxCredentials: vi.fn(),
+  putSandboxCredential: vi.fn(),
+  deleteSandboxCredential: vi.fn(),
 }));
 vi.mock("@/lib/api/sandbox", () => api);
 
@@ -89,6 +93,8 @@ vi.mock("@/lib/paraglide/messages", () => {
             sandbox_event_worker_started: "Jail iniciado ({network})",
             sandbox_event_egress_allowed: "Saída permitida: {host}",
             sandbox_event_egress_blocked: "Saída bloqueada: {host}",
+            sandbox_event_credential_injected:
+              "Credencial {name} injetada para {host}",
             sandbox_dryrun_show: "Mostrar o comando",
             sandbox_dryrun_hide: "Ocultar o comando",
           };
@@ -131,6 +137,7 @@ const policy = (overrides: Partial<SandboxPolicy> = {}): SandboxPolicy => ({
   require_full_isolation: false,
   network: "filtered",
   allow_hosts: ["api.exemplo.com"],
+  credential_bindings: [],
   registry_hosts: true,
   max_file_mb: 4096,
   memory_limit_mb: null,
@@ -164,6 +171,10 @@ beforeEach(() => {
     records: 0,
     broken_at: null,
   });
+  api.getSandboxCredentials.mockResolvedValue([]);
+  api.unlockSandboxCredentials.mockResolvedValue(undefined);
+  api.putSandboxCredential.mockResolvedValue(undefined);
+  api.deleteSandboxCredential.mockResolvedValue(undefined);
   api.putSandboxPolicy.mockResolvedValue(policy());
   api.getSandboxDryRun.mockResolvedValue(["bwrap", "--clearenv", "<comando>"]);
 });
@@ -192,6 +203,44 @@ describe("SandboxTab", () => {
     expect(screen.getByText("Medido no jail em execução.")).toBeTruthy();
     expect(screen.getByText("Filtro de syscalls")).toBeTruthy();
     expect(screen.getByText(/só os destinos permitidos/)).toBeTruthy();
+  });
+
+  it("grava a credencial no cofre e limpa o valor do formulário", async () => {
+    renderTab();
+    await screen.findByText("sandbox_credential_title");
+    fireEvent.change(screen.getByLabelText("sandbox_credential_password"), {
+      target: { value: "senha-atual" },
+    });
+    fireEvent.change(screen.getByLabelText("sandbox_credential_name"), {
+      target: { value: "API_TOKEN" },
+    });
+    fireEvent.change(screen.getByLabelText("sandbox_credential_host"), {
+      target: { value: "api.example.com" },
+    });
+    fireEvent.change(screen.getByLabelText("sandbox_credential_value"), {
+      target: { value: "segredo" },
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "sandbox_credential_save" }),
+    );
+
+    await waitFor(() =>
+      expect(api.putSandboxCredential).toHaveBeenCalledWith("ws-1", {
+        name: "API_TOKEN",
+        host: "api.example.com",
+        header: "Authorization",
+        prefix: "Bearer ",
+        value: "segredo",
+        password: "senha-atual",
+      }),
+    );
+    await waitFor(() =>
+      expect(
+        (screen.getByLabelText("sandbox_credential_value") as HTMLInputElement)
+          .value,
+      ).toBe(""),
+    );
   });
 
   it("isolamento parcial aparece como parcial, nunca como efetivo", async () => {

@@ -7,7 +7,9 @@ import pytest
 from backend.sandbox import policy as policy_module
 from backend.sandbox.policy import (
     DISABLED_POLICY,
+    CredentialBinding,
     SandboxPolicy,
+    parse_policy,
     policy_to_toml,
     resolve_policy,
     trusted_policy_path,
@@ -252,6 +254,25 @@ def test_write_trusted_policy_vai_e_volta(tmp_path):
 
     assert path == trusted_policy_path(tmp_path)
     assert relida == original
+
+
+def test_policy_toml_persiste_bindings_sem_mover_campos_para_a_tabela(tmp_path):
+    policy = SandboxPolicy(
+        enabled=True,
+        credential_bindings=(
+            CredentialBinding(
+                "API_TOKEN", "api.example.com", "Authorization", "Bearer "
+            ),
+        ),
+        memory_limit_mb=512,
+    )
+    path = tmp_path / "policy.toml"
+    path.write_text(policy_to_toml(policy), encoding="utf-8")
+
+    restored = parse_policy(path)
+
+    assert restored.memory_limit_mb == 512
+    assert restored.credential_bindings == policy.credential_bindings
 
 
 def test_policy_to_toml_escapa_caminhos_com_aspas_e_unicode():

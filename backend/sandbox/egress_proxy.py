@@ -14,6 +14,7 @@ import asyncio
 import contextlib
 import logging
 import shutil
+import ssl
 import tempfile
 import time
 from collections import deque
@@ -23,10 +24,12 @@ from pathlib import Path
 
 from backend.sandbox import audit
 from backend.sandbox.policy import (
+    CredentialBinding,
     SandboxPolicy,
     effective_allow_hosts,
     effective_network,
 )
+from backend.sandbox.tls_interception import WorkspaceTLSAuthority
 from backend.services.egress_policy import EgressPolicy, async_is_url_allowed
 
 logger = logging.getLogger(__name__)
@@ -67,12 +70,14 @@ class EgressProxy:
         workspace_id: str | None = None,
         on_decision: Callable[[EgressDecision], None] | None = None,
     ) -> None:
+        self._policy = policy
         self._egress = _egress_policy_for(policy, workspace_id)
         self._workspace_id = workspace_id
         self._on_decision = on_decision
         self._server: asyncio.AbstractServer | None = None
         self._directory: str | None = None
         self._connections = 0
+        self._tls_authority: WorkspaceTLSAuthority | None = None
         self.decisions: deque[EgressDecision] = deque(maxlen=_RECENT_DECISIONS)
 
     @property
@@ -86,12 +91,25 @@ class EgressProxy:
         """Cria o socket (modo 0700, pasta própria) e começa a escutar."""
         self._directory = tempfile.mkdtemp(prefix="vgr-")
         Path(self._directory).chmod(0o700)
-        path = Path(self._directory) / SOCKET_NAME
-        self._server = await asyncio.start_unix_server(self._handle, path=str(path))
-        path.chmod(0o600)
+        try:
+            if self._policy.credential_bindings:
+                self._tls_authority = WorkspaceTLSAuthority(Path(self._directory))
+            path = Path(self._directory) / SOCKET_NAME
+            self._server = await asyncio.start_unix_server(self._handle, path=str(path))
+            path.chmod(0o600)
+        except Exception:
+            if self._tls_authority is not None:
+                self._tls_authority.close()
+                self._tls_authority = None
+            shutil.rmtree(self._directory, ignore_errors=True)
+            self._directory = None
+            raise
         return self._directory
 
     async def stop(self) -> None:
+        if self._tls_authority is not None:
+            self._tls_authority.close()
+            self._tls_authority = None
         if self._server is not None:
             self._server.close()
             with contextlib.suppress(Exception):
@@ -135,14 +153,14 @@ class EgressProxy:
         self._connections += 1
         try:
             await self._serve(reader, writer)
-        except Exception:
+        except Exception as exc:
             logger.debug("egress: conexão encerrada com erro", exc_info=True)
         finally:
             self._connections -= 1
             with contextlib.suppress(Exception):
                 writer.close()
 
-    async def _serve(
+    async def _serve(  # noqa: PLR0911
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> None:
         try:
@@ -173,6 +191,26 @@ class EgressProxy:
                 writer, 403, f"bloqueado pela política de saída do workspace: {reason}"
             )
             return
+        binding = next(
+            (
+                item
+                for item in self._policy.credential_bindings
+                if item.host.casefold() == host.casefold()
+            ),
+            None,
+        )
+        if binding is not None:
+            if port != 443 or self._tls_authority is None:
+                await self._refuse(
+                    writer,
+                    403,
+                    "credenciais vinculadas só podem ser usadas em HTTPS na porta 443",
+                )
+                return
+            await self._serve_credential_request(
+                host, port, pinned, binding, reader, writer
+            )
+            return
         try:
             upstream_reader, upstream_writer = await asyncio.wait_for(
                 asyncio.open_connection(pinned, port), timeout=_CONNECT_TIMEOUT_S
@@ -190,6 +228,113 @@ class EgressProxy:
             with contextlib.suppress(Exception):
                 upstream_writer.close()
 
+    async def _serve_credential_request(  # noqa: PLR0911
+        self,
+        host: str,
+        port: int,
+        pinned: str,
+        binding: CredentialBinding,
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
+    ) -> None:
+        """Termina TLS só no host vinculado e injeta um único cabeçalho."""
+        if self._tls_authority is None:
+            return
+        try:
+            writer.write(b"HTTP/1.1 200 Connection Established\r\n\r\n")
+            await writer.drain()
+            await writer.start_tls(
+                self._tls_authority.server_context(host),
+                ssl_handshake_timeout=_CONNECT_TIMEOUT_S,
+            )
+            head = await asyncio.wait_for(
+                reader.readuntil(b"\r\n\r\n"), timeout=_HEADER_TIMEOUT_S
+            )
+            if len(head) > _HEADER_LIMIT:
+                logger.debug("egress: cabeçalho TLS excede o limite para %s", host)
+                return
+            lines = head.decode("latin-1").split("\r\n")
+            request_line = lines[0]
+            if request_line.startswith(("CONNECT ", "PRI * HTTP/2")):
+                logger.debug("egress: protocolo TLS não aceito para %s", host)
+                return
+            host_values = [
+                value.strip()
+                for line in lines[1:]
+                for name, separator, value in [line.partition(":")]
+                if separator and name.strip().casefold() == "host"
+            ]
+            if len(host_values) != 1:
+                logger.debug("egress: Host ausente na requisição para %s", host)
+                return
+            request_host, _, request_port = host_values[0].partition(":")
+            if request_host.strip("[]").casefold() != host.casefold() or (
+                request_port and request_port != str(port)
+            ):
+                logger.debug("egress: Host divergente na requisição para %s", host)
+                return
+            user_id = _workspace_credential_user(self._workspace_id)
+            if user_id is None:
+                logger.debug("egress: workspace sem dono confiável para %s", host)
+                return
+            from backend.secrets import get_secrets_provider
+
+            secret = await get_secrets_provider().get(
+                user_id, f"sandbox:{self._workspace_id}:{binding.name}"
+            )
+            if not secret or "\r" in secret or "\n" in secret:
+                logger.debug("egress: cofre sem credencial válida para %s", host)
+                return
+            upstream_reader, upstream_writer = await asyncio.wait_for(
+                asyncio.open_connection(
+                    pinned,
+                    port,
+                    ssl=ssl.create_default_context(),
+                    server_hostname=host,
+                ),
+                timeout=_CONNECT_TIMEOUT_S,
+            )
+            forwarded = [request_line]
+            for line in lines[1:]:
+                if not line:
+                    continue
+                name, _, _value = line.partition(":")
+                if name.casefold() in {binding.header.casefold(), "connection"}:
+                    continue
+                forwarded.append(line)
+            forwarded.extend(
+                [
+                    f"{binding.header}: {binding.prefix}{secret}",
+                    "Connection: close",
+                    "",
+                    "",
+                ]
+            )
+            upstream_writer.write("\r\n".join(forwarded).encode("latin-1"))
+            await upstream_writer.drain()
+            audit.record(
+                self._workspace_id or "",
+                "credential_injected",
+                {"host": host, "credential_name": binding.name},
+            )
+            await asyncio.gather(
+                _pipe(reader, upstream_writer), _pipe(upstream_reader, writer)
+            )
+        except Exception as exc:
+            if writer.get_extra_info("ssl_object") is not None:
+                with contextlib.suppress(Exception):
+                    writer.write(
+                        b"HTTP/1.1 503 Credential Injection Unavailable\r\n"
+                        b"Connection: close\r\nContent-Length: 0\r\n\r\n"
+                    )
+                    await writer.drain()
+            logger.debug(
+                "egress: credencial recusada para %s (%s)", host, type(exc).__name__
+            )
+        finally:
+            with contextlib.suppress(Exception):
+                writer.close()
+
     @staticmethod
     async def _refuse(writer: asyncio.StreamWriter, status: int, message: str) -> None:
         body = message.encode("utf-8")
@@ -203,6 +348,17 @@ class EgressProxy:
         )
         with contextlib.suppress(Exception):
             await writer.drain()
+
+
+def _workspace_credential_user(workspace_id: str | None) -> str | None:
+    if not workspace_id:
+        return None
+    from backend.workspace.workspace import workspace_registry
+
+    workspace = workspace_registry.get(workspace_id)
+    if workspace is None or not workspace.trusted_by:
+        return None
+    return str(workspace.trusted_by)
 
 
 def _egress_policy_for(policy: SandboxPolicy, workspace_id: str | None) -> EgressPolicy:
@@ -297,6 +453,7 @@ def _same_network(a: SandboxPolicy, b: SandboxPolicy) -> bool:
         and a.lockdown == b.lockdown
         and a.allow_hosts == b.allow_hosts
         and a.registry_hosts == b.registry_hosts
+        and a.credential_bindings == b.credential_bindings
     )
 
 
