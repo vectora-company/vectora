@@ -361,40 +361,13 @@ def _require_local(ctx: ToolContext) -> str | None:
 async def _remote_workspace_path(
     transport: Any, ws: Any, requested: str
 ) -> tuple[str | None, str | None]:
-    """Resolve um caminho no host remoto e verifica confinamento à raiz.
+    """Resolve um caminho remoto e bloqueia leitura/escrita de credenciais."""
+    from backend.workspace.remote_fs import resolve_remote_workspace_path
 
-    A resolução acontece no host remoto para considerar symlinks existentes;
-    caminhos lexicais com ``..`` também são recusados antes do transporte.
-    """
-    from pathlib import PurePosixPath
-
-    raw = PurePosixPath(requested)
-    if ".." in raw.parts:
-        return None, "Error: Path escapes the remote workspace."
-    root = getattr(ws, "remote_path", None)
-    if not root:
-        result = await transport.run(["pwd"], cwd=".", timeout=15.0)
-        if result.exit_code != 0 or not result.stdout.strip():
-            return None, f"Error resolving remote workspace: {result.stderr[:300]}"
-        root = result.stdout.strip().splitlines()[-1]
-    root = str(PurePosixPath(root))
-    candidate = str(raw) if raw.is_absolute() else str(PurePosixPath(root) / raw)
-    script = (
-        "import os,sys; r=os.path.realpath(sys.argv[1]); "
-        "p=os.path.realpath(sys.argv[2]); "
-        "sys.exit(2) if os.path.commonpath((r,p)) != r else print(p)"
-    )
-    result = await transport.run(
-        ["python3", "-c", script, root, candidate], cwd=root, timeout=15.0
-    )
-    if result.exit_code != 0:
-        return None, "Error: Path escapes the remote workspace or cannot be resolved."
-    resolved = result.stdout.strip().splitlines()
-    if not resolved:
-        return None, "Error resolving remote path."
-    if is_sensitive_path(Path(resolved[-1])):
+    resolved, error = await resolve_remote_workspace_path(transport, ws, requested)
+    if resolved is not None and is_sensitive_path(Path(resolved)):
         return None, "Error: Remote credential and secret files are blocked."
-    return resolved[-1], None
+    return resolved, error
 
 
 @vtool(
@@ -586,9 +559,9 @@ async def file_edit(
             return path_err
         try:
             try:
-                content = (await transport.read_file(
-                    remote_path or "", max_bytes=1_048_576
-                )).decode("utf-8")
+                content = (
+                    await transport.read_file(remote_path or "", max_bytes=1_048_576)
+                ).decode("utf-8")
             except FileNotFoundError:
                 if old_text:
                     return "Error: Text not found in file"

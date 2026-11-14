@@ -1223,6 +1223,58 @@ def _resolve_inside(workspace_id: str, rel_path: str) -> Path | None:
     return resolve_within_workspace(str(candidate), base)
 
 
+async def _remote_fs_context(
+    workspace_id: str, rel_path: str
+) -> tuple[Any, Any, str] | None:
+    """Resolve um caminho remoto confinado; ``None`` para workspace local."""
+    from fastapi import HTTPException
+
+    from backend.transport import get_transport
+    from backend.workspace.remote_fs import resolve_remote_workspace_path
+    from backend.workspace.workspace import workspace_registry
+
+    ws = workspace_registry.get(workspace_id)
+    if ws is None or getattr(ws, "transport", "local") == "local":
+        return None
+    transport = get_transport(ws)
+    resolved, error = await resolve_remote_workspace_path(transport, ws, rel_path)
+    if resolved is None:
+        raise HTTPException(status_code=400, detail=error or "Caminho remoto inválido.")
+    return ws, transport, resolved
+
+
+async def _remote_fs_stat(transport: Any, ws: Any, path: str) -> dict[str, Any]:
+    """Retorna metadados limitados de um caminho remoto."""
+    import json
+
+    script = (
+        "import json,os,sys; p=sys.argv[1]; "
+        "print(json.dumps({'exists':os.path.exists(p),'is_file':os.path.isfile(p),"
+        "'is_dir':os.path.isdir(p),'size':os.path.getsize(p) if os.path.isfile(p) else 0}))"
+    )
+    result = await transport.run(
+        ["python3", "-c", script, path],
+        cwd=getattr(ws, "remote_path", None) or ".",
+        timeout=15.0,
+    )
+    if result.exit_code != 0:
+        raise RuntimeError(result.stderr or "Falha ao consultar caminho remoto.")
+    value = json.loads(result.stdout)
+    if not isinstance(value, dict):
+        raise RuntimeError("Resposta inválida do filesystem remoto.")
+    return value
+
+
+async def _remote_fs_run(transport: Any, ws: Any, script: str, *args: str) -> None:
+    result = await transport.run(
+        ["python3", "-c", script, *args],
+        cwd=getattr(ws, "remote_path", None) or ".",
+        timeout=30.0,
+    )
+    if result.exit_code != 0:
+        raise RuntimeError(result.stderr or "Falha na operação remota.")
+
+
 class IsolationDimensionModel(BaseModel):
     name: str
     state: Literal["effective", "partial", "off", "unknown"]
@@ -1822,6 +1874,32 @@ async def workspace_tree(
     `path` é relativo ao workspace. Sem path → raiz. Diretórios típicos de
     build/cache são ocultados para enxugar a árvore.
     """
+    remote = await _remote_fs_context(workspace_id, path)
+    if remote is not None:
+        ws, transport, remote_path = remote
+        try:
+            info = await _remote_fs_stat(transport, ws, remote_path)
+            if not info.get("is_dir"):
+                return TreeResponse(path=path, entries=[])
+            remote_entries = await transport.list_dir(remote_path)
+            entries = [
+                TreeEntry(
+                    name=item.name,
+                    path=f"{path.rstrip('/')}/{item.name}".lstrip("/"),
+                    kind="dir" if item.is_dir else "file",
+                    size=item.size,
+                )
+                for item in remote_entries
+                if not (item.is_dir and item.name in _IGNORED_DIR_NAMES)
+            ]
+            entries.sort(key=lambda item: (item.kind != "dir", item.name.lower()))
+            return TreeResponse(path=path, entries=entries)
+        except Exception as exc:
+            logger.warning("remote workspace_tree failed", exc_info=True)
+            raise HTTPException(
+                status_code=503, detail="Workspace remoto indisponível."
+            ) from exc
+
     resolved = _resolve_inside(workspace_id, path)
     if resolved is None or not resolved.exists() or not resolved.is_dir():
         return TreeResponse(path=path, entries=[])
@@ -1867,11 +1945,41 @@ async def workspace_tree(
 
 
 @workspace_scoped_router.get("/file", response_model=FileResponse)
-async def workspace_file(
+async def workspace_file(  # noqa: PLR0911
     workspace_id: str,
     path: Annotated[str, Query()],
 ) -> FileResponse:
     """Lê o conteúdo (texto truncado) de um arquivo dentro do workspace."""
+    remote = await _remote_fs_context(workspace_id, path)
+    if remote is not None:
+        ws, transport, remote_path = remote
+        try:
+            info = await _remote_fs_stat(transport, ws, remote_path)
+            if not info.get("is_file"):
+                return FileResponse(path=path, kind="text", content=None, size=0)
+            raw = await transport.read_file(
+                remote_path, max_bytes=_MAX_FILE_PREVIEW + 1
+            )
+            size = int(info.get("size", len(raw)))
+            if b"\x00" in raw[:8192]:
+                return FileResponse(path=path, kind="binary", size=size)
+            truncated = len(raw) > _MAX_FILE_PREVIEW
+            if truncated:
+                raw = raw[:_MAX_FILE_PREVIEW]
+            return FileResponse(
+                path=path,
+                kind="text",
+                content=raw.decode("utf-8", errors="replace"),
+                size=size,
+                truncated=truncated,
+                sha256=None if truncated else hashlib.sha256(raw).hexdigest(),
+            )
+        except Exception as exc:
+            logger.warning("remote workspace_file failed", exc_info=True)
+            raise HTTPException(
+                status_code=503, detail="Workspace remoto indisponível."
+            ) from exc
+
     resolved = _resolve_inside(workspace_id, path)
     if resolved is None or not resolved.exists() or not resolved.is_file():
         return FileResponse(path=path, kind="text", content=None, size=0)
@@ -1925,6 +2033,49 @@ async def workspace_file_raw(
 
     from fastapi import HTTPException
     from fastapi.responses import FileResponse as _StarletteFileResponse
+
+    remote = await _remote_fs_context(workspace_id, path)
+    if remote is not None:
+        ws, transport, remote_path = remote
+        try:
+            info = await _remote_fs_stat(transport, ws, remote_path)
+            if not info.get("is_file"):
+                raise HTTPException(status_code=404, detail="Arquivo não encontrado.")
+            size = int(info.get("size", 0))
+            if size > 50 * 1024 * 1024:
+                raise HTTPException(
+                    status_code=413, detail="Arquivo remoto excede 50 MiB."
+                )
+            content = await transport.read_file(
+                remote_path, max_bytes=50 * 1024 * 1024 + 1
+            )
+            if len(content) > 50 * 1024 * 1024:
+                raise HTTPException(
+                    status_code=413, detail="Arquivo remoto excede 50 MiB."
+                )
+            name = PurePosixPath(path).name or PurePosixPath(remote_path).name
+            media_type = mimetypes.guess_type(name)[0] or "application/octet-stream"
+            active_content_types = {
+                "application/javascript",
+                "application/xhtml+xml",
+                "application/xml",
+                "image/svg+xml",
+                "text/html",
+                "text/javascript",
+                "text/xml",
+            }
+            headers = {"X-Content-Type-Options": "nosniff"}
+            if media_type in active_content_types:
+                media_type = "application/octet-stream"
+                headers["Content-Disposition"] = "attachment"
+            return Response(content=content, media_type=media_type, headers=headers)
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.warning("remote workspace_file_raw failed", exc_info=True)
+            raise HTTPException(
+                status_code=503, detail="Workspace remoto indisponível."
+            ) from exc
 
     resolved = _resolve_inside(workspace_id, path)
     if resolved is None or not resolved.exists() or not resolved.is_file():
@@ -3789,10 +3940,27 @@ class MoveFsNodeRequest(BaseModel):
 
 
 @workspace_scoped_router.post("/fs/file", response_model=StatusResponse)
-async def create_fs_file(
+async def create_fs_file(  # noqa: PLR0911
     workspace_id: str, body: CreateFsNodeRequest
 ) -> StatusResponse:
     """Cria um arquivo vazio (ou com conteúdo inicial) dentro do workspace."""
+    remote = await _remote_fs_context(workspace_id, body.path)
+    if remote is not None:
+        ws, transport, remote_path = remote
+        try:
+            if len(body.content.encode("utf-8")) > _MAX_FILE_EDIT_SIZE:
+                return StatusResponse(
+                    status="error", message="Arquivo excede o limite de 2 MiB."
+                )
+            if (await _remote_fs_stat(transport, ws, remote_path)).get("exists"):
+                return StatusResponse(status="error", message="Arquivo já existe.")
+            await transport.write_file(remote_path, body.content.encode("utf-8"))
+            return StatusResponse(status="ok")
+        except Exception as exc:
+            return StatusResponse(
+                status="error", message=f"Falha no workspace remoto: {exc}"
+            )
+
     resolved = _resolve_inside(workspace_id, body.path)
     if resolved is None:
         return StatusResponse(
@@ -3824,7 +3992,7 @@ class FileWriteResponse(BaseModel):
 
 
 @workspace_scoped_router.put("/fs/file", response_model=FileWriteResponse)
-async def update_fs_file(
+async def update_fs_file(  # noqa: PLR0911
     workspace_id: str,
     path: Annotated[str, Query()],
     body: UpdateFsFileRequest,
@@ -3837,6 +4005,49 @@ async def update_fs_file(
     apenas texto utf-8/ascii até 2 MiB (acima disso, usar outras ferramentas).
     """
     from fastapi import HTTPException
+
+    remote = await _remote_fs_context(workspace_id, path)
+    if remote is not None:
+        ws, transport, remote_path = remote
+        try:
+            info = await _remote_fs_stat(transport, ws, remote_path)
+            if not info.get("is_file"):
+                return FileWriteResponse(
+                    status="error", message="Arquivo não encontrado."
+                )
+            if int(info.get("size", 0)) > _MAX_FILE_EDIT_SIZE:
+                return FileWriteResponse(
+                    status="error",
+                    message="Arquivo excede o limite de 2 MiB para edição.",
+                )
+            current_bytes = await transport.read_file(
+                remote_path, max_bytes=_MAX_FILE_EDIT_SIZE + 1
+            )
+            current_sha256 = hashlib.sha256(current_bytes).hexdigest()
+            if (
+                body.expected_sha256 is not None
+                and body.expected_sha256 != current_sha256
+            ):
+                raise HTTPException(
+                    status_code=412,
+                    detail="O arquivo foi modificado por fora desde a última leitura.",
+                )
+            new_bytes = body.content.encode("utf-8")
+            if len(new_bytes) > _MAX_FILE_EDIT_SIZE:
+                return FileWriteResponse(
+                    status="error",
+                    message="Arquivo excede o limite de 2 MiB para edição.",
+                )
+            await transport.write_file(remote_path, new_bytes)
+            return FileWriteResponse(
+                status="ok", sha256=hashlib.sha256(new_bytes).hexdigest()
+            )
+        except HTTPException:
+            raise
+        except Exception as exc:
+            return FileWriteResponse(
+                status="error", message=f"Falha no workspace remoto: {exc}"
+            )
 
     resolved = _resolve_inside(workspace_id, path)
     if resolved is None:
@@ -3882,6 +4093,22 @@ async def update_fs_file(
 @workspace_scoped_router.post("/fs/dir", response_model=StatusResponse)
 async def create_fs_dir(workspace_id: str, body: CreateFsNodeRequest) -> StatusResponse:
     """Cria um diretório dentro do workspace."""
+    remote = await _remote_fs_context(workspace_id, body.path)
+    if remote is not None:
+        ws, transport, remote_path = remote
+        try:
+            await _remote_fs_run(
+                transport,
+                ws,
+                "import os,sys; os.makedirs(sys.argv[1], exist_ok=True)",
+                remote_path,
+            )
+            return StatusResponse(status="ok")
+        except Exception as exc:
+            return StatusResponse(
+                status="error", message=f"Falha no workspace remoto: {exc}"
+            )
+
     resolved = _resolve_inside(workspace_id, body.path)
     if resolved is None:
         return StatusResponse(
@@ -3895,7 +4122,7 @@ async def create_fs_dir(workspace_id: str, body: CreateFsNodeRequest) -> StatusR
 
 
 @workspace_scoped_router.delete("/fs", response_model=StatusResponse)
-async def delete_fs_node(
+async def delete_fs_node(  # noqa: PLR0911
     workspace_id: str,
     path: Annotated[str, Query()],
     permanent: Annotated[bool, Query()] = False,
@@ -3904,6 +4131,30 @@ async def delete_fs_node(
     import shutil as _shutil
 
     import send2trash
+
+    remote = await _remote_fs_context(workspace_id, path)
+    if remote is not None:
+        if not permanent:
+            return StatusResponse(
+                status="error",
+                message="A lixeira não está disponível em workspaces remotos; confirme a exclusão permanente.",
+            )
+        ws, transport, remote_path = remote
+        try:
+            info = await _remote_fs_stat(transport, ws, remote_path)
+            if not info.get("exists"):
+                return StatusResponse(status="error", message="Caminho não encontrado.")
+            await _remote_fs_run(
+                transport,
+                ws,
+                "import os,shutil,sys; p=sys.argv[1]; shutil.rmtree(p) if os.path.isdir(p) and not os.path.islink(p) else os.unlink(p)",
+                remote_path,
+            )
+            return StatusResponse(status="ok")
+        except Exception as exc:
+            return StatusResponse(
+                status="error", message=f"Falha no workspace remoto: {exc}"
+            )
 
     resolved = _resolve_inside(workspace_id, path)
     if resolved is None:
@@ -3926,7 +4177,9 @@ async def delete_fs_node(
 
 
 @workspace_scoped_router.post("/fs/move", response_model=StatusResponse)
-async def move_fs_node(workspace_id: str, body: MoveFsNodeRequest) -> StatusResponse:
+async def move_fs_node(  # noqa: PLR0911
+    workspace_id: str, body: MoveFsNodeRequest
+) -> StatusResponse:
     """Renomeia ou move um arquivo/pasta dentro do workspace.
 
     Rejeita operações que saiam do sandbox do workspace (ambos os caminhos são
@@ -3935,6 +4188,39 @@ async def move_fs_node(workspace_id: str, body: MoveFsNodeRequest) -> StatusResp
     disco diferente do sistema de arquivos padrão).
     """
     import shutil as _shutil
+
+    source_remote = await _remote_fs_context(workspace_id, body.from_path)
+    target_remote = await _remote_fs_context(workspace_id, body.to_path)
+    if source_remote is not None or target_remote is not None:
+        if source_remote is None or target_remote is None:
+            return StatusResponse(
+                status="error",
+                message="Origem e destino precisam pertencer ao mesmo workspace remoto.",
+            )
+        ws, transport, source = source_remote
+        target_ws, target_transport, target = target_remote
+        try:
+            if (await _remote_fs_stat(transport, ws, source)).get("exists") is False:
+                return StatusResponse(status="error", message="Origem não encontrada.")
+            if (await _remote_fs_stat(target_transport, target_ws, target)).get(
+                "exists"
+            ):
+                return StatusResponse(
+                    status="error",
+                    message="Já existe um arquivo ou pasta com esse nome.",
+                )
+            await _remote_fs_run(
+                transport,
+                ws,
+                "import os,sys; s,d=sys.argv[1:]; os.makedirs(os.path.dirname(d), exist_ok=True); os.rename(s,d)",
+                source,
+                target,
+            )
+            return StatusResponse(status="ok")
+        except Exception as exc:
+            return StatusResponse(
+                status="error", message=f"Falha no workspace remoto: {exc}"
+            )
 
     src = _resolve_inside(workspace_id, body.from_path)
     dst = _resolve_inside(workspace_id, body.to_path)
@@ -4072,6 +4358,65 @@ async def search_workspace_files(
     import json as _json
     import shutil as _shutil
     import subprocess as _subprocess  # nosec B404
+
+    remote = await _remote_fs_context(workspace_id, path)
+    if remote is not None:
+        ws, transport, remote_root = remote
+        try:
+            result = await transport.run(
+                [
+                    "rg",
+                    "--json",
+                    "--max-filesize",
+                    "1M",
+                    "--max-count",
+                    "50",
+                    "--max-columns",
+                    "200",
+                    "--",
+                    q,
+                    remote_root,
+                ],
+                cwd=getattr(ws, "remote_path", None) or ".",
+                timeout=30.0,
+            )
+            if result.exit_code not in {0, 1}:
+                raise RuntimeError(
+                    result.stderr or "ripgrep indisponível no host remoto."
+                )
+            from pathlib import PurePosixPath
+
+            hits: list[SearchHit] = []
+            for raw_line in result.stdout.splitlines():
+                try:
+                    obj = json.loads(raw_line)
+                except ValueError:
+                    continue
+                if obj.get("type") != "match":
+                    continue
+                data = obj.get("data", {})
+                file_name = data.get("path", {}).get("text", "")
+                try:
+                    rel = str(PurePosixPath(file_name).relative_to(remote_root))
+                except ValueError:
+                    rel = PurePosixPath(file_name).name
+                hits.append(
+                    SearchHit(
+                        path=rel,
+                        line_number=int(data.get("line_number", 0)),
+                        line_text=data.get("lines", {})
+                        .get("text", "")
+                        .rstrip("\n\r")[:200],
+                    )
+                )
+                if len(hits) >= 200:
+                    return SearchResponse(hits=hits, truncated=True)
+            return SearchResponse(hits=hits, truncated=False)
+        except Exception as exc:
+            logger.warning("remote search_workspace_files failed", exc_info=True)
+            raise HTTPException(
+                status_code=503, detail="Busca remota indisponível."
+            ) from exc
 
     cwd_root = _resolve_inside(workspace_id, path)
     if cwd_root is None or not cwd_root.is_dir():
