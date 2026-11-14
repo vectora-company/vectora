@@ -123,6 +123,8 @@ class SshTransport:
             cwd=".",
             timeout=15.0,
         )
+        if result.exit_code != 0:
+            raise RuntimeError(result.stderr or "Falha ao listar diretório SSH.")
         # Parser mínimo: extrai nome e flag de diretório do `ls -la`.
         # Tipos detalhados (size, mtime) ficam para uma fase de polish.
         entries: list[DirEntry] = []
@@ -151,6 +153,10 @@ class SshTransport:
             cwd=".",
             timeout=30.0,
         )
+        if result.exit_code != 0:
+            if "no such file or directory" in result.stderr.lower():
+                raise FileNotFoundError(path)
+            raise RuntimeError(result.stderr or "Falha ao ler arquivo SSH.")
         return result.stdout.encode("utf-8", errors="replace")
 
     async def write_file(self, path: str, data: bytes) -> None:
@@ -160,7 +166,7 @@ class SshTransport:
         import shlex
 
         b64 = base64.b64encode(data).decode("ascii")
-        await self.run(
+        result = await self.run(
             [
                 "sh",
                 "-c",
@@ -169,6 +175,8 @@ class SshTransport:
             cwd=".",
             timeout=30.0,
         )
+        if result.exit_code != 0:
+            raise RuntimeError(result.stderr or "Falha ao gravar arquivo SSH.")
 
     async def run(
         self,
