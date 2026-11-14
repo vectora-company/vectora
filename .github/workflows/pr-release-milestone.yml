@@ -68,7 +68,10 @@ jobs:
               });
               const seen = new Set();
               let cursor = base;
-              while (cursor && !seen.has(cursor) && seen.size < 20) {
+              // `paginate` carrega todas as PRs abertas. O conjunto `seen`
+              // encerra ciclos; o tamanho da lista limita a busca sem truncar
+              // uma pilha válida por um teto fixo de profundidade.
+              while (cursor && !seen.has(cursor) && seen.size < open.length) {
                 seen.add(cursor);
                 const parent = open.find(
                   (pr) =>
