@@ -26127,7 +26127,9 @@
               "enum": [
                 "graphml",
                 "cypher",
-                "canvas"
+                "canvas",
+                "svg",
+                "obsidian"
               ],
               "title": "Export Format",
               "type": "string"

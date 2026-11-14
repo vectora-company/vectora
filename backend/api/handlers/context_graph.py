@@ -491,7 +491,7 @@ async def post_affected(
 def get_export(
     request: Request,
     workspace_id: str,
-    export_format: Literal["graphml", "cypher", "canvas"],
+    export_format: Literal["graphml", "cypher", "canvas", "svg", "obsidian"],
 ) -> FileResponse:
     """Gera um arquivo de exportação temporário a partir do grafo autorizado."""
     import shutil
@@ -506,6 +506,8 @@ def get_export(
         "graphml": ("graph.graphml", "application/graphml+xml"),
         "cypher": ("graph.cypher", "text/plain; charset=utf-8"),
         "canvas": ("graph.canvas", "application/json"),
+        "svg": ("graph.svg", "image/svg+xml"),
+        "obsidian": ("context-graph-obsidian.zip", "application/zip"),
     }
     if export_format not in supported:
         raise HTTPException(status_code=422, detail="Formato de exportação inválido")
@@ -524,9 +526,24 @@ def get_export(
     links = data.get("links", data.get("edges", []))
     if not isinstance(nodes, list) or not isinstance(links, list):
         raise HTTPException(status_code=422, detail="Estrutura do grafo inválida")
-    if len(nodes) > 100_000 or len(links) > 500_000:
+    node_limit = (
+        500
+        if export_format == "svg"
+        else 50_000
+        if export_format == "obsidian"
+        else 100_000
+    )
+    edge_limit = 10_000 if export_format == "svg" else 500_000
+    if len(nodes) > node_limit or len(links) > edge_limit:
         raise HTTPException(
             status_code=413, detail="Grafo excede o limite de exportação"
+        )
+    if (
+        export_format in {"svg", "obsidian"}
+        and graph_file.stat().st_size > 64 * 1024 * 1024
+    ):
+        raise HTTPException(
+            status_code=413, detail="Grafo excede o limite deste formato de exportação"
         )
 
     graph_data = {**data, "links": links}
@@ -575,12 +592,46 @@ def get_export(
             graph_export.to_graphml(graph, communities, str(output))
         elif export_format == "cypher":
             graph_export.to_cypher(graph, str(output))
-        else:
+        elif export_format == "canvas":
             graph_export.to_canvas(
                 graph, communities, str(output), community_labels=community_labels
             )
+        elif export_format == "svg":
+            graph_export.to_svg(
+                graph, communities, str(output), community_labels=community_labels
+            )
+        else:
+            import zipfile
+
+            vault_dir = temp_dir / "Context Graph"
+            graph_export.to_obsidian(
+                graph,
+                communities,
+                str(vault_dir),
+                community_labels=community_labels,
+            )
+            with zipfile.ZipFile(
+                output, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6
+            ) as archive:
+                for note in sorted(vault_dir.glob("*.md")):
+                    relative = note.relative_to(vault_dir)
+                    if (
+                        note.is_symlink()
+                        or relative.is_absolute()
+                        or ".." in relative.parts
+                    ):
+                        raise ValueError("O vault gerou um caminho de arquivo inválido")
+                    archive.write(note, f"Context Graph/{relative.as_posix()}")
+                    if output.stat().st_size > 128 * 1024 * 1024:
+                        raise HTTPException(
+                            status_code=413,
+                            detail="Vault Obsidian excede o limite de exportação",
+                        )
         if not output.is_file():
             raise RuntimeError("O exportador não produziu um arquivo")
+    except HTTPException:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        raise
     except ImportError as exc:
         shutil.rmtree(temp_dir, ignore_errors=True)
         raise HTTPException(

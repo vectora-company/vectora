@@ -49,6 +49,7 @@ import {
   getThreadActivity,
   getThreadDAG,
   type DAGPlanView,
+  type DAGStageView,
 } from "@/lib/api/vectora-client";
 import {
   WORKBENCH_STALE_MS,
@@ -209,7 +210,7 @@ export function DAGPlanCard({
   onApprove: () => void;
   onCancel: () => void;
 }) {
-  const stages = plan.execution?.stages ?? plan.stages;
+  const stages: DAGStageView[] = plan.execution?.stages ?? plan.stages;
   return (
     <section
       className="border-b border-border/50 p-2 space-y-2"

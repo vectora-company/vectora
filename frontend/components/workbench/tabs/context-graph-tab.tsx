@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 
 import { useContextGraph } from "@/lib/hooks/use-context-graph";
+import type { ContextGraphExportFormat } from "@/lib/hooks/use-context-graph";
 import { useWorkspacesStore } from "@/lib/stores/workspaces-store";
 import { useContextGraphSettingsStore } from "@/lib/stores/context-graph-settings-store";
 import { WorkbenchSettingsSurface } from "@/components/workbench/settings/workbench-settings-surface";
@@ -54,9 +55,8 @@ export function ContextGraphTab({
   } = useContextGraph(workspaceId);
   const [showReport, setShowReport] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [exportFormat, setExportFormat] = useState<
-    "graphml" | "cypher" | "canvas"
-  >("graphml");
+  const [exportFormat, setExportFormat] =
+    useState<ContextGraphExportFormat>("graphml");
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState(false);
   const fileTypes = useContextGraphSettingsStore((s) => s.fileTypes);
@@ -83,7 +83,10 @@ export function ContextGraphTab({
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `context-graph.${exportFormat}`;
+      link.download =
+        exportFormat === "obsidian"
+          ? "context-graph-obsidian.zip"
+          : `context-graph.${exportFormat}`;
       link.click();
       URL.revokeObjectURL(url);
     } catch {
@@ -166,6 +169,8 @@ export function ContextGraphTab({
               <option value="graphml">{m.graph_export_graphml()}</option>
               <option value="cypher">{m.graph_export_cypher()}</option>
               <option value="canvas">{m.graph_export_canvas()}</option>
+              <option value="svg">{m.graph_export_svg()}</option>
+              <option value="obsidian">{m.graph_export_obsidian()}</option>
             </select>
             <button
               type="button"

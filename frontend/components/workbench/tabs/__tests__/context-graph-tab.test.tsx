@@ -152,6 +152,28 @@ describe("ContextGraphTab", () => {
 
       expect(screen.getByRole("alert").textContent).toBe("graph_export_failed");
     });
+
+    it("oferece SVG e vault Obsidian e usa extensão ZIP para o vault", async () => {
+      setup({ status: { status: "done", node_count: 2 } });
+      const downloads: string[] = [];
+      vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(
+        function (this: HTMLAnchorElement) {
+          downloads.push(this.download);
+        },
+      );
+      render(<ContextGraphTab threadId="t1" />);
+
+      const format = screen.getByLabelText("graph_export_format");
+      expect(format.querySelector('option[value="svg"]')).not.toBeNull();
+      expect(format.querySelector('option[value="obsidian"]')).not.toBeNull();
+      fireEvent.change(format, { target: { value: "obsidian" } });
+      await act(async () => {
+        fireEvent.click(screen.getByText("graph_export_button"));
+      });
+
+      expect(mockExportGraph).toHaveBeenCalledWith("obsidian");
+      expect(downloads).toEqual(["context-graph-obsidian.zip"]);
+    });
   });
 
   describe("estado not_built", () => {

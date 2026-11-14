@@ -8,6 +8,7 @@ de toda a stack FastAPI.
 
 from __future__ import annotations
 
+import io
 import json
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -810,7 +811,9 @@ class TestCheckWorkspaceAccess:
 
 
 class TestGraphExport:
-    @pytest.mark.parametrize("export_format", ["graphml", "cypher", "canvas"])
+    @pytest.mark.parametrize(
+        "export_format", ["graphml", "cypher", "canvas", "svg", "obsidian"]
+    )
     def test_exports_workspace_graph_to_download(self, tmp_path, export_format):
         from backend.api.handlers.context_graph import get_export
 
@@ -834,14 +837,27 @@ class TestGraphExport:
             },
         )
         registry, _ = _make_registry(tmp_path)
-        with patch("backend.workspace.workspace.workspace_registry", registry):
+        with (
+            patch("backend.workspace.workspace.workspace_registry", registry),
+            patch("backend.context_graph.export.to_svg") as render_svg,
+        ):
+            render_svg.side_effect = lambda *_args, **_kwargs: Path(
+                _args[2]
+            ).write_text(
+                '<svg xmlns="http://www.w3.org/2000/svg"></svg>', encoding="utf-8"
+            )
             response = get_export(_fake_request(), "ws1", export_format)
 
         try:
             output = Path(response.path).read_bytes()
             assert output
+            filename = (
+                "context-graph-obsidian.zip"
+                if export_format == "obsidian"
+                else f"graph.{export_format}"
+            )
             assert response.headers["content-disposition"].endswith(
-                f'filename="graph.{export_format}"'
+                f'filename="{filename}"'
             )
             if export_format == "graphml":
                 assert b"<graphml" in output
@@ -850,6 +866,14 @@ class TestGraphExport:
             elif export_format == "canvas":
                 exported = json.loads(output)
                 assert exported["nodes"]
+            elif export_format == "svg":
+                assert b"<svg" in output
+            elif export_format == "obsidian":
+                import zipfile
+
+                with zipfile.ZipFile(io.BytesIO(output)) as archive:
+                    assert "Context Graph/A.md" in archive.namelist()
+                    assert "[[B]]" in archive.read("Context Graph/A.md").decode()
         finally:
             if response.background is not None:
                 import asyncio
@@ -868,7 +892,9 @@ class TestGraphExport:
             get_export(
                 _fake_request(),
                 "ws1",
-                cast("Literal['graphml', 'cypher', 'canvas']", "neo4j"),
+                cast(
+                    "Literal['graphml', 'cypher', 'canvas', 'svg', 'obsidian']", "neo4j"
+                ),
             )
         assert exc.value.status_code == 422
 
@@ -884,3 +910,38 @@ class TestGraphExport:
         ):
             get_export(_fake_request(), "ws1", "cypher")
         assert exc.value.status_code == 404
+
+    def test_svg_reports_missing_optional_renderer(self, tmp_path):
+        from fastapi import HTTPException
+
+        from backend.api.handlers.context_graph import get_export
+
+        _write_graph(tmp_path, {"nodes": [{"id": "a"}], "links": []})
+        registry, _ = _make_registry(tmp_path)
+        with (
+            patch("backend.workspace.workspace.workspace_registry", registry),
+            patch(
+                "backend.context_graph.export.to_svg",
+                side_effect=ImportError("matplotlib indisponível"),
+            ),
+            pytest.raises(HTTPException) as exc,
+        ):
+            get_export(_fake_request(), "ws1", "svg")
+        assert exc.value.status_code == 501
+
+    def test_svg_rejects_graph_over_layout_limit(self, tmp_path):
+        from fastapi import HTTPException
+
+        from backend.api.handlers.context_graph import get_export
+
+        _write_graph(
+            tmp_path,
+            {"nodes": [{"id": f"n{index}"} for index in range(501)], "links": []},
+        )
+        registry, _ = _make_registry(tmp_path)
+        with (
+            patch("backend.workspace.workspace.workspace_registry", registry),
+            pytest.raises(HTTPException) as exc,
+        ):
+            get_export(_fake_request(), "ws1", "svg")
+        assert exc.value.status_code == 413

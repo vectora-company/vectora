@@ -58,6 +58,9 @@ export interface GraphQueryResult {
   edges: RawGraphLink[];
 }
 
+export type ContextGraphExportFormat =
+  "graphml" | "cypher" | "canvas" | "svg" | "obsidian";
+
 function base(workspaceId: string): string {
   return `/workspaces/${encodeURIComponent(workspaceId)}/context-graph`;
 }
@@ -182,7 +185,7 @@ export function useContextGraph(workspaceId: string | null | undefined) {
   }, [workspaceId]);
 
   const exportGraph = useCallback(
-    async (format: "graphml" | "cypher" | "canvas"): Promise<Blob> => {
+    async (format: ContextGraphExportFormat): Promise<Blob> => {
       if (!workspaceId) throw new Error("Workspace indisponível");
       const res = await fetch(`${base(workspaceId)}/export/${format}`);
       if (!res.ok) {
