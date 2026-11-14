@@ -13,12 +13,21 @@ ignorada pelo git) na primeira vez que uma sessão roda nesse workspace.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import os
 import re
 from pathlib import Path
+from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +64,14 @@ name = "{name}"
 
 # [hooks]
 # post_file_write = ["ruff format {{file}}"]  # {{file}} = path absoluto do arquivo editado
+#
+# [[hooks.rules]]                            # hook do harness (exige aprovação do workspace)
+# id = "bloqueia-rm"
+# event = "pre_tool"                         # "pre_tool" | "post_tool" | "pre_response"
+# tools = ["run_command"]                    # padrões fnmatch; vazio vale para todas
+# command = ["python", ".vectora/hooks/check.py"]  # lista de argumentos, sem shell
+# mode = "blocking"                          # "blocking" | "informative"
+# timeout_s = 10
 """
 
 
@@ -88,14 +105,61 @@ class AgentSection(BaseModel):
     auto_commit: bool = False
 
 
-class HooksSection(BaseModel):
-    """Comandos shell disparados após uma tool específica rodar.
+HOOK_ID_PATTERN = r"^[a-z0-9][a-z0-9_-]{0,63}$"
 
-    ``{file}`` no comando é substituído pelo path absoluto do arquivo
-    afetado. Falha de hook nunca propaga pro resultado da tool — só loga.
+
+class HookRule(BaseModel):
+    """Hook determinístico do harness, definido em ``[[hooks.rules]]``.
+
+    O comando é uma lista de argumentos (sem shell) e recebe o contexto da
+    chamada como JSON na entrada padrão. Ele responde com
+    ``{"decision": "allow" | "deny", "reason": "..."}`` na saída padrão;
+    saída vazia com código 0 equivale a ``allow``. Em modo ``blocking``, um
+    ``deny``, um timeout, um erro ou uma resposta inválida impedem a ação
+    (falha fechada); em modo ``informative`` o resultado só é registrado.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(pattern=HOOK_ID_PATTERN)
+    event: Literal["pre_tool", "post_tool", "pre_response"]
+    #: Padrões ``fnmatch`` dos nomes de tool; vazio vale para todas. Ignorado
+    #: em ``pre_response``, que não tem tool.
+    tools: list[str] = Field(default_factory=list, max_length=64)
+    command: list[str] = Field(min_length=1, max_length=32)
+    mode: Literal["blocking", "informative"] = "blocking"
+    timeout_s: float = Field(default=10.0, ge=0.5, le=60.0)
+
+
+class HooksSection(BaseModel):
+    """Hooks do workspace.
+
+    ``post_file_write`` são comandos shell disparados após uma escrita de
+    arquivo (``{file}`` vira o path absoluto; falha nunca propaga para a
+    tool). ``rules`` são os hooks do harness (``pre_tool``, ``post_tool`` e ``pre_response``).
+    Regras inválidas são descartadas com um aviso (sem o valor), para que um
+    erro de digitação não derrube o resto da configuração do workspace.
     """
 
     post_file_write: list[str] = []
+    rules: list[HookRule] = []
+
+    @field_validator("rules", mode="before")
+    @classmethod
+    def _keep_valid_rules(cls, value: object) -> object:
+        if not isinstance(value, list):
+            return []
+        valid: list[HookRule] = []
+        for index, raw in enumerate(value):
+            try:
+                valid.append(HookRule.model_validate(raw))
+            except ValidationError as exc:
+                logger.warning(
+                    "workspace_config: regra de hook %d descartada (%d erro(s) de validação)",
+                    index,
+                    exc.error_count(),
+                )
+        return valid
 
 
 class ComputerUseSection(BaseModel):
@@ -129,6 +193,58 @@ def _resolve_env_placeholders(value: object) -> object:
     if isinstance(value, list):
         return [_resolve_env_placeholders(v) for v in value]
     return value
+
+
+def hook_rules_digest(
+    rules: list[HookRule], post_file_write: list[str] | tuple[str, ...] = ()
+) -> str:
+    """Digest SHA-256 dos hooks do workspace, em forma canônica.
+
+    Cobre as regras ``[[hooks.rules]]`` e os comandos de ``post_file_write``. A
+    aprovação do workspace fica presa a este valor: qualquer mudança em
+    comando, evento, ferramentas, modo ou timeout produz outro digest e exige
+    nova aprovação. A ordem conta.
+    """
+    canonical = json.dumps(
+        {
+            "rules": [rule.model_dump(mode="json") for rule in rules],
+            "post_file_write": list(post_file_write),
+        },
+        sort_keys=True,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def hooks_digest(section: HooksSection) -> str | None:
+    """Digest dos hooks configurados; ``None`` quando não há nada a aprovar."""
+    if not section.rules and not section.post_file_write:
+        return None
+    return hook_rules_digest(section.rules, section.post_file_write)
+
+
+def hooks_approval_valid(
+    section: HooksSection, *, approved: bool, approved_digest: str | None
+) -> bool:
+    """True quando a aprovação do workspace vale para os hooks de ``section``."""
+    return approved and approved_digest == hooks_digest(section)
+
+
+def hook_rules_pending(
+    cwd: str | Path, *, approved: bool, approved_digest: str | None
+) -> bool:
+    """True quando há hooks no ``vectora.toml`` que ainda não valem para execução.
+
+    Vale tanto para hooks nunca aprovados quanto para hooks alterados depois da
+    aprovação (digest diferente do gravado).
+    """
+    config = load_workspace_config(cwd)
+    if config is None or hooks_digest(config.hooks) is None:
+        return False
+    return not hooks_approval_valid(
+        config.hooks, approved=approved, approved_digest=approved_digest
+    )
 
 
 def load_workspace_config(cwd: str | Path) -> WorkspaceConfig | None:

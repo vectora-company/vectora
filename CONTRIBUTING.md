@@ -1,6 +1,6 @@
 # Contribuindo com o Vectora
 
-Obrigado pelo interesse. Este arquivo explica como preparar o ambiente, escolher uma tarefa e abrir um PR. A documentação para quem usa o produto fica em `docs/` (site público); a documentação de desenvolvimento fica aqui e nas issues do repositório.
+Obrigado pelo interesse. Este arquivo explica como preparar o ambiente, escolher uma tarefa e abrir um PR. A documentação para quem usa o produto fica em [docs.vectora.company](https://docs.vectora.company/) e é mantida no repositório [vectora-ltda/documentation](https://github.com/vectora-ltda/documentation); a documentação de desenvolvimento fica aqui e nas issues do repositório.
 
 ## Antes de começar
 
@@ -10,15 +10,20 @@ Obrigado pelo interesse. Este arquivo explica como preparar o ambiente, escolher
 
 ## Ambiente
 
-Requisitos: [uv](https://docs.astral.sh/uv/) (instala o Python 3.13), Node.js 26 e [pnpm](https://pnpm.io/).
+O caminho recomendado é `scons install`: ele detecta e informa o sistema, a arquitetura e, no Linux, a distribuição (com a família do gerenciador de pacotes) e depois instala, em passos numerados, tudo o que o build de release usa: sincroniza todos os grupos Python de desenvolvimento, executa `pnpm ci`, garante o Electron nativo, baixa os sidecars NATS e FFmpeg/FFprobe para a arquitetura detectada e, só no macOS, compila o helper de fala nativo (`swiftc`). Ele termina com a lista do que ficou instalado e pode ser repetido sem baixar de novo o que já existe. O `install` não instala pacotes de sistema com `sudo`: no Linux ele informa o comando para as ferramentas de empacotamento que faltarem. No Linux, `dotfiles.sh` é opcional e detecta a distribuição, instala dependências nativas e prepara a toolchain do desenvolvedor com base no repositório [DotFiles](https://github.com/brunosrz/DotFiles). O script é específico para Linux e encerra em Windows/macOS; nessas plataformas, instale os pré-requisitos indicados abaixo e rode o alvo SCons.
+
+O script seleciona Node e Python para seu próprio processo, sem trocar as versões padrão existentes do NVM, pyenv ou Rust. Ele pode instalar pacotes de sistema e ferramentas globais; antes de rodar `scons install` em outro shell, confirme que os pré-requisitos estão no `PATH`.
 
 ```bash
 git clone https://github.com/vectora-company/vectora.git
 cd vectora
-uv sync
-pnpm --dir frontend install
+# ./dotfiles.sh               # Linux; opcional, prepara a toolchain
+# Em todos os sistemas, com os pré-requisitos no PATH:
+uv run --locked scons install
 cp .env.example .env
 ```
+
+`pnpm ci` remove e recria `frontend/node_modules` usando o lockfile congelado. O Chromium de execução vem do pacote Electron; Playwright é usado como cliente CDP e o bootstrap não baixa browsers Playwright. Para reinstalar manualmente só o workspace frontend: `pnpm --dir frontend ci`.
 
 Para subir o backend em desenvolvimento: `uv run vectora start`.
 
@@ -37,6 +42,20 @@ pnpm --dir frontend exec oxlint
 ```
 
 `scons lint` e `scons tests` rodam o conjunto completo a partir da raiz. Rode os checks da área que você mexeu e diga no PR o que rodou e o que não rodou. Mexeu em `.github/`? Veja [Mudanças em `.github/`](#mudanças-em-github): a mudança precisa passar pela simulação com o `gh` falso.
+
+## Código sem uso
+
+Código que nada alcança costuma ser uma funcionalidade do Vectora ainda não ligada ao produto, não lixo: **não o apague, conecte-o**. Três checks apontam o que falta ligar, no pre-commit e no CI (`utils/unused_code.py`). Eles **avisam e não reprovam**: no GitHub Actions viram anotações de aviso no PR, e `--strict` (ou `UNUSED_CODE_STRICT=1`) os faz reprovar, para quem quiser a verificação dura. Os dois com baseline têm a meta de só encolher:
+
+- **Frontend (knip):** arquivos, dependências e exports sem uso, contra `utils/unused_frontend_baseline.json`. O modo de produção parte só do `main` e das rotas, então um módulo que só um teste importa também é apontado. Código novo sem uso é avisado; um item que deixou de aparecer (porque foi ligado) deve sair do baseline com `python utils/unused_code.py frontend --write-baseline`. O `frontend/knip.jsonc` só lista o que o knip não enxerga (alvos de alias do vite, dependências lidas pelo CSS).
+- **Páginas sem navegação:** toda rota de `frontend/src/routes` precisa de uma navegação no código (`to:`, `href`, `navigate`, `router.replace`, redirect do backend). Uma página aberta de fora do app, ou ainda por ligar, é declarada com o motivo em `utils/route_entrypoints.json`; a declaração de uma rota que já tem navegação, ou que não existe mais, também é avisada.
+- **Python (vulture):** funções, métodos e classes sem uso, contra `utils/unused_python_baseline.json`, com a mesma regra. Remova a entrada do baseline com `uv run --with vulture python utils/unused_code.py python --write-baseline` quando o código for ligado.
+
+```bash
+python utils/unused_code.py routes
+python utils/unused_code.py frontend
+uv run --with vulture python utils/unused_code.py python
+```
 
 ## Regras do código
 

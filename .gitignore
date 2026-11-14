@@ -79,7 +79,6 @@ instance/
 .scrapy
 
 # Sphinx documentation
-docs/_build/
 
 # PyBuilder
 .pybuilder/
@@ -313,11 +312,6 @@ dist
 # ~/.vectora/ is the roaming folder for user state (databases, logs, keys)
 # It should NEVER be committed to the repository
 data/
-# ...exceto o data/ vendorizado do tema Hugo (docs/_vendor/.../data/icons.yaml)
-# — sem exclusão nenhum ícone do Hextra renderiza, "data/" (sem barra
-# inicial) casa em qualquer profundidade, não só na raiz do roaming folder.
-!docs/_vendor/**/data/
-!docs/_vendor/**/data/**
 .src/
 .vectora/
 
@@ -352,7 +346,6 @@ AbilitySystem_repo/
 
 # SCons cache
 .sconsign.dblite
-/dist-nuitka
 
 # WIP isolado fora do src/
 /.wip/
@@ -376,11 +369,7 @@ env.gha
 /.scons-logs
 /.agents
 *.xml
-/docs/.docusaurus
 *.zip
-# mesmo motivo do !docs/_vendor/**/data/** acima — "*.xml" também casava
-# com o layout de RSS vendorizado do Hextra, e RSS está habilitado (hugo.toml).
-!docs/_vendor/**/*.xml
 /frontend/project.inlang
 /resources
 /ai-jail-master
@@ -400,8 +389,7 @@ env.gha
 /.audit-home
 /audit-rg.txt
 
-# Relatório do Nuitka e saída legada do context graph
-/nuitka-report.xml
+# Saída legada do context graph
 graphify-out/
 # Conteúdo de .vectora/ fica fora do git, exceto o lock de skills
 .vectora/*

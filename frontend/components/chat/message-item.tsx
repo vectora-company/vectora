@@ -1,3 +1,4 @@
+import { runOutcomeOf } from "@/lib/chat/run-outcome";
 import {
   Copy,
   Check,
@@ -405,6 +406,7 @@ export const MessageItem = memo(
     onOpenEditedFile,
   }: MessageItemProps) {
     const uiLang = useSettingsStore((s) => s.language);
+    const outcome = runOutcomeOf(message.stoppedReason);
     const { resolvedTheme } = useTheme();
     const isDark = resolvedTheme !== "light";
     const [isEditing, setIsEditing] = useState(false);
@@ -883,6 +885,25 @@ export const MessageItem = memo(
                         })}
                       </div>
                     )}
+                    {message.mediaRoutes && message.mediaRoutes.length > 0 && (
+                      <ul
+                        data-testid="media-routes"
+                        className="space-y-0.5 text-xs text-muted-foreground"
+                      >
+                        {message.mediaRoutes.map((route) => (
+                          <li
+                            key={`${route.name}:${route.model}`}
+                            title={`${route.reason} (${route.model})`}
+                          >
+                            {route.mode === "native"
+                              ? m.chat_media_route_native({ name: route.name })
+                              : route.mode === "image"
+                                ? m.chat_media_route_image({ name: route.name })
+                                : m.chat_media_route_text({ name: route.name })}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                     {/* Text content */}
                     {message.content && (
                       <p
@@ -1086,6 +1107,17 @@ export const MessageItem = memo(
                           </TooltipTrigger>
                           <TooltipContent>{m.chat_retry()}</TooltipContent>
                         </Tooltip>
+                      )}
+
+                      {!message.isThinking && !message.isError && outcome && (
+                        <span
+                          role="status"
+                          className="mr-1 text-[11px] text-muted-foreground"
+                        >
+                          {outcome === "cancelled"
+                            ? m.chat_outcome_cancelled()
+                            : m.chat_outcome_limit()}
+                        </span>
                       )}
 
                       {!message.isThinking && !message.isError && (

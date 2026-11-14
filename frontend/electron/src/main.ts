@@ -2,7 +2,7 @@
  * Vectora Desktop — main process.
  *
  * Responsabilidades:
- * - Spawn do binário Nuitka (``vectora-core``) como sidecar (VECTORA_DESKTOP=1).
+ * - Spawn do binário do backend (``vectora-core``, PyInstaller) como sidecar (VECTORA_DESKTOP=1).
  * - Transporte IPC: unix socket (Linux/macOS) / TCP loopback (Windows). A SPA
  *   carrega de ``vectora-app://app/`` e o main encaminha tudo ao backend, sem
  *   expor porta TCP no desktop (em Linux/macOS).
@@ -17,6 +17,10 @@
  */
 
 import { ChildProcess } from "child_process";
+import {
+  DEVELOPMENT_DESKTOP_NAME,
+  registerDevelopmentDesktop,
+} from "./linux-desktop.js";
 import * as fs from "fs";
 import {
   app,
@@ -130,6 +134,14 @@ if (!installedTestsMode) {
   app.commandLine.appendSwitch("remote-debugging-address", "127.0.0.1");
   app.commandLine.appendSwitch("remote-debugging-port", electronCdpPort);
 }
+if (
+  process.platform === "linux" &&
+  (process.env.WAYLAND_DISPLAY || process.env.XDG_SESSION_TYPE === "wayland")
+) {
+  // Chromium's Wayland surface factory cannot use Vulkan on some Linux
+  // desktops; disable it before app readiness to avoid GPU initialization errors.
+  app.commandLine.appendSwitch("disable-features", "Vulkan");
+}
 
 let electronCdpProxy: import("node:http").Server | null = null;
 if (!installedTestsMode) {
@@ -187,6 +199,30 @@ interface UpdateStatus {
 // que não é o nome do produto. setName() força %APPDATA%\vectora\ sem
 // precisar renomear o pacote. Chamado antes de qualquer path ser resolvido.
 app.setName("vectora");
+if (process.platform === "linux") {
+  app.setDesktopName(
+    app.isPackaged ? "vectora.desktop" : DEVELOPMENT_DESKTOP_NAME,
+  );
+  if (!app.isPackaged) {
+    try {
+      const configuredDataHome = process.env.XDG_DATA_HOME;
+      registerDevelopmentDesktop({
+        dataHome:
+          configuredDataHome && path.isAbsolute(configuredDataHome)
+            ? configuredDataHome
+            : path.join(os.homedir(), ".local", "share"),
+        executable: process.execPath,
+        main: path.join(__dirname, "main.js"),
+        icon: path.join(__dirname, "..", "..", "public", "favicon-600x600.png"),
+      });
+    } catch (error) {
+      console.warn(
+        "[desktop] Failed to register development desktop identity",
+        error,
+      );
+    }
+  }
+}
 
 // O Electron mantém o lock de instância e o perfil Chromium dentro de
 // `userData`. A versão instalada e o Electron de desenvolvimento precisam de
@@ -330,8 +366,8 @@ function getBrowserViewManager(): BrowserViewManager {
 
 const PROTOCOL = "vectora";
 const APP_SCHEME = "vectora-app"; // origem da SPA no desktop (IPC, sem TCP)
-// 90s: cobre extração do Nuitka onefile no primeiro boot (100-200 MB → %TEMP%)
-// e scan do Windows Defender em binário novo não reconhecido.
+// 90s: tempo máximo para o backend responder no primeiro boot, incluindo o
+// scan do Windows Defender em binário novo não reconhecido.
 const READINESS_TIMEOUT_MS = 90_000;
 const HEALTH_BASE_DELAY_MS = 200;
 const HEALTH_MAX_DELAY_MS = 2_000;
@@ -828,16 +864,23 @@ function getTrayIcon(): Electron.NativeImage {
   return nativeImage.createEmpty();
 }
 
-/**
- * Ícone da janela/taskbar. Em produção o electron-builder já embute o
- * ícone no `.exe` compilado (via `icon:` do electron-builder.yml) — mas o
- * binário genérico do pacote npm `electron` usado em dev não tem esse
- * embed, então sem setar `icon:` no BrowserWindow explicitamente a
- * taskbar mostra o ícone padrão do Electron, não o da Vectora.
- */
+/** Resolve o ícone nativo da janela a partir dos recursos empacotados ou do source. */
 function resolveAppIcon(): string | undefined {
+  const isDev = !app.isPackaged;
+  if (process.platform === "linux") {
+    const candidates = [
+      ...(isDev
+        ? [path.join(__dirname, "..", "..", "public", "favicon-600x600.png")]
+        : [path.join(process.resourcesPath, "vectora-icon.png")]),
+      path.join(__dirname, "..", "..", "public", "favicon-600x600.png"),
+    ];
+    return candidates.find((candidate) => fs.existsSync(candidate));
+  }
+
   const candidates = [
-    path.join(process.resourcesPath || "", "vectora.ico"), // produção (extraResources)
+    path.join(process.resourcesPath || "", "vectora-icon.png"),
+    path.join(process.resourcesPath || "", "vectora.ico"),
+    path.join(__dirname, "..", "..", "public", "favicon-600x600.png"),
     path.join(__dirname, "..", "..", "public", "vectora.ico"), // dev
   ];
   return candidates.find((c) => fs.existsSync(c));
@@ -975,6 +1018,14 @@ async function fetchPackagedChangelog(
  */
 /** Register updater events and expose their merged status to the renderer. */
 function setupAutoUpdater(): void {
+  // O binário npm do Electron usado em desenvolvimento informa a versão
+  // `0.0`; electron-updater exige semver válida e aborta o boot ao inicializar.
+  // Atualizações automáticas só fazem sentido no pacote instalado.
+  if (!app.isPackaged) {
+    console.info("[updater] desativado fora do pacote instalado");
+    return;
+  }
+
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = true;
 
@@ -1037,6 +1088,9 @@ function setupAutoUpdater(): void {
 }
 
 async function safeCheckForUpdates(): Promise<void> {
+  // The npm Electron binary reports version 0.0 in development; the updater
+  // is meaningful only for a packaged build with a release semver.
+  if (!app.isPackaged) return;
   try {
     await autoUpdater.checkForUpdates();
   } catch (err) {
@@ -1489,7 +1543,7 @@ app.whenReady().then(async () => {
     createWindow({ visible: !webMode });
     if (!webMode) createTray();
     setupAutoUpdater();
-    if (await isAutoUpdateEnabled()) {
+    if (app.isPackaged && (await isAutoUpdateEnabled())) {
       scheduleAutoUpdateChecks();
     }
   } catch (err) {

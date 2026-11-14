@@ -38,9 +38,12 @@ from typing import TYPE_CHECKING, Any, cast
 from uuid import uuid4
 
 from backend.engine.guardrails import LoopCapConfig, TurnBudget
+from backend.engine.hooks import MAX_RESPONSE_REVISIONS, response_denial_feedback
 from backend.engine.stream_events import (
     ErrorSignal,
     HitlRequested,
+    MediaRoute,
+    MediaRouted,
     MessageBreak,
     MessageChunk,
     TodoItem,
@@ -55,6 +58,10 @@ from backend.engine.tool_batch import (
     _apply_pre_execute,
     _has_structured_result,
     _is_tool_error,
+    _post_tool_hooks,
+    _pre_tool_hooks,
+    _redact_secrets,
+    drain_hook_outcomes,
     execute_tool_batch,
 )
 from backend.persistence.native.agent_run import AgentRunMetrics
@@ -473,7 +480,7 @@ async def _load_persistent_context_memories(ctx: ToolContext) -> list[MemoryReco
 
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Awaitable, Callable
 
     from backend.engine.hitl import ApprovalGate
     from backend.engine.stream_events import EventSink
@@ -543,6 +550,23 @@ async def _safe_update_agent_run_status(
         logger.exception(
             "conversation_loop: falha ao persistir status do run %s", run_id
         )
+
+
+async def _pre_response_hooks(ctx: ToolContext, text: str) -> Any | None:
+    """Roda os hooks ``pre_response``; devolve o desfecho que negou a resposta."""
+    from backend.engine.hooks import blocking_outcome, run_hooks
+    from backend.engine.tool_batch import _record_hook_outcomes
+
+    outcomes = await run_hooks(
+        "pre_response",
+        ctx=ctx,
+        tool_name="",
+        tool_args={},
+        result=text,
+        redact=_redact_secrets,
+    )
+    _record_hook_outcomes(ctx, outcomes)
+    return blocking_outcome(outcomes)
 
 
 async def _safe_record_run_evidence(
@@ -712,6 +736,66 @@ async def _workspace_changed_paths(ctx: ToolContext) -> set[str]:
             exc_info=True,
         )
         return set()
+
+
+async def _report_media_routing(
+    messages: list[VMessage],
+    *,
+    model_id: str,
+    downgraded: bool,
+    emit: Callable[[Any], Awaitable[None]],
+    session_store: SessionStore,
+    run_id: str | None,
+    thread_id: str,
+    iteration: int,
+) -> None:
+    """Registra no run e mostra na UI como cada anexo chegou ao modelo."""
+    from backend.llm.media_parts import media_routing_evidence, resolve_native_media
+
+    if not any(block.kind == "media" for m in messages for block in m.content):
+        return
+    entries = media_routing_evidence(
+        messages, await resolve_native_media(model_id), model_id
+    )
+    if not entries:
+        return
+    if downgraded:
+        for entry in entries:
+            if entry["mode"] == "native":
+                entry["mode"] = "text"
+                entry["reason"] = "provider recusou o arquivo; reenviado como texto"
+    with contextlib.suppress(Exception):
+        await emit(
+            MediaRouted(
+                routes=[
+                    MediaRoute(
+                        name=str(entry["name"]),
+                        media_kind=str(entry["media_kind"]),
+                        mime_type=str(entry["mime_type"]),
+                        size_bytes=int(cast("int", entry["size_bytes"])),
+                        mode=str(entry["mode"]),
+                        reason=str(entry["reason"]),
+                        model=model_id,
+                    )
+                    for entry in entries
+                ]
+            )
+        )
+    if run_id and hasattr(session_store, "record_run_evidence"):
+        try:
+            await session_store.record_run_evidence(
+                run_id,
+                evidence={
+                    "kind": "media_routing",
+                    "evidence_id": f"media_routing:{run_id}:{iteration}:{model_id}",
+                    "run_id": run_id,
+                    "thread_id": thread_id,
+                    "model": model_id,
+                    "attachments": entries,
+                },
+            )
+        except Exception:
+            logger.exception("conversation_loop: falha ao registrar envio de anexos")
 
 
 async def run_conversation(  # noqa: PLR0911
@@ -898,6 +982,8 @@ async def run_conversation(  # noqa: PLR0911
                 "conversation_loop: falha ao carregar checkpoint de retomada"
             )
 
+    media_routed_model: str | None = None
+    response_revisions = 0
     for _iteracao in range(config.max_iterations):
         raw_history = await session_store.get_history(thread_id)
         if ctx.permission_mode == "plan":
@@ -919,8 +1005,16 @@ async def run_conversation(  # noqa: PLR0911
             workspace_id=ctx.workspace_id or None,
             policy_snapshot=policy_snapshot,
             persistent_memory_records=await _load_persistent_context_memories(ctx),
+            model=str(ctx.model) if ctx.model else None,
         )
-        historico = planned_context.messages
+        from backend.services.media_hydration import hydrate_media_blocks
+
+        historico = hydrate_media_blocks(
+            planned_context.messages,
+            user_id=ctx.user_id or "local",
+            workspace_id=ctx.workspace_id or "",
+            thread_id=thread_id,
+        )
         if config.run_id and hasattr(session_store, "record_run_evidence"):
             try:
                 if planned_context.manifest and not manifest_recorded:
@@ -1023,6 +1117,15 @@ async def run_conversation(  # noqa: PLR0911
             # não via `on_event`.
 
         if stream_usage is not None:
+            with contextlib.suppress(Exception):
+                from backend.services.image_token_cost import observe_turn
+
+                observe_turn(
+                    str(ctx.model) if ctx.model else None,
+                    historico,
+                    tools,
+                    stream_usage,
+                )
             if last_usage is None:
                 last_usage = {}
             for key, value in stream_usage.items():
@@ -1030,6 +1133,19 @@ async def run_conversation(  # noqa: PLR0911
         model_id = getattr(chat_client, "last_model_id", None)
         if model_id:
             usage_models.add(str(model_id))
+        routed_model = str(model_id or ctx.model or "")
+        if routed_model and routed_model != media_routed_model:
+            media_routed_model = routed_model
+            await _report_media_routing(
+                historico,
+                model_id=routed_model,
+                downgraded=bool(getattr(chat_client, "last_media_downgraded", False)),
+                emit=emit,
+                session_store=session_store,
+                run_id=config.run_id,
+                thread_id=thread_id,
+                iteration=_iteracao,
+            )
         if stream_usage is not None:
             usage_records.append((str(model_id) if model_id else None, stream_usage))
 
@@ -1051,7 +1167,8 @@ async def run_conversation(  # noqa: PLR0911
             await record_interaction(
                 session_store,
                 run_id=config.run_id,
-                messages=historico,
+                # Sem a mídia reidratada: a gravação guarda só referências.
+                messages=planned_context.messages,
                 response=texto_final,
                 tool_calls=tool_calls,
                 usage=stream_usage,
@@ -1214,6 +1331,39 @@ async def run_conversation(  # noqa: PLR0911
         )
 
         if not tool_calls:
+            response_denial = await _pre_response_hooks(ctx, texto_final)
+            for hook_evidence in drain_hook_outcomes(ctx):
+                await _safe_record_run_evidence(
+                    session_store, config.run_id, evidence=hook_evidence
+                )
+            if response_denial is not None:
+                if response_revisions < MAX_RESPONSE_REVISIONS:
+                    response_revisions += 1
+                    parent_id = await session_store.append_message(
+                        thread_id,
+                        VMessage(
+                            role=MessageRole.USER,
+                            content=[
+                                ContentBlock(
+                                    kind="text",
+                                    text=response_denial_feedback(response_denial),
+                                )
+                            ],
+                        ),
+                        parent_message_id=parent_id,
+                        run_id=config.run_id,
+                    )
+                    continue
+                await emit(
+                    ErrorSignal(
+                        code="RESPONSE_HOOK_DENIED",
+                        message=(
+                            f"O hook {response_denial.hook_id} negou a resposta "
+                            "mesmo depois das revisões; ela não atende à regra "
+                            "configurada no workspace."
+                        ),
+                    )
+                )
             if config.run_id:
                 try:
                     if hasattr(session_store, "append_ledger_event"):
@@ -1739,6 +1889,10 @@ async def run_conversation(  # noqa: PLR0911
             on_tool_started=_record_tool_started,
             policy_snapshot=policy_snapshot,
         )
+        for hook_evidence in drain_hook_outcomes(ctx):
+            await _safe_record_run_evidence(
+                session_store, config.run_id, evidence=hook_evidence
+            )
         for resultado in resultados:
             parent_id = await session_store.append_message(
                 thread_id, resultado, parent_message_id=parent_id
@@ -2130,12 +2284,32 @@ async def _execute_single_call(
         )
         if spec.extras.category == "media":
             call_context = await apply_media_billing_source(call_context)
+        blocked_by_hook = await _pre_tool_hooks(tool_call, ctx)
+        if blocked_by_hook is not None:
+            return blocked_by_hook
+        # O hook pode demorar: confere a autorização de novo antes de despachar.
+        allowed, deny_reason = await asyncio.to_thread(
+            _apply_pre_execute, tool_call, ctx, policy_snapshot
+        )
+        if not allowed:
+            return VMessage(
+                role=MessageRole.TOOL,
+                content=[
+                    ContentBlock(
+                        kind="text", text=f"Error: policy_denied: {deny_reason}"
+                    )
+                ],
+                tool_call_id=tool_call.id,
+                name=tool_call.name,
+                is_error=True,
+            )
         texto = await spec.ainvoke(
             tool_call.args,
             call_context,
         )
         texto = _apply_post_execute(texto)
         is_error = _is_tool_error(texto, structured=_has_structured_result(spec))
+        texto, is_error = await _post_tool_hooks(tool_call, ctx, texto, is_error)
         from backend.services.tool_usage import record_tool_usage
 
         await record_tool_usage(
@@ -2442,6 +2616,11 @@ async def resume_conversation(
                     tabs=spec.extras.invalidates, tool_name=resultado.name or ""
                 )
             )
+
+    for hook_evidence in drain_hook_outcomes(ctx):
+        await _safe_record_run_evidence(
+            session_store, resume_run_id, evidence=hook_evidence
+        )
 
     record_decision = getattr(session_store, "record_approval_decision", None)
     if record_decision is not None:

@@ -443,7 +443,7 @@
             "type": "integer"
           },
           "cost_cents": {
-            "default": 0,
+            "default": 0.0,
             "title": "Cost Cents",
             "type": "number"
           },
@@ -609,7 +609,7 @@
           "byte_size": {
             "default": 0,
             "description": "Tamanho do payload em bytes.",
-            "minimum": 0,
+            "minimum": 0.0,
             "title": "Byte Size",
             "type": "integer"
           },
@@ -668,7 +668,7 @@
         "type": "object"
       },
       "Attachment": {
-        "description": "Arquivo anexado a uma mensagem pelo usuário.\n\n``base64_data`` armazena o conteúdo em base64 puro (sem prefixo data URL).\nO frontend usa ``fileToBase64()`` que já remove o prefixo ``data:...;base64,``.",
+        "description": "Arquivo anexado a uma mensagem pelo usuário.\n\n``base64_data`` armazena o conteúdo em base64 puro (sem prefixo data URL).\nQualquer tipo de arquivo é aceito; o limite de tamanho depende do tipo\ndetectado pelos bytes (imagem, áudio, vídeo, documento, texto ou\narquivo genérico).",
         "properties": {
           "base64_data": {
             "title": "Base64 Data",
@@ -696,13 +696,16 @@
         "type": "object"
       },
       "AttachmentKind": {
-        "description": "Tipo semântico do attachment — determina como o backend o injeta na mensagem.",
+        "description": "Tipo do anexo declarado pelo cliente.\n\nÉ só uma dica: o backend reclassifica pelos bytes\n(``backend/services/media_types.py``) e o tipo efetivo decide como o\nanexo chega ao modelo.",
         "enum": [
           "image",
           "pdf",
+          "document",
           "code",
           "text",
-          "audio"
+          "audio",
+          "video",
+          "file"
         ],
         "title": "AttachmentKind",
         "type": "string"
@@ -1052,6 +1055,21 @@
         "title": "BulkTaskResult",
         "type": "object"
       },
+      "CancelRunRequest": {
+        "properties": {
+          "thread_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Thread Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "thread_id"
+        ],
+        "title": "CancelRunRequest",
+        "type": "object"
+      },
       "CatalogSkillInstallRequest": {
         "description": "Referência a uma skill publicada no catálogo agregado.",
         "properties": {
@@ -1138,7 +1156,7 @@
           "context_max_tokens": {
             "anyOf": [
               {
-                "minimum": 1,
+                "minimum": 1.0,
                 "type": "integer"
               },
               {
@@ -1696,6 +1714,36 @@
           "branches"
         ],
         "title": "ConversationBranchesResponse",
+        "type": "object"
+      },
+      "CountThreadsRequest": {
+        "description": "Mesmos filtros de `ListThreadsRequest`; devolve quantas threads listaria.",
+        "properties": {
+          "include_empty": {
+            "default": false,
+            "title": "Include Empty",
+            "type": "boolean"
+          },
+          "mode": {
+            "default": "",
+            "title": "Mode",
+            "type": "string"
+          }
+        },
+        "title": "CountThreadsRequest",
+        "type": "object"
+      },
+      "CountThreadsResponse": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "count"
+        ],
+        "title": "CountThreadsResponse",
         "type": "object"
       },
       "CreateAgentProfileRequest": {
@@ -2768,8 +2816,8 @@
           "context_size": {
             "anyOf": [
               {
-                "maximum": 1000000,
-                "minimum": 1,
+                "maximum": 1000000.0,
+                "minimum": 1.0,
                 "type": "integer"
               },
               {
@@ -2804,8 +2852,8 @@
           "context_size": {
             "anyOf": [
               {
-                "maximum": 1000000,
-                "minimum": 1,
+                "maximum": 1000000.0,
+                "minimum": 1.0,
                 "type": "integer"
               },
               {
@@ -3579,8 +3627,8 @@
             "type": "string"
           },
           "progress": {
-            "maximum": 100,
-            "minimum": 0,
+            "maximum": 100.0,
+            "minimum": 0.0,
             "title": "Progress",
             "type": "integer"
           },
@@ -4122,6 +4170,51 @@
           "content"
         ],
         "title": "HistoryMessage",
+        "type": "object"
+      },
+      "HookRuleInfo": {
+        "description": "Regra ``[[hooks.rules]]`` do ``vectora.toml``, como o usuário a revisa.",
+        "properties": {
+          "command": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Command",
+            "type": "array"
+          },
+          "event": {
+            "title": "Event",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          },
+          "timeout_s": {
+            "title": "Timeout S",
+            "type": "number"
+          },
+          "tools": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Tools",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "event",
+          "mode",
+          "timeout_s",
+          "command"
+        ],
+        "title": "HookRuleInfo",
         "type": "object"
       },
       "HuggingFaceDownloadRequest": {
@@ -4674,6 +4767,16 @@
       },
       "ListThreadsRequest": {
         "properties": {
+          "cursor": {
+            "default": "",
+            "title": "Cursor",
+            "type": "string"
+          },
+          "include_empty": {
+            "default": false,
+            "title": "Include Empty",
+            "type": "boolean"
+          },
           "limit": {
             "default": 50,
             "title": "Limit",
@@ -4690,12 +4793,22 @@
       },
       "ListThreadsResponse": {
         "properties": {
+          "next_cursor": {
+            "default": "",
+            "title": "Next Cursor",
+            "type": "string"
+          },
           "threads": {
             "items": {
               "$ref": "#/components/schemas/Thread"
             },
             "title": "Threads",
             "type": "array"
+          },
+          "total": {
+            "default": 0,
+            "title": "Total",
+            "type": "integer"
           }
         },
         "required": [
@@ -5345,6 +5458,68 @@
         "title": "McpServer",
         "type": "object"
       },
+      "MediaLimitsBody": {
+        "description": "Campos ausentes (``None``) não mudam; fora da faixa é recusado.",
+        "properties": {
+          "max_images": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Images"
+          },
+          "max_side": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Side"
+          },
+          "pdf_pages": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pdf Pages"
+          },
+          "quality": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quality"
+          },
+          "video_frames": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Video Frames"
+          }
+        },
+        "title": "MediaLimitsBody",
+        "type": "object"
+      },
       "MediaModelsBody": {
         "description": "String vazia **limpa** a escolha (volta a valer a env var); `None`\nsignifica \"não mexe nesta chave\".",
         "properties": {
@@ -5930,6 +6105,17 @@
             },
             "title": "Messages",
             "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
           },
           "run_status": {
             "default": "idle",
@@ -7019,7 +7205,7 @@
           "context_max_tokens": {
             "anyOf": [
               {
-                "minimum": 1,
+                "minimum": 1.0,
                 "type": "integer"
               },
               {
@@ -7069,6 +7255,28 @@
           }
         },
         "title": "ResumeRunRequest",
+        "type": "object"
+      },
+      "ResumeStreamRequest": {
+        "description": "Retoma o stream de um run a partir do último evento recebido.",
+        "properties": {
+          "last_event_id": {
+            "default": "",
+            "maxLength": 300,
+            "title": "Last Event Id",
+            "type": "string"
+          },
+          "thread_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Thread Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "thread_id"
+        ],
+        "title": "ResumeStreamRequest",
         "type": "object"
       },
       "RevertCommitRequest": {
@@ -7726,7 +7934,7 @@
             "type": "array"
           },
           "total": {
-            "minimum": 0,
+            "minimum": 0.0,
             "title": "Total",
             "type": "integer"
           }
@@ -8467,17 +8675,28 @@
       "TestApiKeyBody": {
         "properties": {
           "api_key": {
-            "title": "Api Key",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key"
           },
           "provider": {
             "title": "Provider",
             "type": "string"
+          },
+          "use_env": {
+            "default": false,
+            "title": "Use Env",
+            "type": "boolean"
           }
         },
         "required": [
-          "provider",
-          "api_key"
+          "provider"
         ],
         "title": "TestApiKeyBody",
         "type": "object"
@@ -8529,6 +8748,11 @@
           "created_at": {
             "title": "Created At",
             "type": "string"
+          },
+          "empty": {
+            "default": false,
+            "title": "Empty",
+            "type": "boolean"
           },
           "id": {
             "title": "Id",
@@ -8940,6 +9164,57 @@
           "diagnostic"
         ],
         "title": "TranscriptionReadinessResponse",
+        "type": "object"
+      },
+      "TranscriptionSettingsBody": {
+        "description": "Campos ausentes (``None``) não mudam; string vazia limpa a escolha.",
+        "properties": {
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "system_command": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System Command"
+          },
+          "system_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System Model"
+          }
+        },
+        "title": "TranscriptionSettingsBody",
         "type": "object"
       },
       "TreeEntry": {
@@ -9545,8 +9820,8 @@
           "confidence_threshold_hitl": {
             "anyOf": [
               {
-                "maximum": 1,
-                "minimum": 0,
+                "maximum": 1.0,
+                "minimum": 0.0,
                 "type": "number"
               },
               {
@@ -9674,8 +9949,8 @@
           "risk_assessment_timeout_s": {
             "anyOf": [
               {
-                "exclusiveMinimum": 0,
-                "maximum": 120,
+                "exclusiveMinimum": 0.0,
+                "maximum": 120.0,
                 "type": "number"
               },
               {
@@ -9999,6 +10274,33 @@
         "title": "VscodeOptionsResponse",
         "type": "object"
       },
+      "WorkspaceHooksResponse": {
+        "description": "Regras de hook do workspace e o estado da aprovação.",
+        "properties": {
+          "approval": {
+            "title": "Approval",
+            "type": "string"
+          },
+          "rules": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/HookRuleInfo"
+            },
+            "title": "Rules",
+            "type": "array"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_id",
+          "approval"
+        ],
+        "title": "WorkspaceHooksResponse",
+        "type": "object"
+      },
       "WorkspaceInfo": {
         "properties": {
           "codespace_name": {
@@ -10052,6 +10354,11 @@
           "hooks_approved": {
             "default": false,
             "title": "Hooks Approved",
+            "type": "boolean"
+          },
+          "hooks_rules_pending": {
+            "default": false,
+            "title": "Hooks Rules Pending",
             "type": "boolean"
           },
           "id": {
@@ -10545,7 +10852,7 @@
   "info": {
     "description": "API de chat do Vectora — streaming via SSE, gerenciamento de threads, autodescoberta de ferramentas.",
     "title": "Vectora API",
-    "version": "0.1.23"
+    "version": "1"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -10815,7 +11122,7 @@
         ]
       },
       "post": {
-        "description": "Gera um link de convite de signup com token expirável.\n\nConvidar membro adicional (2º+ usuário) é feature de time — exige plano\nPro. O primeiro usuário (root) não passa por aqui: nasce direto no\nsignup inicial (``backend/services/auth.py::signup``), sempre livre.",
+        "description": "Gera um convite para outra conta na instância local.",
         "operationId": "create_invite_admin_invites_post",
         "requestBody": {
           "content": {
@@ -10897,6 +11204,72 @@
           }
         },
         "summary": "Revoke Invite",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/media-limits": {
+      "get": {
+        "description": "Limites das imagens geradas de PDF e vídeo: valor efetivo, padrão e\nfaixa aceita (``backend/services/media_limits.py``).",
+        "operationId": "get_media_limits_admin_media_limits_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Media Limits Admin Media Limits Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Media Limits",
+        "tags": [
+          "admin"
+        ]
+      },
+      "patch": {
+        "description": "Grava os limites informados e devolve o estado efetivo.",
+        "operationId": "patch_media_limits_admin_media_limits_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MediaLimitsBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Patch Media Limits Admin Media Limits Patch",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Patch Media Limits",
         "tags": [
           "admin"
         ]
@@ -11676,6 +12049,72 @@
           }
         },
         "summary": "Toggle Tool",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/transcription": {
+      "get": {
+        "description": "Configuração da transcrição local de áudio e vídeo: modelo e idioma do\nfaster-whisper embutido, whisper do sistema, e quais motores existem\nnesta máquina (``backend/services/speech_to_text.py``).",
+        "operationId": "get_transcription_settings_admin_transcription_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Transcription Settings Admin Transcription Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Transcription Settings",
+        "tags": [
+          "admin"
+        ]
+      },
+      "patch": {
+        "description": "Grava a configuração da transcrição local e devolve o estado efetivo.",
+        "operationId": "patch_transcription_settings_admin_transcription_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TranscriptionSettingsBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Patch Transcription Settings Admin Transcription Patch",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Patch Transcription Settings",
         "tags": [
           "admin"
         ]
@@ -14329,7 +14768,7 @@
     },
     "/license/validate-token": {
       "post": {
-        "description": "Valida um VECTORA_TOKEN ad-hoc, antes de existir qualquer conta.\n\nUsado pelo wizard de onboarding pra checar o token Pro no passo VPS\nANTES do signup de verdade acontecer. Só permitido no primeiro acesso\n(instância ainda sem nenhum usuário) — mesma guarda de\n``/auth/setup-local``. Se válido e ``tier == \"pro\"``, persiste (o\n``/auth/signup`` seguinte já herda o token configurado); se inválido ou\nFree, não persiste em disco (só fica no ambiente do processo atual).",
+        "description": "Valida um VECTORA_TOKEN ad-hoc, antes de existir qualquer conta.\n\nUsado no primeiro acesso para conectar uma conta antes da configuração\nda instância. Aceita qualquer tier válido: hospedar a própria instância\nnão depende da assinatura Pro.",
         "operationId": "license_validate_token_license_validate_token_post",
         "requestBody": {
           "content": {
@@ -17351,7 +17790,7 @@
     },
     "/provider-routing/llamacpp/runtime/test": {
       "post": {
-        "description": "Executa apenas ``--version`` no binário indicado pelo usuário.",
+        "description": "Testa ``--version`` apenas em um runtime gerenciado pelo Vectora.",
         "operationId": "check_llamacpp_runtime_provider_routing_llamacpp_runtime_test_post",
         "parameters": [
           {
@@ -20998,7 +21437,7 @@
     },
     "/threads/{thread_id}/history": {
       "get": {
-        "description": "Histórico paginado de mensagens de uma thread.\n\nRetorna as ``limit`` mensagens mais recentes (excluindo as ``offset`` mais\nrecentes), em ordem cronológica. ``has_more=True`` quando existem mensagens\nmais antigas além das retornadas.",
+        "description": "Histórico paginado de mensagens de uma thread.\n\nRetorna as ``limit`` mensagens mais recentes (excluindo as ``offset`` mais\nrecentes), em ordem cronológica. ``has_more=True`` quando existem mensagens\nmais antigas além das retornadas.\n\nCom ``before_message_id`` a página é a janela que termina logo antes dessa\nmensagem, e ``offset`` é ignorado: o cursor é a identidade da mensagem, então\nmensagens novas chegando no fim da conversa entre duas páginas não\ndeslocam a janela (o que repetiria ou pularia mensagens com ``offset``).\n``next_cursor`` é o ``message_id`` da mensagem mais antiga da página, ou\n``None`` quando não há mais páginas ou essa mensagem não tem ID (aí o\ncliente volta a usar ``offset``). Um cursor que não existe mais (mensagem\nremovida por rewind) responde 409, e o cliente recarrega do fim.",
         "operationId": "get_thread_history_paginated_threads__thread_id__history_get",
         "parameters": [
           {
@@ -21028,6 +21467,22 @@
               "default": 0,
               "title": "Offset",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before_message_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before Message Id"
             }
           }
         ],
@@ -21646,6 +22101,56 @@
         ]
       }
     },
+    "/vectora.chat.v1.ChatService/CancelRun": {
+      "post": {
+        "description": "Cancel an active run after verifying ownership of its conversation.",
+        "operationId": "cancel_run_vectora_chat_v1_ChatService_CancelRun_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "boolean"
+                      }
+                    ]
+                  },
+                  "title": "Response Cancel Run Vectora Chat V1 Chatservice Cancelrun Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Run"
+      }
+    },
     "/vectora.chat.v1.ChatService/GetTools": {
       "get": {
         "description": "Retorna o schema das ferramentas disponíveis para o usuário autenticado.\n\nReflete a política de tools (deny por usuário) + as tools dos servidores MCP\ndo usuário — o mesmo toolset que o agente recebe (S4/S7).",
@@ -21700,6 +22205,43 @@
           }
         },
         "summary": "Resume Chat"
+      }
+    },
+    "/vectora.chat.v1.ChatService/ResumeStream": {
+      "post": {
+        "description": "Entrega os eventos de um run depois do cursor informado e acompanha o run.\n\nResponde 404 quando o log do run não está mais disponível (servidor\nreiniciado, run antigo ou cursor fora do que foi guardado); o cliente então\nreconcilia com o histórico persistido.",
+        "operationId": "resume_stream_vectora_chat_v1_ChatService_ResumeStream_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResumeStreamRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resume Stream"
       }
     },
     "/vectora.chat.v1.ChatService/StreamChat": {
@@ -21817,6 +22359,45 @@
           }
         },
         "summary": "Transcription Readiness"
+      }
+    },
+    "/vectora.chat.v1.ThreadService/CountThreads": {
+      "post": {
+        "description": "Conta as threads que ``ListThreads`` listaria com os mesmos filtros.",
+        "operationId": "count_threads_vectora_chat_v1_ThreadService_CountThreads_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CountThreadsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CountThreadsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Count Threads"
       }
     },
     "/vectora.chat.v1.ThreadService/CreateThread": {
@@ -22057,7 +22638,7 @@
     },
     "/vectora.chat.v1.ThreadService/ListThreads": {
       "post": {
-        "description": "Lista threads visíveis ao usuário, excluindo sessões internas.",
+        "description": "Lista threads visíveis ao usuário, excluindo sessões internas.\n\nThreads sem mensagem só entram com ``include_empty``. ``total`` é o número\nde threads do filtro inteiro e ``next_cursor`` aponta a página seguinte\n(vazio na última), estável mesmo que a lista mude entre as chamadas.",
         "operationId": "list_threads_vectora_chat_v1_ThreadService_ListThreads_post",
         "requestBody": {
           "content": {
@@ -22271,7 +22852,7 @@
     },
     "/vectora.workspace.v1.WorkspaceService/ApproveHooks": {
       "post": {
-        "description": "Aprova a execução de ``[hooks].post_file_write`` deste workspace.\n\nConfiar na pasta (``TrustWorkspace``) autoriza leitura/escrita/terminal —\nhooks são um efeito colateral distinto (comando de shell definido em\n``vectora.toml``, que pode vir de um repositório clonado) e exigem\naprovação própria antes da 1ª execução.",
+        "description": "Aprova a execução dos hooks deste workspace.\n\nVale para ``[hooks].post_file_write`` e ``[[hooks.rules]]``.\n\nConfiar na pasta (``TrustWorkspace``) autoriza leitura/escrita/terminal —\nhooks são um efeito colateral distinto (comando de shell definido em\n``vectora.toml``, que pode vir de um repositório clonado) e exigem\naprovação própria antes da 1ª execução.",
         "operationId": "approve_hooks_vectora_workspace_v1_WorkspaceService_ApproveHooks_post",
         "requestBody": {
           "content": {
@@ -26820,6 +27401,49 @@
           }
         },
         "summary": "Git Unstage",
+        "tags": [
+          "workspaces-view"
+        ]
+      }
+    },
+    "/workspaces/{workspace_id}/hooks": {
+      "get": {
+        "description": "Lista as regras de hook do workspace para revisão antes da aprovação.",
+        "operationId": "get_workspace_hooks_workspaces__workspace_id__hooks_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceHooksResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Workspace Hooks",
         "tags": [
           "workspaces-view"
         ]

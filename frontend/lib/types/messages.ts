@@ -8,6 +8,7 @@ import type { ToolCall } from "./tools";
 import type { SubgraphOutput } from "./tools";
 import type { UsageMetadata } from "./metadata";
 import type { ImageAttachment } from "./images";
+import type { MediaRoute } from "@/lib/api/vectora-client";
 
 export interface EditedFile {
   path: string;
@@ -26,12 +27,16 @@ export interface Message {
   id: string;
   /** ID numérico persistido; nunca usar o ID visual para cursores de leitura. */
   persistedMessageId?: number;
+  /** Como o run terminou (`stopped_reason` do evento `done`). */
+  stoppedReason?: string;
   role: "user" | "assistant";
   content: string;
   timestamp: Date;
 
   // Image attachments
   images?: ImageAttachment[];
+  /** Como cada anexo chegou ao modelo (evento `media_routed`). */
+  mediaRoutes?: MediaRoute[];
 
   // Tool execution
   toolCalls?: ToolCall[];

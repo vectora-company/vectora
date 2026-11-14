@@ -20,6 +20,7 @@ via SessionStore (backend/persistence/native/session_store.py).
 from __future__ import annotations
 
 import asyncio
+import base64
 import contextlib
 import json
 import logging
@@ -71,6 +72,8 @@ from backend.api.schemas import (
     ConversationBranch,
     ConversationBranchComparison,
     ConversationBranchesResponse,
+    CountThreadsRequest,
+    CountThreadsResponse,
     CreateThreadRequest,
     DeleteThreadRequest,
     DiffHunk,
@@ -387,7 +390,7 @@ def _row_to_thread(row: tuple) -> Thread:
     últimas posições). Ambas têm fallback pra ``None``/``0`` quando a SELECT
     de origem não as inclui (compatibilidade com chamadas mais antigas).
     """
-    thread_id, _, created_at, last_activity, _, extra_json = row[:6]
+    thread_id, _, created_at, last_activity, message_count, extra_json = row[:6]
     mode_col = row[6] if len(row) > 6 else None
     pinned_col = row[7] if len(row) > 7 else 0
     unread_col = row[8] if len(row) > 8 else 0
@@ -409,6 +412,7 @@ def _row_to_thread(row: tuple) -> Thread:
         mode=mode,
         pinned=bool(pinned_col),
         unread_count=max(0, int(unread_col or 0)),
+        empty=not int(message_count or 0),
     )
 
 
@@ -823,6 +827,7 @@ async def create_thread(body: CreateThreadRequest, http_request: Request) -> Thr
         updated_at=now,
         title="",
         workspace_id=workspace_id,
+        empty=True,
     )
 
 
@@ -999,13 +1004,19 @@ async def get_thread(
 # ---------------------------------------------------------------------------
 
 
-@router.post("/vectora.chat.v1.ThreadService/ListThreads")
-async def list_threads(
-    request: ListThreadsRequest,
-    http_request: Request = None,  # ty: ignore[invalid-parameter-default]
-) -> ListThreadsResponse:
-    """Lista threads visíveis ao usuário, excluindo sessões internas."""
-    limit = max(1, min(request.limit or 50, 200))
+async def _eligible_thread_rows(
+    mode: str,
+    include_empty: bool,
+    http_request: Request | None,
+) -> tuple[list[tuple], Any]:
+    """Todas as threads visíveis ao usuário, na ordem estável da lista.
+
+    A ordem é fixada por ``(pinned DESC, last_activity DESC, thread_id ASC)``: o
+    desempate pelo ID impede que duas threads com a mesma atividade troquem de
+    lugar entre requisições, o que o cursor de ``ListThreads`` precisa. Linhas
+    de outros usuários e sessões internas de subagent ficam de fora, então a
+    lista, o total e ``CountThreads`` saem do mesmo conjunto.
+    """
     session_store = await _get_session_store()
     native_sessions = await session_store.list_all_sessions()
     native_thread_ids = {session["thread_id"] for session in native_sessions}
@@ -1015,68 +1026,111 @@ async def list_threads(
         if session["mode"] == "subagent"
     }
     db = await _get_db()
-    cols = (
-        "SELECT thread_id, user_type, created_at, last_activity, message_count, extra, mode, pinned "
-        "FROM vectora_sessions "
+    query = (
+        "SELECT thread_id, user_type, created_at, last_activity, message_count, "
+        "extra, mode, pinned FROM vectora_sessions WHERE mode != 'subagent'"
     )
-    mode_filter = _normalize_mode(request.mode) if request.mode else ""
-    legacy_filter = ""
-    legacy_params: tuple[Any, ...] = ()
-    if subagent_thread_ids:
-        placeholders = ",".join("?" for _ in subagent_thread_ids)
-        legacy_filter = f" AND thread_id NOT IN ({placeholders})"
-        legacy_params = tuple(subagent_thread_ids)
+    params: list[Any] = []
+    mode_filter = _normalize_mode(mode) if mode else ""
     if mode_filter:
-        query = (
-            cols
-            + "WHERE mode = ? AND mode != 'subagent' AND message_count > 0"
-            + legacy_filter
-            + " ORDER BY pinned DESC, last_activity DESC LIMIT ?"
-        )
-        params: tuple[Any, ...] = (mode_filter, *legacy_params, limit)
-    else:
-        query = (
-            cols
-            + "WHERE mode != 'subagent' AND message_count > 0"
-            + legacy_filter
-            + " ORDER BY pinned DESC, last_activity DESC LIMIT ?"
-        )
-        params = (*legacy_params, limit)
+        query += " AND mode = ?"
+        params.append(mode_filter)
+    if not include_empty:
+        query += " AND message_count > 0"
+    if subagent_thread_ids:
+        query += f" AND thread_id NOT IN ({','.join('?' for _ in subagent_thread_ids)})"
+        params.extend(subagent_thread_ids)
+    query += " ORDER BY pinned DESC, last_activity DESC, thread_id ASC"
+    async with db.execute(query, tuple(params)) as cur:
+        rows = [tuple(r) for r in await cur.fetchall()]
 
     if http_request is None:
-        async with db.execute(query, params) as cur:
-            rows = await cur.fetchall()
-    else:
-        # Legacy UI metadata cannot establish ownership during a read, so
-        # ineligible rows are dropped before the limit is applied: pages are
-        # read in order until ``limit`` eligible threads are collected, so
-        # stale metadata at the top never hides older valid threads.
-        user_id = _user_id(http_request)
-        paged_query = query + " OFFSET ?"
-        rows = []
-        offset = 0
-        while len(rows) < limit:
-            async with db.execute(paged_query, (*params, offset)) as cur:
-                page = await cur.fetchall()
-            if not page:
-                break
-            offset += len(page)
-            foreign_ids = await session_store.foreign_thread_ids(
-                [r[0] for r in page], user_id
-            )
-            # Posse nativa só se exige quando há principal autenticado; o
-            # launcher local sem usuário mantém as threads legadas visíveis.
-            require_native = getattr(http_request.state, "user", None) is not None
-            rows.extend(
-                r
-                for r in page
-                if r[0] not in foreign_ids
-                and (not require_native or r[0] in native_thread_ids)
-            )
-            if len(page) < limit:
-                break
-        rows = rows[:limit]
+        return rows, session_store
+    # Metadados legados da UI não provam posse: as linhas inelegíveis saem
+    # antes de qualquer corte, para metadado antigo no topo não esconder
+    # threads válidas mais abaixo.
+    user_id = _user_id(http_request)
+    foreign_ids: set[str] = set()
+    for offset in range(0, len(rows), 500):
+        foreign_ids |= await session_store.foreign_thread_ids(
+            [r[0] for r in rows[offset : offset + 500]], user_id
+        )
+    # Posse nativa só se exige quando há principal autenticado; o launcher
+    # local sem usuário mantém as threads legadas visíveis.
+    require_native = getattr(http_request.state, "user", None) is not None
+    eligible = [
+        r
+        for r in rows
+        if r[0] not in foreign_ids and (not require_native or r[0] in native_thread_ids)
+    ]
+    return eligible, session_store
 
+
+def _encode_thread_cursor(row: tuple) -> str:
+    """Cursor opaco da posição de ``row`` na lista de threads."""
+    raw = json.dumps([int(row[7] or 0), row[3], row[0]], separators=(",", ":"))
+    return base64.urlsafe_b64encode(raw.encode()).decode().rstrip("=")
+
+
+def _decode_thread_cursor(cursor: str) -> tuple[int, str, str]:
+    try:
+        padded = cursor + "=" * (-len(cursor) % 4)
+        pinned, last_activity, thread_id = json.loads(
+            base64.urlsafe_b64decode(padded.encode())
+        )
+        return int(pinned), str(last_activity), str(thread_id)
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status_code=400, detail="Cursor inválido") from exc
+
+
+def _is_after_cursor(row: tuple, cursor: tuple[int, str, str]) -> bool:
+    """``True`` se ``row`` vem depois da posição do cursor na ordem da lista."""
+    pinned, last_activity, thread_id = int(row[7] or 0), row[3], row[0]
+    c_pinned, c_activity, c_id = cursor
+    if pinned != c_pinned:
+        return pinned < c_pinned
+    if last_activity != c_activity:
+        return last_activity < c_activity
+    return thread_id > c_id
+
+
+@router.post("/vectora.chat.v1.ThreadService/CountThreads")
+async def count_threads(
+    request: CountThreadsRequest,
+    http_request: Request = None,  # ty: ignore[invalid-parameter-default]
+) -> CountThreadsResponse:
+    """Conta as threads que ``ListThreads`` listaria com os mesmos filtros."""
+    rows, _ = await _eligible_thread_rows(
+        request.mode, request.include_empty, http_request
+    )
+    return CountThreadsResponse(count=len(rows))
+
+
+@router.post("/vectora.chat.v1.ThreadService/ListThreads")
+async def list_threads(
+    request: ListThreadsRequest,
+    http_request: Request = None,  # ty: ignore[invalid-parameter-default]
+) -> ListThreadsResponse:
+    """Lista threads visíveis ao usuário, excluindo sessões internas.
+
+    Threads sem mensagem só entram com ``include_empty``. ``total`` é o número
+    de threads do filtro inteiro e ``next_cursor`` aponta a página seguinte
+    (vazio na última), estável mesmo que a lista mude entre as chamadas.
+    """
+    limit = max(1, min(request.limit or 50, 200))
+    all_rows, session_store = await _eligible_thread_rows(
+        request.mode, request.include_empty, http_request
+    )
+    total = len(all_rows)
+    remaining = all_rows
+    if request.cursor:
+        position = _decode_thread_cursor(request.cursor)
+        remaining = [r for r in all_rows if _is_after_cursor(r, position)]
+    rows = remaining[:limit]
+    next_cursor = (
+        _encode_thread_cursor(rows[-1]) if rows and len(remaining) > limit else ""
+    )
+    db = await _get_db()
     user_id = _user_id(http_request) if http_request is not None else "local"
     current_device_id = (
         validate_device_id(getattr(http_request.state, "device_id", None))
@@ -1142,7 +1196,7 @@ async def list_threads(
         if activity := remote_activity.get(thread.id):
             thread.remote_activity = RemoteActivity(last_active_at=activity)
         threads.append(thread)
-    return ListThreadsResponse(threads=threads)
+    return ListThreadsResponse(threads=threads, total=total, next_cursor=next_cursor)
 
 
 class MarkThreadReadRequest(BaseModel):
@@ -2188,12 +2242,22 @@ async def get_thread_history_paginated(
     request: Request,
     limit: int = MESSAGES_CAP,
     offset: int = 0,
+    before_message_id: int | None = None,
 ) -> PagedHistoryResponse:
     """Histórico paginado de mensagens de uma thread.
 
     Retorna as ``limit`` mensagens mais recentes (excluindo as ``offset`` mais
     recentes), em ordem cronológica. ``has_more=True`` quando existem mensagens
     mais antigas além das retornadas.
+
+    Com ``before_message_id`` a página é a janela que termina logo antes dessa
+    mensagem, e ``offset`` é ignorado: o cursor é a identidade da mensagem, então
+    mensagens novas chegando no fim da conversa entre duas páginas não
+    deslocam a janela (o que repetiria ou pularia mensagens com ``offset``).
+    ``next_cursor`` é o ``message_id`` da mensagem mais antiga da página, ou
+    ``None`` quando não há mais páginas ou essa mensagem não tem ID (aí o
+    cliente volta a usar ``offset``). Um cursor que não existe mais (mensagem
+    removida por rewind) responde 409, e o cliente recarrega do fim.
     """
     # Validate ownership when a native session is already present, but do not
     # require that row before reconciliation.  ``get_thread`` below remains
@@ -2237,7 +2301,21 @@ async def get_thread_history_paginated(
 
     # Fatia: pega as [effective_limit] mensagens anteriores às [offset] mais recentes
     # Índice do fim da janela (a partir do final da lista)
-    end = total - offset
+    if before_message_id is not None:
+        end = next(
+            (
+                index
+                for index, entry in enumerate(pairs)
+                if entry.message_id == before_message_id
+            ),
+            -1,
+        )
+        if end < 0:
+            raise HTTPException(
+                status_code=409, detail="Cursor de histórico não existe mais"
+            )
+    else:
+        end = total - offset
     start = max(0, end - effective_limit)
     page = pairs[start:end]
 
@@ -2265,7 +2343,7 @@ async def get_thread_history_paginated(
         for entry in page
     ]
 
-    if offset == 0:
+    if offset == 0 and before_message_id is None:
         try:
             from backend.persistence.kv import get_kv
 
@@ -2295,6 +2373,7 @@ async def get_thread_history_paginated(
         messages=messages,
         has_more=has_more,
         total_count=total,
+        next_cursor=page[0].message_id if has_more and page else None,
         run_status=summary.status if summary else "idle",
         last_seq=safe_last_seq,
     )
@@ -2365,9 +2444,13 @@ async def get_thread_asset(thread_id: str, asset_id: str, request: Request) -> R
     if loaded is None:
         raise HTTPException(status_code=404, detail="Asset não encontrado")
     asset, payload = loaded
-    return Response(
-        payload, media_type=asset.mime_type, headers={"Cache-Control": "no-store"}
-    )
+    headers = {"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"}
+    inline = asset.mime_type.startswith(("image/", "audio/", "video/"))
+    if not inline:
+        # Documentos e arquivos genéricos só são baixados, nunca renderizados
+        # na origem do app.
+        headers["Content-Disposition"] = "attachment"
+    return Response(payload, media_type=asset.mime_type, headers=headers)
 
 
 # ---------------------------------------------------------------------------

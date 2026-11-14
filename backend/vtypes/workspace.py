@@ -47,7 +47,8 @@ class Workspace(BaseModel):
     hooks_approved: bool = Field(
         default=False,
         description="True quando o usuário aprovou explicitamente a execução de "
-        "hooks [hooks].post_file_write deste workspace (vectora.toml). Confiar "
+        "hooks deste workspace ([hooks].post_file_write e [[hooks.rules]] do "
+        "vectora.toml). Confiar "
         "no workspace não implica aprovar hooks — são efeitos colaterais "
         "distintos (write vs. shell arbitrário via config do repositório).",
     )
@@ -56,6 +57,12 @@ class Workspace(BaseModel):
     )
     hooks_approved_by: str | None = Field(
         default=None, description="ID do usuário que aprovou os hooks."
+    )
+    hooks_rules_digest: str | None = Field(
+        default=None,
+        description="SHA-256 das regras [[hooks.rules]] no momento da aprovação. "
+        "As regras só executam enquanto o digest atual do vectora.toml for igual "
+        "a este valor; ausente significa que as regras ainda não foram aprovadas.",
     )
 
     owner_id: str | None = Field(

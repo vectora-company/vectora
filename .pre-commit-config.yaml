@@ -18,7 +18,6 @@ exclude: |
     \.venv/.*|
     graphify.*|
     backend/services/context_graph/.*|
-    docs/_vendor/.*|
     # `\.mjs.*` (sem `.*` no início) só batia com caminho começando
     # literalmente em ".mjs" — nunca excluía nada de verdade. O prettier
     # vinha reformatando frontend/public/pdf.worker.min.mjs (vendor
@@ -49,6 +48,15 @@ exclude: |
 # analisam código recebem só os arquivos do commit.
 
 repos:
+  - repo: local
+    hooks:
+      - id: environment
+        name: Detectar ambiente (Linux, Windows, macOS)
+        entry: uv run --no-project python utils/checks.py environment
+        language: system
+        always_run: true
+        pass_filenames: false
+
   # ==========================================================================
   # Base compartilhada: idêntica nos repositórios do app, do services e da
   # company. Mudou aqui, mude nos três. Tudo que é Python roda via `uv run`; o
@@ -182,6 +190,20 @@ repos:
         files: ^(backend|tests)/.*\.py$
 
   # ==========================================
+  # Contratos HTTP/SSE/tools — regenerados a partir do código
+  # ==========================================
+  # Reexporta `backend/contracts/` e `frontend/lib/contracts/index.ts`. Se algo
+  # mudar, o hook falha e deixa os arquivos atualizados para o `git add`.
+  - repo: local
+    hooks:
+      - id: contracts
+        name: Regenera os contratos (backend/contracts)
+        entry: uv run --no-sync python -m backend.contracts export
+        language: system
+        files: ^backend/.*\.py$
+        pass_filenames: false
+
+  # ==========================================
   # JS/TS Lint — oxlint (Rust, OXC toolchain)
   # ==========================================
   # ~50–100x mais rapido que ESLint; config em chat/.oxlintrc.json.
@@ -199,11 +221,33 @@ repos:
         language: system
         files: ^frontend/.*\.(ts|tsx|js|jsx|mjs|cjs)$
 
+      - id: frontend-unused
+        name: Frontend sem uso (knip contra o baseline)
+        entry: uv run --no-project python utils/unused_code.py frontend
+        language: system
+        files: ^(frontend/.*\.(ts|tsx|mts|json|jsonc)|utils/(unused_code\.py|unused_frontend_baseline\.json))$
+        pass_filenames: false
+
+      - id: unused-routes
+        name: Páginas sem navegação (rotas do frontend)
+        entry: uv run --no-project python utils/unused_code.py routes
+        language: system
+        files: ^(frontend/(src|components|lib|hooks|electron/src)/.*\.(ts|tsx)|backend/.*\.py|utils/(unused_code\.py|route_entrypoints\.json))$
+        pass_filenames: false
+
+      - id: unused-python
+        name: Python sem uso (vulture)
+        entry: uv run --no-project --with vulture python utils/unused_code.py python
+        language: system
+        files: ^(backend/.*\.py|utils/(unused_code\.py|unused_python_baseline\.json))$
+        pass_filenames: false
+
       - id: i18n
         name: Frontend i18n lint
-        entry: pnpm --dir frontend run lint:i18n -- --changed
+        entry: uv run --no-project python utils/checks.py frontend-i18n
         language: system
         files: ^frontend/.*\.(ts|tsx)$
+        pass_filenames: false
 
   # ==========================================
   # Type Checking — TypeScript (tsc)
@@ -216,7 +260,7 @@ repos:
         name: Type Check — TypeScript (tsc)
         # `typecheck` gera o routeTree.gen.ts (TanStack Router, gitignored) antes
         # do tsc --noEmit; tsc puro falharia sem o route tree.
-        entry: pnpm --dir frontend run typecheck
+        entry: uv run --no-project python utils/checks.py frontend-typecheck
         language: system
         files: ^frontend/.*\.(ts|tsx)$
         pass_filenames: false

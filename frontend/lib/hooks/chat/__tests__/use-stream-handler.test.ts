@@ -24,8 +24,11 @@ import {
 const streamChatMock = vi.fn();
 const resumeChatMock = vi.fn();
 const getHistoryMock = vi.fn();
+const resumeStreamMock = vi.fn();
 
 vi.mock("@/lib/api/vectora-client", () => ({
+  resumeStream: (...args: unknown[]) => resumeStreamMock(...args),
+  StreamResumeUnavailableError: class StreamResumeUnavailableError extends Error {},
   streamChat: (...args: unknown[]) => streamChatMock(...args),
   resumeChat: (...args: unknown[]) => resumeChatMock(...args),
   getHistory: (...args: unknown[]) => getHistoryMock(...args),
@@ -44,6 +47,8 @@ function gen(events: StreamEvent[]): AsyncGenerator<StreamEvent> {
   })();
 }
 
+const seq = (n: number) => ({ seq: n, event_id: `run-1:${n}` });
+
 describe("useStreamHandler.processStream", () => {
   let messages: Message[];
   const setMessages = (u: Message[] | ((p: Message[]) => Message[])) => {
@@ -55,6 +60,7 @@ describe("useStreamHandler.processStream", () => {
     streamChatMock.mockReset();
     resumeChatMock.mockReset();
     getHistoryMock.mockReset();
+    resumeStreamMock.mockReset();
     window.localStorage.clear();
   });
 
@@ -89,6 +95,59 @@ describe("useStreamHandler.processStream", () => {
     expect(assistant?.isThinking).toBe(false);
     expect(assistant?.isError).toBeFalsy();
     expect(assistant?.persistedMessageId).toBe(42);
+  });
+
+  it("evento repetido, reordenado ou posterior ao done não altera a resposta", async () => {
+    streamChatMock.mockReturnValue(
+      gen([
+        { type: "thread", thread_id: "t1", run_id: "run-1", ...seq(1) },
+        { type: "token", content: "Olá", ...seq(2) },
+        { type: "token", content: "Olá", ...seq(2) }, // retransmitido
+        { type: "token", content: "NUNCA", ...seq(1) }, // reordenado
+        { type: "token", content: ", mundo", ...seq(3) },
+        {
+          type: "done",
+          thread_id: "t1",
+          run_id: "run-1",
+          message_id: 7,
+          stopped_reason: "stop",
+          ...seq(4),
+        },
+        { type: "token", content: "DEPOIS", ...seq(5) }, // após o terminal
+      ] as StreamEvent[]),
+    );
+
+    const { result } = run();
+    const out = await result.current.processStream("oi", "a1");
+
+    expect(out.assistantContent).toBe("Olá, mundo");
+    expect(out.runId).toBe("run-1");
+    expect(messages.find((msg) => msg.id === "a1")?.content).toBe("Olá, mundo");
+  });
+
+  it("turnId informado vai como turn_id da requisição; ausente deixa o cliente gerar", async () => {
+    streamChatMock.mockImplementation(() =>
+      gen([
+        { type: "thread", thread_id: "t1" },
+        { type: "done", thread_id: "t1", run_id: "run-1" },
+      ]),
+    );
+    const { result } = run();
+
+    await result.current.processStream(
+      "oi",
+      "a1",
+      undefined,
+      undefined,
+      "turno-estavel",
+    );
+    const comId = streamChatMock.mock.calls[0]?.[0] as { turn_id?: string };
+    expect(comId.turn_id).toBe("turno-estavel");
+
+    streamChatMock.mockClear();
+    await result.current.processStream("oi", "a2");
+    const semId = streamChatMock.mock.calls[0]?.[0] as { turn_id?: string };
+    expect(semId.turn_id).toBeUndefined();
   });
 
   it("forkFromCheckpointId presente manda config.fork_from_checkpoint_id; ausente omite (edit/regenerate)", async () => {
@@ -286,6 +345,35 @@ describe("useStreamHandler.processStream", () => {
       expect.any(Error),
     );
     errorSpy.mockRestore();
+  });
+
+  it("queda de transporte: retoma pelo cursor, recebe o resto e não precisa reconciliar", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    streamChatMock.mockReturnValue(
+      (async function* () {
+        yield { type: "thread", thread_id: "t1", ...seq(1) } as StreamEvent;
+        yield { type: "token", content: "Olá", ...seq(2) } as StreamEvent;
+        throw new Error("network down");
+      })(),
+    );
+    resumeStreamMock.mockReturnValue(
+      gen([
+        { type: "token", content: ", mundo", ...seq(3) },
+        { type: "done", thread_id: "t1", run_id: "run-1", ...seq(4) },
+      ] as StreamEvent[]),
+    );
+
+    const { result } = run();
+    await result.current.processStream("oi", "a1");
+
+    expect(resumeStreamMock).toHaveBeenCalledWith(
+      "t1",
+      "run-1:2",
+      expect.anything(),
+    );
+    const assistant = messages.find((m) => m.id === "a1");
+    expect(assistant?.content).toBe("Olá, mundo");
+    expect(getHistoryMock).not.toHaveBeenCalled();
   });
 
   it("queda de transporte sem reconciliação disponível (getHistory rejeita) mantém o conteúdo parcial — nunca perde o que já foi gerado", async () => {
@@ -539,6 +627,40 @@ describe("useStreamHandler.processStream", () => {
       "openai:gpt-4o",
       "google-genai:gemini-2.5-flash",
     );
+  });
+
+  it("media_routed anota na mensagem do usuário como cada anexo foi enviado", async () => {
+    messages = [
+      { id: "u1", role: "user", content: "resuma", timestamp: new Date() },
+      { id: "a1", role: "assistant", content: "", timestamp: new Date() },
+    ];
+    const routes = [
+      {
+        name: "r.pdf",
+        media_kind: "document",
+        mime_type: "application/pdf",
+        size_bytes: 10,
+        mode: "native" as const,
+        reason: "provider aceita o tipo",
+        model: "anthropic:claude",
+      },
+    ];
+    streamChatMock.mockReturnValue(
+      gen([
+        { type: "thread", thread_id: "t1" },
+        { type: "media_routed", routes },
+        { type: "token", content: "ok" },
+        { type: "done", thread_id: "t1" },
+      ]),
+    );
+    const { result } = run();
+    await result.current.processStream("resuma", "a1");
+    expect(messages.find((msg) => msg.id === "u1")?.mediaRoutes).toEqual(
+      routes,
+    );
+    expect(
+      messages.find((msg) => msg.id === "a1")?.mediaRoutes,
+    ).toBeUndefined();
   });
 
   it("model_switched não interrompe o stream de tokens", async () => {
@@ -1605,5 +1727,35 @@ describe("useStreamHandler — workspace de sessão nova", () => {
     await result.current.processStream("cria um workspace novo", "a1");
 
     expect(consumeCreateNewWorkspace("t1")).toBe(false);
+  });
+});
+
+describe("useStreamHandler.processStream — desfecho do run", () => {
+  it("guarda o stopped_reason do done na mensagem do assistente", async () => {
+    let messages: Message[] = [];
+    const setMessages = (u: Message[] | ((p: Message[]) => Message[])) => {
+      messages = typeof u === "function" ? u(messages) : u;
+    };
+    streamChatMock.mockReturnValue(
+      gen([
+        { type: "thread", thread_id: "t1" },
+        { type: "token", content: "parcial" },
+        {
+          type: "done",
+          thread_id: "t1",
+          run_id: "run-1",
+          stopped_reason: "cancelled",
+        },
+      ]),
+    );
+    const { result } = renderHook(() =>
+      useStreamHandler({ threadId: "t1", setMessages }),
+    );
+
+    await result.current.processStream("oi", "a1");
+
+    expect(messages.find((msg) => msg.id === "a1")?.stoppedReason).toBe(
+      "cancelled",
+    );
   });
 });

@@ -1,8 +1,4 @@
-# Changelog
-
-Este arquivo registra as alterações do Vectora, organizadas por versão.
-
-## [0.1.23] (2026-11-10)
+## [0.1.25] (2026-11-13)
 
 Esta seção reúne as alterações publicadas nesta versão.
 
@@ -10,13 +6,52 @@ Esta seção reúne as alterações publicadas nesta versão.
 
 Os recursos incluídos nesta versão são listados abaixo.
 
+- feat(mcp): transcreve localmente o áudio devolvido por ferramentas MCP (#501)
+- feat(contexto): aprende o custo em tokens de uma imagem por modelo (#500)
+- feat(midia): tela para configurar os limites de imagens de PDF e vídeo (#499)
+- feat(build): scons install completo, com detecção do ambiente (#496)
+- feat(midia): limites configuráveis e ferramentas de PDF e vídeo com opções (#494)
+- feat(midia): configuração da transcrição local nas configurações do app (#492)
+- feat(midia): reconhecimento de fala nativo do macOS para transcrição local (#491)
+- feat(midia): transcrição local-first de áudio e vídeo e PDF em imagens (#490)
+- feat(chat): envia PDF e vídeo como imagens a modelos que só leem imagem (#488)
+- feat(chat): imagens devolvidas por ferramentas MCP chegam ao modelo (#487)
+- feat(chat): envia PDF, áudio e vídeo nativos pelo OpenRouter e 9router (#486)
+- feat(chat): screenshots de ferramentas chegam ao modelo como imagem (#483)
+- feat(chat): composer aceita qualquer arquivo e mostra como cada anexo chegou ao modelo (#482)
+- feat(chat): envia PDF, áudio e vídeo nativos aos modelos que aceitam (#481)
+- feat(chat): aceita qualquer arquivo anexado e classifica pelos bytes (#480)
+
+### Bug Fixes
+
+As correções incluídas nesta versão são listadas abaixo.
+
+- fix(ci): lê o epoch da última tag anotada pelo commit (#484)
+- fix(contexto): estimativa de tokens conta as imagens de PDF e vídeo (#493)
+- fix(chat): imagens anexadas chegam ao modelo depois de gravadas no histórico (#479)
+
+# Changelog
+
+Este arquivo registra as alterações do Vectora, organizadas por versão.
+
+## [0.1.24] (2026-11-04)
+
+Esta seção reúne as alterações publicadas nesta versão.
+
+### Features
+
+Os recursos incluídos nesta versão são listados abaixo.
+
+- Unifica a instalação do ambiente de desenvolvimento e separa dela o bootstrap opcional da toolchain Linux.
+- Libera recursos locais e armazenamento configurado pelo operador no plano Free.
+- Integra a Library hospedada pelo Services para os catálogos MCP, Skills e Memory Buckets; buckets já instalados localmente continuam disponíveis sem assinatura.
+- Remove a fonte local do site Hugo incorporado; a documentação pública continua disponível no site oficial.
 - feat: document Vectora App capabilities before 0.1.23 (#291)
 - feat: consolidar o shell e modernizar a UI/UX do App (#272)
 - feat: support parallel release lines with milestones (#247)
 - feat: archive safe roots and enforce workspace access (#222)
 - feat: add global responsive session layout bands (#223)
 - feat: add Chromium browser settings and profile isolation (#221)
-- feat: validate GitHub review job contracts (#227)
 - feat: navigate created folders and surface new sessions (#217)
 - feat(frontend): complete adaptive session shell, workbench and responsive chat (#213)
 - feat: add owned multimodal asset metadata (#173)
@@ -57,13 +92,20 @@ Os recursos incluídos nesta versão são listados abaixo.
 - feat: enviar anexos ao modelo ativo antes do fallback multimodal (#80)
 - feat(frontend): revisa Aparência com novo catálogo de temas e UI Scale (#69)
 - feat(services): teste real de update contra produção, sem mock nenhum (#58)
-- feat(gha-bot): modo self-hosted — revisão roda na própria instância Vectora (#52)
 - feat(frontend): theme picker com cards pintados + toggle claro/escuro/sistema (#51)
 
 ### Bug Fixes
 
 As correções incluídas nesta versão são listadas abaixo.
 
+- Corrige o build e a integração do aplicativo desktop no Linux, incluindo os metadados de identidade do ícone.
+- Preserva os padrões existentes das toolchains Linux e registra a identidade do aplicativo no dock durante o desenvolvimento.
+- Respeita o repositório alvo ao montar o contexto do agente e mantém o contexto dos gatilhos de tarefas.
+- Suprime o traceback esperado de cancelamento durante o encerramento do servidor.
+- Autentica os testes E2E pela janela Electron e usa o Chromium distribuído com o aplicativo.
+- Mantém os painéis do shell acessíveis em telas compactas e preserva o streaming ao alternar workbenches.
+- Remove a implementação obsoleta do modo de revisão automatizada.
+- Desativa o gateway remoto sem novas tentativas quando a conta não tem Pro, preservando os webhooks locais.
 - fix: endurece validacao de entradas e caminhos (#431)
 - fix: remove o segredo do gateway do código e adiciona varredura de segredos (#428)
 - fix(ci): consolidate release workflow corrections
@@ -116,7 +158,6 @@ As correções incluídas nesta versão são listadas abaixo.
 - fix(services): reconstrói o manifesto de update por arch (#62)
 - fix(frontend): altura do Header, rename do mode switcher e composer mais limpo (#61)
 - fix: reaplica schema base do D1 em todo deploy de produção (#60)
-- fix(build): enxuga o vectora-cli headless + multipart upload no R2 (#57)
 - fix(services): resolve 3 achados pendentes da auditoria do services/ (#55)
 - fix(deploy): remove flag --skip-confirmation inválida do wrangler d1 migrations (#54)
 - fix(frontend): tela de Integrações dirigida 100% pelo registry do backend (#50)

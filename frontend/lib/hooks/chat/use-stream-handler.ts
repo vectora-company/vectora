@@ -15,11 +15,15 @@
 
 "use client";
 
+import { createSequenceGuard } from "@/lib/api/stream-sequence";
+import { withResume } from "@/lib/api/resumable-stream";
 import { useCallback, useRef } from "react";
 import type { Message, ToolCall, ImageAttachment } from "../../types";
 import {
   streamChat,
   resumeChat,
+  resumeStream,
+  StreamResumeUnavailableError,
   getHistory,
   getLatestTurnFiles,
   getLatestTurnFilesSnapshot,
@@ -184,6 +188,17 @@ function announceSSEDropped(err: unknown): void {
   }
 }
 
+/** Retomada por cursor depois de uma queda de conexão (ver resumable-stream). */
+function resumeOptions(threadId: string, signal?: AbortSignal) {
+  return {
+    open: (lastEventId: string, resumeSignal?: AbortSignal) =>
+      resumeStream(threadId, lastEventId, resumeSignal),
+    isUnavailable: (error: unknown) =>
+      error instanceof StreamResumeUnavailableError,
+    signal,
+  };
+}
+
 /**
  * Reconcilia uma mensagem cujo stream terminou sem `done`/`error` explícito
  * — o async generator do SSE simplesmente esgotou (ex.: buffer final
@@ -305,6 +320,7 @@ interface UseStreamHandlerReturn {
     assistantMessageId: string,
     images?: ImageAttachment[],
     forkFromCheckpointId?: string,
+    turnId?: string,
   ) => Promise<{
     assistantContent: string;
     runId: string | undefined;
@@ -345,6 +361,7 @@ export function useStreamHandler({
       assistantMessageId: string,
       images?: ImageAttachment[],
       forkFromCheckpointId?: string,
+      turnId?: string,
     ): Promise<{
       assistantContent: string;
       runId: string | undefined;
@@ -437,25 +454,35 @@ export function useStreamHandler({
       markStreamStarted(threadId);
 
       try {
-        const events = streamChat(
-          {
-            thread_id: threadId,
-            content: userContent,
-            config,
-            ...(attachments && attachments.length > 0 && { attachments }),
-          },
-          abort.signal,
-          () => {
-            requestAccepted = true;
-          },
+        const events = withResume(
+          streamChat(
+            {
+              thread_id: threadId,
+              content: userContent,
+              config,
+              // ID estável do turno: o backend deduplica por ele, então repetir
+              // o envio (retry da fila) não duplica a mensagem do usuário.
+              ...(turnId && { turn_id: turnId }),
+              ...(attachments && attachments.length > 0 && { attachments }),
+            },
+            abort.signal,
+            () => {
+              requestAccepted = true;
+            },
+          ),
+          resumeOptions(threadId, abort.signal),
         );
 
+        const sequence = createSequenceGuard();
         for await (const event of events) {
           // Primeiro evento do stream = conexão SSE de fato estabelecida
           if (!sseConnected) {
             sseConnected = true;
             announceSSEConnected();
           }
+
+          // Repetido, reordenado ou posterior ao terminal: não altera a tela.
+          if (!sequence.accept(event)) continue;
 
           // Interrupção solicitada pelo usuário
           if (shouldInterruptRef?.current) {
@@ -554,14 +581,17 @@ export function useStreamHandler({
           }
           if (event.type === "done") {
             resolvedRunId = event.run_id || undefined;
-            if (typeof event.message_id === "number") {
-              setMessages((prev) =>
-                updateMessageInList(prev, activeId, (message) => ({
-                  ...message,
-                  persistedMessageId: event.message_id ?? undefined,
-                })),
-              );
-            }
+            setMessages((prev) =>
+              updateMessageInList(prev, activeId, (message) => ({
+                ...message,
+                ...(typeof event.message_id === "number" && {
+                  persistedMessageId: event.message_id,
+                }),
+                ...(event.stopped_reason && {
+                  stoppedReason: event.stopped_reason,
+                }),
+              })),
+            );
             streamCompletedNormally = true;
             break;
           }
@@ -749,14 +779,21 @@ export function useStreamHandler({
       markStreamStarted(threadId);
 
       try {
-        const events = resumeChat(request, abortRef.current?.signal);
+        const events = withResume(
+          resumeChat(request, abortRef.current?.signal),
+          resumeOptions(threadId, abortRef.current?.signal),
+        );
 
+        const sequence = createSequenceGuard();
         for await (const event of events) {
           // Primeiro evento do stream = conexão SSE de fato estabelecida
           if (!sseConnected) {
             sseConnected = true;
             announceSSEConnected();
           }
+
+          // Repetido, reordenado ou posterior ao terminal: não altera a tela.
+          if (!sequence.accept(event)) continue;
 
           if (shouldInterruptRef?.current) {
             abortRef.current?.abort();
@@ -811,14 +848,17 @@ export function useStreamHandler({
           }
           if (event.type === "done") {
             resolvedRunId = event.run_id || resolvedRunId;
-            if (typeof event.message_id === "number") {
-              setMessages((prev) =>
-                updateMessageInList(prev, assistantMessageId, (message) => ({
-                  ...message,
-                  persistedMessageId: event.message_id ?? undefined,
-                })),
-              );
-            }
+            setMessages((prev) =>
+              updateMessageInList(prev, assistantMessageId, (message) => ({
+                ...message,
+                ...(typeof event.message_id === "number" && {
+                  persistedMessageId: event.message_id,
+                }),
+                ...(event.stopped_reason && {
+                  stoppedReason: event.stopped_reason,
+                }),
+              })),
+            );
             streamCompletedNormally = true;
             break;
           }
@@ -943,6 +983,26 @@ async function handleEvent(
       // "desconhecidos" (cairiam no default e disparariam o warning de
       // drift de contrato por engano).
       break;
+
+    case "media_routed": {
+      // Anota na mensagem do usuário que originou o turno como cada anexo
+      // chegou ao modelo (arquivo ou texto).
+      setMessages((prev) => {
+        const assistantIndex = prev.findIndex(
+          (candidate) => candidate.id === assistantMessageId,
+        );
+        const searchEnd = assistantIndex === -1 ? prev.length : assistantIndex;
+        for (let index = searchEnd - 1; index >= 0; index -= 1) {
+          if (prev[index].role === "user") {
+            const next = [...prev];
+            next[index] = { ...prev[index], mediaRoutes: event.routes };
+            return next;
+          }
+        }
+        return prev;
+      });
+      break;
+    }
 
     case "tool_call": {
       let args: Record<string, unknown> = {};

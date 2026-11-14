@@ -10,7 +10,7 @@ inputs:
     required: false
     default: "0.12.1"
   python-version:
-    description: "Versão do Python (deve casar com requires-python / Nuitka)."
+    description: "Versão do Python (deve casar com requires-python)."
     required: true
   architecture:
     description: "Arquitetura do Python; pode ser x64 em runners Windows ARM64 sob emulação."
@@ -44,6 +44,9 @@ runs:
         version: ${{ inputs.uv-version }}
         enable-cache: true
         cache-dependency-glob: "${{ inputs.working-directory }}/uv.lock"
+        # Um sufixo por job evita que jobs paralelos tentem reservar a mesma
+        # chave de cache e emitam o aviso "Unable to reserve cache".
+        cache-suffix: ${{ github.job }}
 
     - name: Sync dependencies
       if: ${{ inputs.sync == 'true' }}

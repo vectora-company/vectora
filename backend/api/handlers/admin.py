@@ -297,17 +297,8 @@ async def set_user_tools(
 
 @router.post("/invites")
 async def create_invite(request: Request, body: CreateInviteBody) -> dict:
-    """Gera um link de convite de signup com token expirável.
-
-    Convidar membro adicional (2º+ usuário) é feature de time — exige plano
-    Pro. O primeiro usuário (root) não passa por aqui: nasce direto no
-    signup inicial (``backend/services/auth.py::signup``), sempre livre.
-    """
+    """Gera um convite para outra conta na instância local."""
     import os
-
-    from backend.rbac.subscription import require_pro
-
-    require_pro()
 
     user = _get_user(request)
     require_admin(user)
@@ -718,6 +709,112 @@ async def patch_image_fallback_model(
     if field is not None:
         field.set(model)
     return {"status": "updated", "model": model}
+
+
+class TranscriptionSettingsBody(BaseModel):
+    """Campos ausentes (``None``) não mudam; string vazia limpa a escolha."""
+
+    model: str | None = None
+    language: str | None = None
+    system_command: str | None = None
+    system_model: str | None = None
+
+
+@router.get("/transcription")
+async def get_transcription_settings(request: Request) -> dict:
+    """Configuração da transcrição local de áudio e vídeo: modelo e idioma do
+    faster-whisper embutido, whisper do sistema, e quais motores existem
+    nesta máquina (``backend/services/speech_to_text.py``)."""
+    require_admin(_get_user(request))
+    from backend.services.speech_to_text import stt_settings
+
+    return stt_settings()
+
+
+@router.patch("/transcription")
+async def patch_transcription_settings(
+    request: Request, body: TranscriptionSettingsBody
+) -> dict:
+    """Grava a configuração da transcrição local e devolve o estado efetivo."""
+    require_admin(_get_user(request))
+    from backend.config.registry import get_field
+    from backend.services.speech_to_text import (
+        LOCAL_MODEL_SIZES,
+        stt_settings,
+        validate_language,
+        validate_system_command,
+        validate_system_model,
+    )
+
+    updates: dict[str, str] = {}
+    try:
+        if body.model is not None:
+            if body.model not in LOCAL_MODEL_SIZES:
+                raise ValueError("modelo inválido; use " + ", ".join(LOCAL_MODEL_SIZES))
+            updates["stt_local_model"] = body.model
+        if body.language is not None:
+            updates["stt_language"] = validate_language(body.language)
+        if body.system_command is not None:
+            updates["stt_system_command"] = validate_system_command(body.system_command)
+        if body.system_model is not None:
+            updates["stt_system_model"] = validate_system_model(body.system_model)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    for name, value in updates.items():
+        field = get_field(name)
+        if field is None:
+            raise HTTPException(status_code=500, detail=f"campo ausente: {name}")
+        field.set(value)
+    return stt_settings()
+
+
+class MediaLimitsBody(BaseModel):
+    """Campos ausentes (``None``) não mudam; fora da faixa é recusado."""
+
+    pdf_pages: int | None = None
+    video_frames: int | None = None
+    max_side: int | None = None
+    quality: int | None = None
+    max_images: int | None = None
+
+
+@router.get("/media-limits")
+async def get_media_limits(request: Request) -> dict:
+    """Limites das imagens geradas de PDF e vídeo: valor efetivo, padrão e
+    faixa aceita (``backend/services/media_limits.py``)."""
+    require_admin(_get_user(request))
+    from backend.services.media_limits import limits_settings
+
+    return limits_settings()
+
+
+@router.patch("/media-limits")
+async def patch_media_limits(request: Request, body: MediaLimitsBody) -> dict:
+    """Grava os limites informados e devolve o estado efetivo."""
+    require_admin(_get_user(request))
+    from backend.config.registry import get_field
+    from backend.services.media_limits import (
+        LIMIT_FIELDS,
+        limits_settings,
+        validate_limit,
+    )
+
+    updates: dict[str, str] = {}
+    try:
+        for name, (field_name, _default, _bounds) in LIMIT_FIELDS.items():
+            value = getattr(body, name)
+            if value is not None:
+                updates[field_name] = str(validate_limit(name, value))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    for field_name, value in updates.items():
+        field = get_field(field_name)
+        if field is None:
+            raise HTTPException(status_code=500, detail=f"campo ausente: {field_name}")
+        field.set(value)
+    return limits_settings()
 
 
 class MediaModelsBody(BaseModel):
@@ -1335,24 +1432,6 @@ async def update_storage_config(request: Request) -> dict:
     require_admin(user)
 
     body = await request.json()
-
-    # Postgres/Redis/Qdrant são o modo completo, recurso Pro. O gate cobre
-    # tanto o flip do modo quanto os campos de conexão: sem os dois, o não-Pro
-    # deixa tudo configurado e só falta virar a chave. Voltar pra `lite` nunca
-    # é bloqueado — prender no modo completo quem perdeu a licença deixaria a
-    # instalação sem saída.
-    _touches_complete = (
-        body.get("storage_mode") == "complete"
-        or "services" in body
-        or any(
-            k in body
-            for k in ("postgres_dsn", "redis_url", "qdrant_url", "qdrant_api_key")
-        )
-    )
-    if _touches_complete:
-        from backend.rbac.subscription import require_pro
-
-        require_pro()
 
     from backend.workspace.runtime_settings import runtime_settings
 

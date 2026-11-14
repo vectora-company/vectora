@@ -12,6 +12,7 @@
  */
 
 import { VECTORA_API_URL } from "@/lib/constants/api";
+import { HistoryCursorGoneError } from "./history-cursor";
 import { saveReturnTo } from "@/lib/utils/return-to";
 import { getDeviceId, resetDeviceId } from "@/lib/device-id";
 
@@ -45,7 +46,8 @@ export interface ChatConfig {
 }
 
 /** Tipo semântico do attachment — espelha AttachmentKind do backend. */
-export type AttachmentKind = "image" | "pdf" | "code" | "text" | "audio";
+export type AttachmentKind =
+  "image" | "pdf" | "document" | "code" | "text" | "audio" | "video" | "file";
 
 /**
  * Arquivo anexado a uma mensagem.
@@ -56,6 +58,21 @@ export interface Attachment {
   name: string;
   mime_type: string;
   base64_data: string;
+}
+
+/** Como um anexo foi enviado ao modelo (evento `media_routed`). */
+export interface MediaRoute {
+  name: string;
+  media_kind: string;
+  mime_type: string;
+  size_bytes: number;
+  /**
+   * `native`: o modelo recebeu o arquivo; `image`: recebeu páginas ou quadros
+   * como imagem; `text`: recebeu a forma textual.
+   */
+  mode: "native" | "image" | "text";
+  reason: string;
+  model: string;
 }
 
 export interface StreamChatRequest {
@@ -170,6 +187,8 @@ export type StreamEvent =
       thread_id: string;
       run_id?: string;
       message_id?: number | null;
+      /** Como o run terminou: stop, cancelled, error, interrupted, ... */
+      stopped_reason?: string;
     }
   | { type: "message_break" }
   | { type: "workbench_invalidate"; tabs: string[]; tool_name?: string }
@@ -193,6 +212,7 @@ export type StreamEvent =
       elapsed_ms: number | null;
     }
   | { type: "model_switched"; from_model: string; to_model: string }
+  | { type: "media_routed"; routes: MediaRoute[] }
   | { type: "terminal_line"; line: string }
   | { type: "todos_updated"; todos: TodoItem[] };
 
@@ -242,6 +262,8 @@ export interface Thread {
   pinned?: boolean;
   unread_count?: number;
   remote_activity?: { last_active_at: string } | null;
+  /** Thread ainda sem nenhuma mensagem (recém-criada). */
+  empty?: boolean;
 }
 
 export interface ConversationBranch {
@@ -322,7 +344,7 @@ export interface GetToolsResponse {
  * Tenta renovar o access token via /auth/refresh.
  *
  * Chamado automaticamente quando qualquer endpoint retorna 401.
- * Em produção (binário Nuitka) e em dev (Vite proxy), o browser fala
+ * Em produção (binário do PyInstaller) e em dev (Vite proxy), o browser fala
  * direto com o FastAPI — cookies httpOnly viajam no `credentials: include`.
  *
  * @returns true se o refresh foi bem-sucedido
@@ -450,6 +472,62 @@ export async function* streamChat(
   yield* readSSEStream(response.body);
 }
 
+/** O servidor não guarda mais os eventos pedidos; o cliente deve reconciliar. */
+export class StreamResumeUnavailableError extends Error {
+  constructor() {
+    super("ResumeStream: eventos indisponíveis");
+    this.name = "StreamResumeUnavailableError";
+  }
+}
+
+/**
+ * Retoma o stream de um run depois do último evento recebido (`event_id`,
+ * no formato `<run_id>:<seq>`) e acompanha o run até o evento terminal.
+ * Lança `StreamResumeUnavailableError` quando o servidor não tem mais o log.
+ */
+export async function* resumeStream(
+  threadId: string,
+  lastEventId: string,
+  signal?: AbortSignal,
+): AsyncGenerator<StreamEvent> {
+  const url = `${VECTORA_API_URL}/vectora.chat.v1.ChatService/ResumeStream`;
+  const doFetch = () => {
+    const deviceId = getDeviceId();
+    return fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Last-Event-ID": lastEventId,
+        ...(deviceId ? { "X-Vectora-Device-Id": deviceId } : {}),
+      },
+      credentials: "include",
+      body: JSON.stringify({
+        thread_id: threadId,
+        last_event_id: lastEventId,
+      }),
+      signal,
+    });
+  };
+
+  let response = await doFetch();
+  if (response.status === 401) {
+    const refreshed = await tryRefreshToken();
+    if (!refreshed) {
+      redirectToLogin();
+      throw new Error("ResumeStream: sessão expirada. Faça login novamente.");
+    }
+    response = await doFetch();
+  }
+  if (response.status === 404 || response.status === 400) {
+    throw new StreamResumeUnavailableError();
+  }
+  if (!response.ok || !response.body) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`ResumeStream failed (${response.status}): ${text}`);
+  }
+  yield* readSSEStream(response.body);
+}
+
 /**
  * Retoma uma execução pausada (HITL).
  */
@@ -543,8 +621,42 @@ export const transcribeAudio = (
 export const getThread = (thread_id: string): Promise<Thread> =>
   postRpc("/vectora.chat.v1.ThreadService/GetThread", { thread_id });
 
-export const listThreads = (limit = 50): Promise<{ threads: Thread[] }> =>
-  postRpc("/vectora.chat.v1.ThreadService/ListThreads", { limit });
+export interface ListThreadsOptions {
+  /** Filtro por modo de 1ª classe ("chat" ou "code"); vazio lista todos. */
+  mode?: string;
+  /** Inclui threads sem mensagem; por padrão elas não aparecem. */
+  includeEmpty?: boolean;
+  /** `next_cursor` da página anterior; vazio começa do topo. */
+  cursor?: string;
+}
+
+export interface ListThreadsResult {
+  threads: Thread[];
+  /** Total de threads do filtro inteiro, não só desta página. */
+  total?: number;
+  /** Cursor da página seguinte; vazio ou ausente na última. */
+  next_cursor?: string;
+}
+
+export const listThreads = (
+  limit = 50,
+  options: ListThreadsOptions = {},
+): Promise<ListThreadsResult> =>
+  postRpc("/vectora.chat.v1.ThreadService/ListThreads", {
+    limit,
+    ...(options.mode ? { mode: options.mode } : {}),
+    ...(options.includeEmpty ? { include_empty: true } : {}),
+    ...(options.cursor ? { cursor: options.cursor } : {}),
+  });
+
+/** Quantas threads `listThreads` listaria com os mesmos filtros. */
+export const countThreads = (
+  options: Pick<ListThreadsOptions, "mode" | "includeEmpty"> = {},
+): Promise<{ count: number }> =>
+  postRpc("/vectora.chat.v1.ThreadService/CountThreads", {
+    ...(options.mode ? { mode: options.mode } : {}),
+    ...(options.includeEmpty ? { include_empty: true } : {}),
+  });
 
 export const deleteThread = (thread_id: string): Promise<{}> =>
   postRpc("/vectora.chat.v1.ThreadService/DeleteThread", { thread_id });
@@ -633,17 +745,34 @@ export interface PagedHistoryResponse {
   messages: HistoryMessage[];
   has_more: boolean;
   total_count: number;
+  /** `message_id` da mensagem mais antiga da página; `null` sem mais páginas. */
+  next_cursor?: number | null;
 }
 
-/** Carrega mensagens antigas paginadas (GC + scroll infinito). */
+/**
+ * Carrega mensagens antigas paginadas (GC + scroll infinito).
+ *
+ * Com `beforeMessageId` a janela termina logo antes dessa mensagem e `offset`
+ * é ignorado: o cursor não se desloca quando chegam mensagens novas. Lança
+ * `HistoryCursorGoneError` quando o servidor não acha mais essa mensagem.
+ */
 export const getHistoryPage = (
   thread_id: string,
   limit = 200,
   offset = 0,
-): Promise<PagedHistoryResponse> =>
-  fetch(
-    `/threads/${encodeURIComponent(thread_id)}/history?limit=${limit}&offset=${offset}`,
-  ).then((r) => r.json() as Promise<PagedHistoryResponse>);
+  beforeMessageId?: number,
+): Promise<PagedHistoryResponse> => {
+  const cursor =
+    beforeMessageId === undefined
+      ? ""
+      : `&before_message_id=${beforeMessageId}`;
+  return fetch(
+    `/threads/${encodeURIComponent(thread_id)}/history?limit=${limit}&offset=${offset}${cursor}`,
+  ).then((r) => {
+    if (r.status === 409) throw new HistoryCursorGoneError();
+    return r.json() as Promise<PagedHistoryResponse>;
+  });
+};
 
 /** Pede ao backend um título gerado pela IA (idempotente: só no 1º turno). */
 export const generateTitle = (thread_id: string): Promise<{ title: string }> =>

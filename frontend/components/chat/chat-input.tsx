@@ -16,7 +16,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Play, Send, TriangleAlert } from "lucide-react";
+import { Play, RotateCcw, Send, TriangleAlert, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -135,8 +135,14 @@ interface ChatInputProps {
   voiceError?: string | null;
 
   // Queued messages
-  queuedMessages?: { content: string; id: string }[];
+  queuedMessages?: {
+    content: string;
+    id: string;
+    status?: "waiting" | "sending" | "failed" | "cancelled";
+  }[];
   onRunQueuedNow?: (messageId: string) => void;
+  onRemoveQueued?: (messageId: string) => void;
+  onRetryQueued?: (messageId: string) => void;
 
   // Context meter
   tokensUsed?: number;
@@ -377,6 +383,8 @@ export function ChatInput({
   voiceError,
   queuedMessages = EMPTY_QUEUED_MESSAGES,
   onRunQueuedNow,
+  onRemoveQueued,
+  onRetryQueued,
   tokensUsed,
   modelId,
   agentConfig,
@@ -577,10 +585,15 @@ export function ChatInput({
 
           {/* Queued Messages */}
           {queuedMessages.length > 0 && (
-            <div className="mb-2 space-y-1.5">
+            <div
+              className="mb-2 max-h-36 space-y-1.5 overflow-y-auto"
+              role="list"
+              aria-live="polite"
+            >
               {queuedMessages.map((msg) => (
                 <div
                   key={msg.id}
+                  role="listitem"
                   className="flex items-center gap-2 px-3 py-2 bg-muted/50 border border-border/50 rounded-lg text-sm"
                 >
                   <div className="flex items-center gap-1.5 text-muted-foreground flex-shrink-0">
@@ -593,31 +606,69 @@ export function ChatInput({
                       <circle cx="12" cy="12" r="10" />
                     </svg>
                     <span className="text-xs font-medium">
-                      {m.input_queued()}
+                      {msg.status === "failed"
+                        ? m.input_queue_failed()
+                        : msg.status === "cancelled"
+                          ? m.input_queue_cancelled()
+                          : msg.status === "sending"
+                            ? m.input_queue_sending()
+                            : m.input_queued()}
                     </span>
                   </div>
                   <span className="text-foreground/80 truncate">
                     {msg.content}
                   </span>
-                  {onRunQueuedNow && (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
+                  <div className="ml-auto flex shrink-0 items-center gap-0.5">
+                    {(msg.status === "failed" || msg.status === "cancelled") &&
+                      onRetryQueued && (
                         <Button
                           type="button"
                           variant="ghost"
                           size="sm"
-                          className="ml-auto h-7 w-7 shrink-0 p-0 text-muted-foreground hover:text-primary"
-                          aria-label={m.input_run_queued_now()}
-                          onClick={() => onRunQueuedNow(msg.id)}
+                          className="h-7 w-7 shrink-0 p-0 text-muted-foreground hover:text-primary"
+                          aria-label={m.input_queue_retry()}
+                          title={m.input_queue_retry()}
+                          onClick={() => onRetryQueued(msg.id)}
                         >
-                          <Play className="h-3.5 w-3.5" />
+                          <RotateCcw className="h-3.5 w-3.5" />
                         </Button>
-                      </TooltipTrigger>
-                      <TooltipContent side="top">
-                        {m.input_run_queued_now()}
-                      </TooltipContent>
-                    </Tooltip>
-                  )}
+                      )}
+                    {msg.status !== "failed" &&
+                      msg.status !== "cancelled" &&
+                      msg.status !== "sending" &&
+                      onRunQueuedNow && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 shrink-0 p-0 text-muted-foreground hover:text-primary"
+                              aria-label={m.input_run_queued_now()}
+                              onClick={() => onRunQueuedNow(msg.id)}
+                            >
+                              <Play className="h-3.5 w-3.5" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top">
+                            {m.input_run_queued_now()}
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
+                    {msg.status !== "sending" && onRemoveQueued && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 shrink-0 p-0 text-muted-foreground hover:text-destructive"
+                        aria-label={m.input_queue_remove()}
+                        title={m.input_queue_remove()}
+                        onClick={() => onRemoveQueued(msg.id)}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -665,7 +716,6 @@ export function ChatInput({
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept="image/*,audio/*,.py,.js,.ts,.tsx,.jsx,.java,.cpp,.c,.h,.cs,.go,.rs,.rb,.php,.sh,.bash,.yaml,.yml,.json,.xml,.html,.css,.md,.txt,.log,.sql,.graphql,.r,.swift,.kt,.scala,.har,.mp3,.wav,.m4a,.ogg,.webm"
                     multiple
                     onChange={onFileSelect}
                     className="hidden"

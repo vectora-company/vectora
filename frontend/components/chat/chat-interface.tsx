@@ -1,6 +1,7 @@
 "use client";
 /* oxlint-disable react/memo-dependencies, react-hooks/exhaustive-deps -- callback intentionally captures the stable upload controller. */
 
+import { createSendQueue, type QueueStatus } from "@/lib/chat/send-queue";
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import type { ClientProfile } from "@/lib/hooks";
 import type { EditedFile, Message, ImageAttachment } from "@/lib/types";
@@ -51,6 +52,11 @@ import {
   type ModelOption,
 } from "@/lib/config/deployment-config";
 import { parseSlashCommand } from "@/lib/constants/slash-commands";
+import {
+  deliverLocalNotification,
+  notificationKey,
+  notifyOnce,
+} from "@/lib/notifications/notify-once";
 import { detectAtMention } from "@/components/chat/features/at-mention-menu";
 
 /** Idioma da UI → código BCP-47 do reconhecimento de voz. */
@@ -99,6 +105,11 @@ interface ChatInterfaceProps {
   /** IDE sidebar: oculta avatar do assistente e usa espaçamento compacto. */
   compact?: boolean;
   onOpenEditedFile?: (file: EditedFile) => void;
+}
+
+/** Anexos não enviados da thread (rascunho restaurado ao remontar). */
+function fileDraftOf(threadId: string): ImageAttachment[] {
+  return useChatInputStore.getState().getFileDraft(threadId);
 }
 
 interface QueuedMessage {
@@ -340,16 +351,57 @@ export function ChatInterface({
     handleDragLeave,
     removeFile,
     clearFiles,
+    replaceFiles,
     setUploadError,
     processFiles,
-  } = useFileUpload({ disableImageUploads: false });
+  } = useFileUpload({
+    disableImageUploads: false,
+    // Remontar a conversa (ou voltar a ela) restaura os anexos não enviados.
+    initialFiles: fileDraftOf(threadId),
+  });
+
+  // Anexos não enviados por thread: gravados a cada mudança e trocados junto
+  // com o rascunho quando a thread muda (sem remount). `filesOwnerRef` diz de
+  // qual thread são os anexos em tela. O efeito de gravar vem ANTES do de
+  // trocar: no render em que a thread muda, os anexos em tela ainda são da
+  // anterior e não podem ser gravados sob a nova.
+  const filesOwnerRef = useRef(threadId);
+  const attachedFilesRef = useRef(attachedFiles);
+  // Texto atual do composer e bolha de resposta do último envio, lidos ao
+  // restaurar o rascunho de um envio que falhou antes de chegar ao servidor.
+  const composerInputRef = useRef(uiState.input);
+  const lastAssistantIdRef = useRef("");
+  useEffect(() => {
+    composerInputRef.current = uiState.input;
+  }, [uiState.input]);
+  useEffect(() => {
+    attachedFilesRef.current = attachedFiles;
+    if (filesOwnerRef.current !== threadId) return;
+    useChatInputStore.getState().setFileDraft(threadId, attachedFiles);
+  }, [attachedFiles, threadId]);
+  useEffect(() => {
+    if (filesOwnerRef.current === threadId) return;
+    const store = useChatInputStore.getState();
+    store.setFileDraft(filesOwnerRef.current, attachedFilesRef.current);
+    filesOwnerRef.current = threadId;
+    replaceFiles(store.getFileDraft(threadId));
+  }, [threadId, replaceFiles]);
 
   // Message queue for sending while AI is responding
-  const messageQueueRef = useRef<QueuedMessage[]>([]);
+  const queueRef = useRef(createSendQueue<QueuedMessage>());
   const isProcessingQueueRef = useRef(false);
   const [queuedMessagesDisplay, setQueuedMessagesDisplay] = useState<
-    { content: string; id: string }[]
+    { content: string; id: string; status: QueueStatus }[]
   >([]);
+  const syncQueueDisplay = useCallback(() => {
+    setQueuedMessagesDisplay(
+      queueRef.current.items().map((item) => ({
+        id: item.id,
+        content: item.payload.content,
+        status: item.status,
+      })),
+    );
+  }, []);
 
   // Track the "base" input text (before voice input started + finalized
   // transcripts). Ref evita closure obsoleta no callback `onTranscript` do
@@ -785,7 +837,14 @@ export function ChatInterface({
 
   // Process a single message (used for both immediate send and queue processing)
   const processMessage = useCallback(
-    async (content: string, files: ImageAttachment[], userMessage: Message) => {
+    async (
+      content: string,
+      files: ImageAttachment[],
+      userMessage: Message,
+    ): Promise<"sent" | "failed"> => {
+      // "sent" só quando o servidor recebeu a requisição; "failed" mantém o
+      // item na fila para reenvio com o mesmo turn_id.
+      let outcome: "sent" | "failed" = "sent";
       // Capturado antes de qualquer setMessages — se essa era a 1ª mensagem
       // da thread e a conexão nunca chegar a estabelecer (ver checagem após
       // processStream), o otimista da sidebar precisa ser desfeito.
@@ -800,12 +859,16 @@ export function ChatInterface({
 
       try {
         const assistantMessageId = generateMessageId();
+        lastAssistantIdRef.current = assistantMessageId;
         const streamStart = Date.now();
         const { assistantContent, requestReachedBackend } = await processStream(
           content,
           assistantMessageId,
           files,
+          undefined,
+          userMessage.id,
         );
+        if (!assistantContent && !requestReachedBackend) outcome = "failed";
 
         // processStream nunca relança (absorve queda de transporte/erro de
         // app internamente) — quando a 1ª mensagem de uma thread nova não
@@ -824,17 +887,19 @@ export function ChatInterface({
 
         // Notificação OS quando resposta chega com aba oculta e >15s
         const streamDuration = Date.now() - streamStart;
+        // A chave liga o alerta à thread e ao turno: reenvio da fila ou
+        // retomada do stream com o mesmo turno não alertam de novo.
         if (
           streamDuration > 15_000 &&
           document.visibilityState === "hidden" &&
-          typeof Notification !== "undefined" &&
-          Notification.permission === "granted" &&
           assistantContent
         ) {
-          void new Notification("Vectora", {
-            body: "Resposta pronta — clique para ver.",
-            icon: "/vectora.svg",
-          });
+          notifyOnce(notificationKey(threadId, userMessage.id, "done"), () =>
+            deliverLocalNotification(
+              "Vectora",
+              "Resposta pronta — clique para ver.",
+            ),
+          );
         }
         // Badge de título: (1) quando aba oculta
         if (document.visibilityState === "hidden" && assistantContent) {
@@ -884,6 +949,7 @@ export function ChatInterface({
           }
         }
       } catch (error) {
+        outcome = "failed";
         console.error("Error streaming chat response:", error);
         const errorMsg =
           error instanceof Error
@@ -917,6 +983,7 @@ export function ChatInterface({
         // inclusive em erro/abort.
         sendGuardRef.current.release();
       }
+      return outcome;
     },
     [
       threadId,
@@ -935,31 +1002,40 @@ export function ChatInterface({
   // próprio corpo é acesso à variável durante a inicialização (TDZ).
   const processQueueRef = useRef<() => void>(() => {});
   const processQueue = useCallback(async () => {
-    if (isProcessingQueueRef.current || messageQueueRef.current.length === 0)
-      return;
+    if (isProcessingQueueRef.current) return;
+    const nextItem = queueRef.current.next();
+    if (!nextItem) return;
 
     isProcessingQueueRef.current = true;
-    const nextMessage = messageQueueRef.current.shift()!;
+    const nextMessage = nextItem.payload;
+    queueRef.current.start(nextItem.id);
+    syncQueueDisplay();
 
-    // Remove from queue display and add to chat
-    setQueuedMessagesDisplay((prev) =>
-      prev.filter((m) => m.id !== nextMessage.userMessage.id),
+    // No reenvio a mensagem já está no chat: não duplica na tela.
+    setMessages((prev) =>
+      prev.some((message) => message.id === nextMessage.userMessage.id)
+        ? prev
+        : [...prev, nextMessage.userMessage],
     );
-    setMessages((prev) => [...prev, nextMessage.userMessage]);
 
-    await processMessage(
+    const outcome = await processMessage(
       nextMessage.content,
       nextMessage.files,
       nextMessage.userMessage,
     );
 
+    if (outcome === "sent") queueRef.current.succeed(nextItem.id);
+    else if (shouldInterruptRef.current) queueRef.current.cancel(nextItem.id);
+    else queueRef.current.fail(nextItem.id);
+    syncQueueDisplay();
     isProcessingQueueRef.current = false;
 
-    // Process next in queue if any
-    if (messageQueueRef.current.length > 0) {
+    // Próximo da fila; um item que falhou bloqueia os seguintes até o
+    // usuário reenviar ou remover.
+    if (queueRef.current.next()) {
       processQueueRef.current();
     }
-  }, [processMessage, setMessages]);
+  }, [processMessage, setMessages, syncQueueDisplay]);
   useEffect(() => {
     processQueueRef.current = processQueue;
   });
@@ -971,7 +1047,7 @@ export function ChatInterface({
     // A queue may be promoted while a regeneration is active. Once the
     // active stream is idle, always drain the selected item; the focus effect
     // updates prevIsLoadingRef before this effect runs.
-    if (!isCurrentlyLoading && messageQueueRef.current.length > 0) {
+    if (!isCurrentlyLoading && queueRef.current.next()) {
       processQueueRef.current();
     }
   }, [uiState.isLoading, uiState.isRegenerating]);
@@ -1123,16 +1199,12 @@ export function ChatInterface({
 
     // If currently loading, queue the message (don't show in chat yet)
     if (uiState.isLoading || uiState.isRegenerating) {
-      const queuedItem = {
+      queueRef.current.enqueue(userMessage.id, {
         content: currentInput,
         files: currentFiles,
         userMessage,
-      };
-      messageQueueRef.current.push(queuedItem);
-      setQueuedMessagesDisplay((prev) => [
-        ...prev,
-        { content: currentInput, id: userMessage.id },
-      ]);
+      });
+      syncQueueDisplay();
       return;
     }
 
@@ -1160,10 +1232,29 @@ export function ChatInterface({
       onThreadUpdate(threadId, optimisticTitle, "", undefined, 1);
     }
 
-    await processMessage(currentInput, currentFiles, userMessage);
+    const outcome = await processMessage(
+      currentInput,
+      currentFiles,
+      userMessage,
+    );
+
+    // A requisição não chegou ao servidor: devolve texto e anexos ao
+    // composer (se ele continua vazio) em vez de deixá-los só no balão de
+    // erro, e tira do chat a mensagem que nunca foi enviada.
+    if (outcome === "failed") {
+      const failedAssistantId = lastAssistantIdRef.current;
+      setMessages((prev) =>
+        prev.filter(
+          (message) =>
+            message.id !== userMessage.id && message.id !== failedAssistantId,
+        ),
+      );
+      if (!composerInputRef.current.trim()) setInput(rawInput);
+      if (attachedFilesRef.current.length === 0) replaceFiles(currentFiles);
+    }
 
     // Check if anything was queued while processing
-    if (messageQueueRef.current.length > 0) {
+    if (queueRef.current.next()) {
       processQueue();
     }
   }, [
@@ -1178,12 +1269,14 @@ export function ChatInterface({
     threadId,
     setInput,
     clearFiles,
+    replaceFiles,
     processMessage,
     processQueue,
     resolveAtMentions,
     setMessages,
     inputLocked,
     contextFull,
+    syncQueueDisplay,
   ]);
 
   const handleStop = useCallback(async () => {
@@ -1202,32 +1295,40 @@ export function ChatInterface({
 
   const handleRunQueuedNow = useCallback(
     (messageId: string) => {
-      const queuedIndex = messageQueueRef.current.findIndex(
-        (message) => message.userMessage.id === messageId,
-      );
-      if (queuedIndex < 0) return;
-
-      const [selectedMessage] = messageQueueRef.current.splice(queuedIndex, 1);
-      if (!selectedMessage) return;
-      messageQueueRef.current.unshift(selectedMessage);
-      setQueuedMessagesDisplay((current) => {
-        const selected = current.find((message) => message.id === messageId);
-        if (!selected) return current;
-        return [
-          selected,
-          ...current.filter((message) => message.id !== messageId),
-        ];
-      });
+      if (!queueRef.current.promote(messageId)) return;
+      syncQueueDisplay();
 
       // Aborta o turno atual; quando o stream terminar, o efeito da fila
-      // remove o próximo item, que agora é o selecionado.
+      // envia o próximo item, que agora é o selecionado.
       if (uiState.isLoading || uiState.isRegenerating) {
         void handleStop();
       } else {
         processQueueRef.current();
       }
     },
-    [handleStop, uiState.isLoading, uiState.isRegenerating],
+    [handleStop, syncQueueDisplay, uiState.isLoading, uiState.isRegenerating],
+  );
+
+  const handleRemoveQueued = useCallback(
+    (messageId: string) => {
+      if (queueRef.current.remove(messageId)) syncQueueDisplay();
+      // Remover um item que falhou libera os seguintes.
+      if (queueRef.current.next() && !uiState.isLoading) {
+        processQueueRef.current();
+      }
+    },
+    [syncQueueDisplay, uiState.isLoading],
+  );
+
+  const handleRetryQueued = useCallback(
+    (messageId: string) => {
+      if (!queueRef.current.retry(messageId)) return;
+      syncQueueDisplay();
+      if (!uiState.isLoading && !uiState.isRegenerating) {
+        processQueueRef.current();
+      }
+    },
+    [syncQueueDisplay, uiState.isLoading, uiState.isRegenerating],
   );
 
   const handleRegenerate = useCallback(async () => {
@@ -1543,6 +1644,8 @@ export function ChatInterface({
           voiceError={voiceError}
           queuedMessages={queuedMessagesDisplay}
           onRunQueuedNow={handleRunQueuedNow}
+          onRemoveQueued={handleRemoveQueued}
+          onRetryQueued={handleRetryQueued}
           modelId={agentConfig?.model}
           tokensUsed={contextTokens}
           agentConfig={agentConfig}
