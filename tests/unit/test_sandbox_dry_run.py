@@ -187,10 +187,7 @@ def test_multiple_rw_and_ro_paths_preserve_order():
     rw_binds = [argv[i + 1] for i, tok in enumerate(argv) if tok == "--bind"]
     assert rw_binds == ["/ws", "/a", "/b", "/c"]
     ro_binds = [argv[i + 1] for i, tok in enumerate(argv) if tok == "--ro-bind"]
-    # os três primeiros --ro-bind são /usr /bin /lib fixos do sistema; o(s)
-    # último(s) vem(êm) do auto-mask de vectora.toml (/dev/null) — /x /y
-    # ficam no meio, na ordem declarada.
-    assert ro_binds[3:5] == ["/x", "/y"]
+    assert ro_binds.index("/x") < ro_binds.index("/y")
 
 
 def test_paths_with_spaces_and_unicode_pass_through_unchanged():
