@@ -344,7 +344,7 @@ def _require_trust(ctx: ToolContext) -> str:
     return ""
 
 
-def _require_local(ctx: ToolContext) -> str:
+def _require_local(ctx: ToolContext) -> str | None:
     """Rejeita workspaces remotos para tools de filesystem que fazem I/O
     direto via ``Path()`` (sem transporte remoto)."""
     _, ws = _workspace_root(ctx)
@@ -355,7 +355,46 @@ def _require_local(ctx: ToolContext) -> str:
             f"Workspace '{ws.name}' usa transport={transport!r}. "
             "Use a tool `terminal` para executar comandos remoto."
         )
-    return ""
+    return None
+
+
+async def _remote_workspace_path(
+    transport: Any, ws: Any, requested: str
+) -> tuple[str | None, str | None]:
+    """Resolve um caminho no host remoto e verifica confinamento à raiz.
+
+    A resolução acontece no host remoto para considerar symlinks existentes;
+    caminhos lexicais com ``..`` também são recusados antes do transporte.
+    """
+    from pathlib import PurePosixPath
+
+    raw = PurePosixPath(requested)
+    if ".." in raw.parts:
+        return None, "Error: Path escapes the remote workspace."
+    root = getattr(ws, "remote_path", None)
+    if not root:
+        result = await transport.run(["pwd"], cwd=".", timeout=15.0)
+        if result.exit_code != 0 or not result.stdout.strip():
+            return None, f"Error resolving remote workspace: {result.stderr[:300]}"
+        root = result.stdout.strip().splitlines()[-1]
+    root = str(PurePosixPath(root))
+    candidate = str(raw) if raw.is_absolute() else str(PurePosixPath(root) / raw)
+    script = (
+        "import os,sys; r=os.path.realpath(sys.argv[1]); "
+        "p=os.path.realpath(sys.argv[2]); "
+        "sys.exit(2) if os.path.commonpath((r,p)) != r else print(p)"
+    )
+    result = await transport.run(
+        ["python3", "-c", script, root, candidate], cwd=root, timeout=15.0
+    )
+    if result.exit_code != 0:
+        return None, "Error: Path escapes the remote workspace or cannot be resolved."
+    resolved = result.stdout.strip().splitlines()
+    if not resolved:
+        return None, "Error resolving remote path."
+    if is_sensitive_path(Path(resolved[-1])):
+        return None, "Error: Remote credential and secret files are blocked."
+    return resolved[-1], None
 
 
 @vtool(
@@ -375,8 +414,20 @@ async def file_read(file_path: str, ctx: ToolContext) -> str:
     Returns:
         Conteúdo do arquivo como string
     """
-    if remote_err := _require_local(ctx):
-        return remote_err
+    _root, ws = _workspace_root(ctx)
+    if getattr(ws, "transport", "local") != "local":
+        from backend.transport import get_transport
+
+        transport = get_transport(ws)
+        remote_path, path_err = await _remote_workspace_path(transport, ws, file_path)
+        if path_err:
+            return path_err
+        try:
+            data = await transport.read_file(remote_path or "", max_bytes=1_048_576)
+            return data.decode("utf-8")
+        except Exception:
+            logger.exception("remote file_read failed", extra={"path": file_path})
+            return "Error reading remote file. Check workspace connection."
     resolved, err = _confine(file_path, ctx)
     if resolved is None:
         logger.warning("file_read blocked by scope check", extra={"path": file_path})
@@ -521,18 +572,49 @@ async def file_edit(
     Returns:
         Confirmação da edição
     """
-    if remote_err := _require_local(ctx):
-        return remote_err
     trust_err = _require_trust(ctx)
     if trust_err:
         return trust_err
+
+    root, ws = _workspace_root(ctx)
+    if getattr(ws, "transport", "local") != "local":
+        from backend.transport import get_transport
+
+        transport = get_transport(ws)
+        remote_path, path_err = await _remote_workspace_path(transport, ws, file_path)
+        if path_err:
+            return path_err
+        try:
+            try:
+                content = (await transport.read_file(
+                    remote_path or "", max_bytes=1_048_576
+                )).decode("utf-8")
+            except FileNotFoundError:
+                if old_text:
+                    return "Error: Text not found in file"
+                content = ""
+            if old_text and old_text not in content:
+                return "Error: Text not found in file"
+            updated = (
+                content.replace(old_text, new_text)
+                if replace_all
+                else content.replace(old_text, new_text, 1)
+            )
+            data = updated.encode("utf-8")
+            if len(data) > 1_048_576:
+                return "Error: Remote file edits are limited to 1 MiB."
+            await transport.write_file(remote_path or "", data)
+            action = "created" if not content and not old_text else "updated"
+            return f"[OK] Remote file {action}: {file_path}"
+        except Exception:
+            logger.exception("remote file_edit failed", extra={"path": file_path})
+            return "Error editing remote file. Check workspace connection."
 
     resolved, err = _confine(file_path, ctx)
     if resolved is None:
         logger.warning("file_edit blocked by scope check", extra={"path": file_path})
         return err
 
-    root, ws = _workspace_root(ctx)
     policy = resolve_policy(root)
     workspace_id = str(getattr(ws, "id", root))
 
@@ -622,18 +704,34 @@ async def file_write(file_path: str, content: str, ctx: ToolContext) -> str:
     Returns:
         Confirmação com caminho e tamanho em bytes
     """
-    if remote_err := _require_local(ctx):
-        return remote_err
     trust_err = _require_trust(ctx)
     if trust_err:
         return trust_err
+
+    root, ws = _workspace_root(ctx)
+    remote = getattr(ws, "transport", "local") != "local"
+    if remote:
+        from backend.transport import get_transport
+
+        transport = get_transport(ws)
+        remote_path, path_err = await _remote_workspace_path(transport, ws, file_path)
+        if path_err:
+            return path_err
+        try:
+            data = content.encode("utf-8")
+            if len(data) > 1_048_576:
+                return "Error: Remote file writes are limited to 1 MiB."
+            await transport.write_file(remote_path or "", data)
+            return f"[OK] Remote file written: {file_path} ({len(data)} bytes)"
+        except Exception:
+            logger.exception("remote file_write failed", extra={"path": file_path})
+            return "Error writing remote file. Check workspace connection."
 
     resolved, err = _confine(file_path, ctx)
     if resolved is None:
         logger.warning("file_write blocked by scope check", extra={"path": file_path})
         return err
 
-    root, ws = _workspace_root(ctx)
     policy = resolve_policy(root)
 
     try:
@@ -887,8 +985,26 @@ async def list_dir(
     Returns:
         Lista de arquivos e pastas com prefixo [DIR] ou [FILE]
     """
-    if remote_err := _require_local(ctx):
-        return remote_err
+    _root, ws = _workspace_root(ctx)
+    if getattr(ws, "transport", "local") != "local":
+        if recursive:
+            return "Error: Recursive remote directory listing is not supported."
+        from backend.transport import get_transport
+
+        transport = get_transport(ws)
+        remote_path, path_err = await _remote_workspace_path(transport, ws, path)
+        if path_err:
+            return path_err
+        try:
+            entries = await transport.list_dir(remote_path or "")
+            lines = [
+                f"{'[DIR]' if item.is_dir else '[FILE]'} {item.name}"
+                for item in entries[:500]
+            ]
+            return "\n".join(lines) if lines else "(empty directory)"
+        except Exception:
+            logger.exception("remote list_dir failed", extra={"path": path})
+            return "Error listing remote directory. Check workspace connection."
     resolved, err = _confine(path, ctx)
     if resolved is None:
         return err

@@ -116,8 +116,10 @@ class SshTransport:
     # ─── Protocol ─────────────────────────────────────────────────────
 
     async def list_dir(self, path: str) -> list[DirEntry]:
+        import shlex
+
         result = await self.run(
-            ["sh", "-c", f"ls -la --time-style=long-iso {path}"],
+            ["sh", "-c", f"ls -la --time-style=long-iso {shlex.quote(path)}"],
             cwd=".",
             timeout=15.0,
         )
@@ -142,8 +144,10 @@ class SshTransport:
         return entries
 
     async def read_file(self, path: str, max_bytes: int = 1_048_576) -> bytes:
+        import shlex
+
         result = await self.run(
-            ["sh", "-c", f"head -c {max_bytes} {path}"],
+            ["sh", "-c", f"head -c {max_bytes} {shlex.quote(path)}"],
             cwd=".",
             timeout=30.0,
         )
@@ -153,10 +157,15 @@ class SshTransport:
         # Para arquivos pequenos, base64 + decode no destino é seguro
         # contra caracteres especiais e quebras de linha.
         import base64
+        import shlex
 
         b64 = base64.b64encode(data).decode("ascii")
         await self.run(
-            ["sh", "-c", f"echo '{b64}' | base64 -d > {path}"],
+            [
+                "sh",
+                "-c",
+                f"echo '{b64}' | base64 -d > {shlex.quote(path)}",
+            ],
             cwd=".",
             timeout=30.0,
         )

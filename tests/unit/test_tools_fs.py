@@ -110,6 +110,110 @@ class TestFileRead:
         assert "sensível" in result.lower() or "error" in result.lower()
         assert "chave-privada-fake" not in result
 
+    async def test_remote_workspace_reads_through_transport(self, tmp_path, monkeypatch):
+        from unittest.mock import AsyncMock
+
+        from backend.workspace import workspace as ws_mod
+
+        ws = Workspace(
+            id="remote-read",
+            name="remote",
+            cwd=str(tmp_path),
+            created_at="2024-01-01T00:00:00+00:00",
+            trusted=True,
+            transport="codespace",
+            remote_path="/workspaces/project",
+        )
+        monkeypatch.setattr(ws_mod.workspace_registry, "get", lambda _wid: ws)
+        monkeypatch.setattr(ws_mod.workspace_registry, "get_active", lambda _uid: ws)
+        transport = AsyncMock()
+        transport.run.return_value = type(
+            "Result",
+            (),
+            {
+                "exit_code": 0,
+                "stdout": "/workspaces/project/src/a.py\n",
+                "stderr": "",
+            },
+        )()
+        transport.read_file = AsyncMock(return_value=b"print('remote')")
+        monkeypatch.setattr("backend.transport.get_transport", lambda _ws: transport)
+
+        from backend.tools import fs as fs_mod
+
+        result = await fs_mod.file_read(
+            "src/a.py", ctx_from_config({"configurable": {"workspace_id": ws.id}})
+        )
+
+        assert result == "print('remote')"
+        transport.read_file.assert_awaited_once_with(
+            "/workspaces/project/src/a.py", max_bytes=1_048_576
+        )
+
+    async def test_remote_workspace_rejects_parent_traversal(self, tmp_path, monkeypatch):
+        from unittest.mock import AsyncMock
+
+        from backend.tools import fs as fs_mod
+        from backend.workspace import workspace as ws_mod
+
+        ws = Workspace(
+            id="remote-escape",
+            name="remote",
+            cwd=str(tmp_path),
+            created_at="2024-01-01T00:00:00+00:00",
+            trusted=True,
+            transport="codespace",
+            remote_path="/workspaces/project",
+        )
+        monkeypatch.setattr(ws_mod.workspace_registry, "get", lambda _wid: ws)
+        transport = AsyncMock()
+        monkeypatch.setattr("backend.transport.get_transport", lambda _ws: transport)
+
+        result = await fs_mod.file_read(
+            "../outside.txt", ctx_from_config({"configurable": {"workspace_id": ws.id}})
+        )
+
+        assert "escapes" in result
+        transport.run.assert_not_awaited()
+        transport.read_file.assert_not_awaited()
+
+    async def test_remote_write_requires_trust_and_uses_transport(self, tmp_path, monkeypatch):
+        from unittest.mock import AsyncMock
+
+        from backend.tools import fs as fs_mod
+        from backend.workspace import workspace as ws_mod
+
+        ws = Workspace(
+            id="remote-write",
+            name="remote",
+            cwd=str(tmp_path),
+            created_at="2024-01-01T00:00:00+00:00",
+            trusted=True,
+            transport="codespace",
+            remote_path="/workspaces/project",
+        )
+        monkeypatch.setattr(ws_mod.workspace_registry, "get", lambda _wid: ws)
+        transport = AsyncMock()
+        transport.run.return_value = type(
+            "Result",
+            (),
+            {
+                "exit_code": 0,
+                "stdout": "/workspaces/project/new.txt\n",
+                "stderr": "",
+            },
+        )()
+        monkeypatch.setattr("backend.transport.get_transport", lambda _ws: transport)
+
+        result = await fs_mod.file_write(
+            "new.txt", "conteúdo", ctx_from_config({"configurable": {"workspace_id": ws.id}})
+        )
+
+        assert "Remote file written" in result
+        transport.write_file.assert_awaited_once_with(
+            "/workspaces/project/new.txt", "conteúdo".encode()
+        )
+
 
 # ---------------------------------------------------------------------------
 # Files Workbench parity

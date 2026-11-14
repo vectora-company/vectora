@@ -97,6 +97,8 @@ class CodespaceTransport:
             cwd=".",
             timeout=15.0,
         )
+        if result.exit_code != 0:
+            raise RuntimeError(result.stderr or "Falha ao listar diretório remoto.")
         entries: list[DirEntry] = []
         for line in result.stdout.splitlines():
             parts = line.split()
@@ -121,17 +123,23 @@ class CodespaceTransport:
             cwd=".",
             timeout=30.0,
         )
+        if result.exit_code != 0:
+            if "no such file or directory" in result.stderr.lower():
+                raise FileNotFoundError(path)
+            raise RuntimeError(result.stderr or "Falha ao ler arquivo remoto.")
         return result.stdout.encode("utf-8", errors="replace")
 
     async def write_file(self, path: str, data: bytes) -> None:
         import base64
 
         b64 = base64.b64encode(data).decode("ascii")
-        await self.run(
+        result = await self.run(
             ["sh", "-c", f"echo '{b64}' | base64 -d > {shlex.quote(path)}"],
             cwd=".",
             timeout=60.0,
         )
+        if result.exit_code != 0:
+            raise RuntimeError(result.stderr or "Falha ao gravar arquivo remoto.")
 
     async def run(
         self,
