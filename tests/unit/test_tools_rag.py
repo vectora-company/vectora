@@ -662,6 +662,30 @@ class TestEmbedding:
 
 class TestIngestDocs:
     @pytest.mark.asyncio
+    async def test_sensitive_files_are_filtered_before_ingestion(self, tmp_path):
+        from backend.tools.rag import ingest_docs
+
+        secret = tmp_path / ".env"
+        secret.write_text("API_TOKEN=must-not-be-indexed")
+
+        with patch("backend.tools.rag.settings") as mock_settings:
+            mock_settings.enable_file_operations = True
+            with patch("backend.tools.fs._confine", return_value=(tmp_path, "")):
+                with patch(
+                    "backend.services.ignore.walk_files", return_value=([secret], 0)
+                ):
+                    result = await ingest_docs(
+                        ctx=ToolContext(),
+                        directory_path=str(tmp_path),
+                        collection="articles",
+                        glob_pattern="**/*",
+                    )
+
+        data = json.loads(result)
+        assert data["status"] == "no_files"
+        assert data["skipped_ignored"] >= 1
+
+    @pytest.mark.asyncio
     async def test_unsafe_path_denied(self):
         """Verifica o comportamento de unsafe path denied."""
         from backend.tools.rag import ingest_docs
