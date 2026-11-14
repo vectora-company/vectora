@@ -9,9 +9,7 @@ from starlette.requests import Request
 
 
 def _request(user: object | None) -> Request:
-    request = Request(
-        {"type": "http", "method": "GET", "path": "/auth/secrets/keys"}
-    )
+    request = Request({"type": "http", "method": "GET", "path": "/auth/secrets/keys"})
     request.state.user = user
     return request
 
@@ -66,7 +64,9 @@ async def test_internal_provider_does_not_list_keys_when_vault_is_locked(monkeyp
         await internal.InternalSecretsProvider().list_keys("user-1")
 
 
-async def test_secret_key_listing_isolated_between_real_internal_vaults(monkeypatch, tmp_path):
+async def test_secret_key_listing_isolated_between_real_internal_vaults(
+    monkeypatch, tmp_path
+):
     from backend.api.handlers import auth
     from backend.secrets import internal
 
