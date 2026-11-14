@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import functools
 import hashlib
 import json
 import logging
@@ -91,6 +92,57 @@ _REPEATED_CALL_HARD_LIMIT = 6
 """Limite de segurança antes de encerrar uma chamada de tool presa."""
 
 logger = logging.getLogger(__name__)
+
+
+def _record_turn_telemetry[**RunArgs, RunResult](
+    function: Callable[RunArgs, Awaitable[RunResult]],
+) -> Callable[RunArgs, Awaitable[RunResult]]:
+    """Record one telemetry lifecycle around every harness invocation."""
+
+    @functools.wraps(function)
+    async def wrapped(*args: RunArgs.args, **kwargs: RunArgs.kwargs) -> RunResult:
+        config = kwargs.get("config")
+        run_id = getattr(config, "run_id", None)
+        turn_id = str(run_id or f"turn-{uuid4().hex}")
+        thread_id = kwargs.get("thread_id")
+        from backend.persistence.telemetry import telemetry
+
+        started = time.perf_counter()
+        await telemetry.turn_start(None, turn_id)
+        status = "ok"
+        try:
+            result = await function(*args, **kwargs)
+            status = str(getattr(result, "stopped_reason", "ok"))
+            return result
+        except asyncio.CancelledError as exc:
+            status = "cancelled"
+            telemetry.record_error(
+                "conversation_loop",
+                exc,
+                include_message=False,
+                turn_id=turn_id,
+                thread_id=thread_id,
+            )
+            raise
+        except Exception as exc:
+            status = "error"
+            telemetry.record_error(
+                "conversation_loop",
+                exc,
+                include_message=False,
+                turn_id=turn_id,
+                thread_id=thread_id,
+            )
+            raise
+        finally:
+            await telemetry.turn_end(
+                None,
+                turn_id,
+                status,
+                (time.perf_counter() - started) * 1000,
+            )
+
+    return wrapped
 
 
 async def _bind_decision_model_snapshot(
@@ -798,6 +850,7 @@ async def _report_media_routing(
             logger.exception("conversation_loop: falha ao registrar envio de anexos")
 
 
+@_record_turn_telemetry
 async def run_conversation(  # noqa: PLR0911
     *,
     session_store: SessionStore,
