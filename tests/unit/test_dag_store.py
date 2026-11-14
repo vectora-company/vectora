@@ -41,7 +41,55 @@ async def test_approval_requires_a_non_empty_human_actor(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_dag_is_idempotent_and_resumes_after_expired_claim(tmp_path) -> None:
+async def test_upsert_draft_refreshes_only_unapproved_plan_and_reads_execution(
+    tmp_path,
+):
+    db = await aiosqlite.connect(tmp_path / "dag-draft-view.db")
+    store = DAGStore(db)
+    await store.setup()
+    first_draft = await store.upsert_draft(
+        run_id="run-draft-view", stages=[DAGStage("one", "Primeira")]
+    )
+    assert first_draft is not None
+    plan_id, first_hash = first_draft
+    updated_draft = await store.upsert_draft(
+        run_id="run-draft-view",
+        stages=[DAGStage("one", "Primeira"), DAGStage("two", "Segunda", ("one",))],
+    )
+    assert updated_draft is not None
+    same_id, updated_hash = updated_draft
+    assert same_id == plan_id
+    assert first_hash != updated_hash
+    await store.approve_plan(plan_id, plan_hash=updated_hash, approver="user-1")
+    assert (
+        await store.upsert_draft(
+            run_id="run-draft-view", stages=[DAGStage("changed", "Alterada")]
+        )
+        is None
+    )
+    execution = await store.start_execution(
+        plan_id, run_id="run-draft-view", idempotency_key="draft-view"
+    )
+    claimed = await store.claim_ready_stage(execution.execution_id)
+    assert claimed is not None
+    stage_id, claim_token = claimed
+    await store.finish_stage(
+        execution.execution_id,
+        stage_id,
+        claim_token=claim_token,
+        passed=True,
+        output={"summary": "ok"},
+    )
+    view = await store.get_plan(plan_id)
+    assert view is not None
+    assert view["status"] == "approved"
+    assert view["execution"]["stages"][0]["status"] == "passed"
+    assert view["execution"]["stages"][0]["output"] == {"summary": "ok"}
+    await db.close()
+
+
+@pytest.mark.asyncio
+async def test_dag_is_idempotent_and_blocks_uncertain_expired_claim(tmp_path) -> None:
     db = await aiosqlite.connect(tmp_path / "dag.db")
     db.row_factory = aiosqlite.Row
     store = DAGStore(db)
@@ -90,64 +138,38 @@ async def test_dag_is_idempotent_and_resumes_after_expired_claim(tmp_path) -> No
     )
     await db.commit()
     assert await store.recover_expired_claims() == 1
-    claimed = await store.claim_ready_stage(execution.execution_id)
-    assert claimed is not None
-    async with db.execute(
-        "SELECT payload_json FROM vectora_dag_events "
-        "WHERE execution_id=? AND stage_id=? AND event_type='stage_claimed' "
-        "ORDER BY created_at DESC LIMIT 1",
-        (execution.execution_id, claimed[0]),
-    ) as cursor:
-        event = await cursor.fetchone()
-    assert event is not None
-    assert '"attempt": 2' in event["payload_json"]
+    assert await store.claim_ready_stage(execution.execution_id) is None
     async with db.execute(
         "SELECT COUNT(*) FROM vectora_dag_events "
-        "WHERE execution_id=? AND stage_id=? AND event_type='stage_recovered'",
-        (execution.execution_id, claimed[0]),
+        "WHERE execution_id=? AND stage_id='planner' AND event_type='stage_recovery_required'",
+        (execution.execution_id,),
     ) as cursor:
-        recovered_events = await cursor.fetchone()
-    assert recovered_events is not None and recovered_events[0] == 1
+        recovery_events = await cursor.fetchone()
+    assert recovery_events is not None and recovery_events[0] == 1
     with pytest.raises(DAGValidationError):
         await store.finish_stage(
             execution.execution_id,
-            claimed[0],
+            "planner",
             claim_token=expired_token,
             passed=True,
             output={"stale": True},
         )
     async with db.execute(
         "SELECT status, output_json FROM vectora_dag_stages "
-        "WHERE execution_id=? AND stage_id=?",
-        (execution.execution_id, claimed[0]),
+        "WHERE execution_id=? AND stage_id='planner'",
+        (execution.execution_id,),
     ) as cursor:
-        stale_row = await cursor.fetchone()
-    assert stale_row is not None
-    assert stale_row[0] == "running"
-    assert stale_row[1] is None
-    await store.finish_stage(
-        execution.execution_id,
-        claimed[0],
-        claim_token=claimed[1],
-        passed=True,
-        output={"ok": True},
-    )
-    next_stage = await store.claim_ready_stage(execution.execution_id)
-    assert next_stage is not None and next_stage[0] == "final"
-    await store.finish_stage(
-        execution.execution_id,
-        "final",
-        claim_token=next_stage[1],
-        passed=True,
-        output={"done": True},
-    )
+        planner_row = await cursor.fetchone()
+    assert planner_row is not None
+    assert planner_row[0] == "failed"
+    assert planner_row[1] is None
     async with db.execute(
         "SELECT status FROM vectora_dag_executions WHERE execution_id=?",
         (execution.execution_id,),
     ) as cursor:
         execution_row = await cursor.fetchone()
     assert execution_row is not None
-    assert execution_row[0] == "passed"
+    assert execution_row[0] == "failed"
     async with db.execute(
         "SELECT COUNT(*) FROM vectora_dag_events "
         "WHERE execution_id=? AND event_type='execution_finished'",
@@ -155,16 +177,11 @@ async def test_dag_is_idempotent_and_resumes_after_expired_claim(tmp_path) -> No
     ) as cursor:
         finished_events = await cursor.fetchone()
     assert finished_events is not None and finished_events[0] == 1
-    assert await store.claim_ready_stage(execution.execution_id) is None
-    with pytest.raises(DAGValidationError):
-        await store.finish_stage(
-            execution.execution_id, "final", claim_token="wrong", passed=True
-        )
     await db.close()
 
 
 @pytest.mark.asyncio
-async def test_dag_heartbeat_extends_lease_and_recovery_exhausts_attempts(
+async def test_dag_heartbeat_extends_lease_and_expiry_fails_closed(
     tmp_path,
 ) -> None:
     db = await aiosqlite.connect(tmp_path / "dag-heartbeat.db")
@@ -506,8 +523,10 @@ async def test_dag_persiste_estagios_canonicos_e_nao_o_json_cru(tmp_path) -> Non
 
 
 @pytest.mark.asyncio
-async def test_dag_cancel_invalidates_claims_and_is_idempotent(tmp_path) -> None:
-    """Cancel a DAG idempotently and invalidate outstanding claims."""
+async def test_dag_cancel_blocks_new_stages_and_waits_for_active_claim(
+    tmp_path,
+) -> None:
+    """Cancellation is reported terminal only after active work settles."""
     db = await aiosqlite.connect(tmp_path / "dag-cancel.db")
     store = DAGStore(db)
     await store.setup()
@@ -527,17 +546,49 @@ async def test_dag_cancel_invalidates_claims_and_is_idempotent(tmp_path) -> None
         execution.execution_id, requested_by="user-1"
     )
     assert await store.claim_ready_stage(execution.execution_id) is None
-    with pytest.raises(DAGValidationError):
-        await store.finish_stage(
-            execution.execution_id,
-            claimed[0],
-            claim_token=claimed[1],
-            passed=True,
-        )
+    async with db.execute(
+        "SELECT status FROM vectora_dag_executions WHERE execution_id=?",
+        (execution.execution_id,),
+    ) as cursor:
+        row = await cursor.fetchone()
+    assert row is not None and row[0] == "cancelling"
+    await store.finish_stage(
+        execution.execution_id,
+        claimed[0],
+        claim_token=claimed[1],
+        passed=True,
+    )
     async with db.execute(
         "SELECT status FROM vectora_dag_executions WHERE execution_id=?",
         (execution.execution_id,),
     ) as cursor:
         row = await cursor.fetchone()
     assert row is not None and row[0] == "cancelled"
+    await db.close()
+
+
+@pytest.mark.asyncio
+async def test_dag_cancel_releases_a_claimed_stage_that_has_not_started(
+    tmp_path,
+) -> None:
+    db = await aiosqlite.connect(tmp_path / "dag-cancel-pending.db")
+    store = DAGStore(db)
+    await store.setup()
+    plan_id, plan_hash = await store.create_plan(
+        run_id="run-cancel-pending", stages=[DAGStage("only", "Only")]
+    )
+    await store.approve_plan(plan_id, plan_hash=plan_hash, approver="user-1")
+    execution = await store.start_execution(
+        plan_id, run_id="run-cancel-pending", idempotency_key="cancel-pending"
+    )
+    claim = await store.claim_ready_stage(execution.execution_id)
+    assert claim is not None
+    assert await store.cancel_execution(execution.execution_id, requested_by="user-1")
+    assert await store.cancel_claimed_stage(
+        execution.execution_id, claim[0], claim_token=claim[1]
+    )
+    plan = await store.get_plan(plan_id)
+    assert plan is not None
+    assert plan["execution"]["status"] == "cancelled"
+    assert plan["execution"]["stages"][0]["status"] == "cancelled"
     await db.close()

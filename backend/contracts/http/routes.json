@@ -1482,6 +1482,27 @@
     "methods": [
       "GET"
     ],
+    "name": "get_latest_dag_threads__thread_id__dag_get",
+    "path": "/threads/{thread_id}/dag"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "name": "approve_dag_threads__thread_id__dag__plan_id__approve_post",
+    "path": "/threads/{thread_id}/dag/{plan_id}/approve"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "name": "cancel_dag_threads__thread_id__dag__plan_id__cancel_post",
+    "path": "/threads/{thread_id}/dag/{plan_id}/cancel"
+  },
+  {
+    "methods": [
+      "GET"
+    ],
     "name": "stream_thread_ledger_events_threads__thread_id__events_get",
     "path": "/threads/{thread_id}/events"
   },

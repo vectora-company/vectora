@@ -998,6 +998,75 @@ export async function getSharedThread(
   return res.json() as Promise<SharedThread>;
 }
 
+export interface DAGStageView {
+  stage_id: string;
+  name: string;
+  depends_on: string[];
+  status: string;
+  attempt: number;
+  error: string | null;
+  output: Record<string, unknown> | null;
+}
+
+export interface DAGPlanView {
+  plan_id: string;
+  run_id: string;
+  workspace_id: string | null;
+  stages: DAGStageView[];
+  plan_hash: string;
+  status: "draft" | "approved";
+  approved_by: string | null;
+  approved_at: string | null;
+  created_at: string;
+  execution: {
+    execution_id: string;
+    status: "running" | "cancelling" | "passed" | "failed" | "cancelled";
+    stages: DAGStageView[];
+  } | null;
+}
+
+export async function getThreadDAG(
+  threadId: string,
+): Promise<DAGPlanView | null> {
+  const url = `${VECTORA_API_URL}/threads/${encodeURIComponent(threadId)}/dag`;
+  let response = await fetch(url, { credentials: "include" });
+  if (response.status === 401) {
+    if (!(await tryRefreshToken())) {
+      redirectToLogin();
+      throw new Error("unauthorized");
+    }
+    response = await fetch(url, { credentials: "include" });
+  }
+  if (!response.ok) throw new Error(`thread DAG failed (${response.status})`);
+  const body = (await response.json()) as { plan: DAGPlanView | null };
+  return body.plan;
+}
+
+async function updateThreadDAG(
+  threadId: string,
+  planId: string,
+  action: "approve" | "cancel",
+  planHash?: string,
+): Promise<DAGPlanView | null> {
+  const body = await postRpc<{ plan: DAGPlanView | null }>(
+    `/threads/${encodeURIComponent(threadId)}/dag/${encodeURIComponent(planId)}/${action}`,
+    planHash ? { plan_hash: planHash } : {},
+  );
+  return body.plan;
+}
+
+export const approveThreadDAG = (
+  threadId: string,
+  planId: string,
+  planHash: string,
+): Promise<DAGPlanView | null> =>
+  updateThreadDAG(threadId, planId, "approve", planHash);
+
+export const cancelThreadDAG = (
+  threadId: string,
+  planId: string,
+): Promise<DAGPlanView | null> => updateThreadDAG(threadId, planId, "cancel");
+
 export async function getTools(): Promise<GetToolsResponse> {
   const url = `${VECTORA_API_URL}/vectora.chat.v1.ChatService/GetTools`;
   let res = await fetch(url, { credentials: "include" });

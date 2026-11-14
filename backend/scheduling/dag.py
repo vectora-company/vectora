@@ -123,6 +123,8 @@ class DAGStore:
             );
             CREATE INDEX IF NOT EXISTS ix_vectora_dag_stage_claim
                 ON vectora_dag_stages(status, claim_expires_at);
+            CREATE UNIQUE INDEX IF NOT EXISTS ux_vectora_dag_plan_run
+                ON vectora_dag_plans(run_id);
             """
         )
         await self.db.commit()
@@ -155,6 +157,120 @@ class DAGStore:
         )
         await self.db.commit()
         return plan_id, plan_hash
+
+    async def upsert_draft(
+        self,
+        *,
+        run_id: str,
+        stages: Sequence[DAGStage],
+        workspace_id: str | None = None,
+    ) -> tuple[str, str] | None:
+        """Create or refresh the unapproved plan for a run.
+
+        Once a human approves the plan it is immutable. Subsequent checklist
+        updates cannot silently change the approved execution.
+        """
+        validate_stages(stages)
+        async with self.db.execute(
+            "SELECT plan_id,status FROM vectora_dag_plans "
+            "WHERE run_id=? ORDER BY created_at DESC LIMIT 1",
+            (run_id,),
+        ) as cur:
+            existing = await cur.fetchone()
+        if existing is not None and existing["status"] != "draft":
+            return None
+        plan_hash = _hash_plan(stages)
+        data = json.dumps(
+            [
+                {
+                    "stage_id": s.stage_id,
+                    "name": s.name,
+                    "depends_on": list(s.depends_on),
+                }
+                for s in stages
+            ],
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        if existing is not None:
+            await self.db.execute(
+                "UPDATE vectora_dag_plans SET stages_json=?,plan_hash=?,workspace_id=? "
+                "WHERE plan_id=? AND status='draft'",
+                (data, plan_hash, workspace_id, existing["plan_id"]),
+            )
+            await self.db.commit()
+            return str(existing["plan_id"]), plan_hash
+        plan_id, created_hash = await self.create_plan(
+            run_id=run_id, stages=stages, workspace_id=workspace_id
+        )
+        return plan_id, created_hash
+
+    async def get_plan(self, plan_id: str) -> dict[str, Any] | None:
+        async with self.db.execute(
+            "SELECT plan_id,run_id,workspace_id,stages_json,plan_hash,status,"
+            "approved_by,approved_at,created_at FROM vectora_dag_plans WHERE plan_id=?",
+            (plan_id,),
+        ) as cur:
+            row = await cur.fetchone()
+        if row is None:
+            return None
+        plan = dict(row)
+        plan["stages"] = json.loads(plan.pop("stages_json"))
+        async with self.db.execute(
+            "SELECT execution_id,status FROM vectora_dag_executions "
+            "WHERE plan_id=? ORDER BY created_at DESC LIMIT 1",
+            (plan_id,),
+        ) as cur:
+            execution = await cur.fetchone()
+        plan["execution"] = dict(execution) if execution is not None else None
+        if execution is not None:
+            execution_snapshot: dict[str, Any] = dict(execution)
+            async with self.db.execute(
+                "SELECT stage_id,name,depends_on_json,status,attempt,error,output_json "
+                "FROM vectora_dag_stages WHERE execution_id=? ORDER BY rowid",
+                (execution["execution_id"],),
+            ) as cur:
+                rows = await cur.fetchall()
+            execution_snapshot["stages"] = [
+                {
+                    "stage_id": row["stage_id"],
+                    "name": row["name"],
+                    "depends_on": json.loads(row["depends_on_json"]),
+                    "status": row["status"],
+                    "attempt": row["attempt"],
+                    "error": row["error"],
+                    "output": json.loads(row["output_json"])
+                    if row["output_json"]
+                    else None,
+                }
+                for row in rows
+            ]
+            plan["execution"] = execution_snapshot
+        return plan
+
+    async def list_active_executions(self) -> list[dict[str, str]]:
+        async with self.db.execute(
+            "SELECT e.execution_id,e.plan_id,e.run_id FROM vectora_dag_executions e "
+            "WHERE e.status='running' ORDER BY e.created_at"
+        ) as cur:
+            return [dict(row) for row in await cur.fetchall()]
+
+    async def get_plan_for_run(self, run_id: str) -> dict[str, Any] | None:
+        async with self.db.execute(
+            "SELECT plan_id FROM vectora_dag_plans WHERE run_id=? "
+            "ORDER BY created_at DESC LIMIT 1",
+            (run_id,),
+        ) as cur:
+            row = await cur.fetchone()
+        return await self.get_plan(str(row[0])) if row is not None else None
+
+    async def get_plan_by_execution(self, execution_id: str) -> dict[str, Any] | None:
+        async with self.db.execute(
+            "SELECT plan_id FROM vectora_dag_executions WHERE execution_id=?",
+            (execution_id,),
+        ) as cur:
+            row = await cur.fetchone()
+        return await self.get_plan(str(row[0])) if row is not None else None
 
     async def approve_plan(
         self, plan_id: str, *, plan_hash: str, approver: str
@@ -332,17 +448,17 @@ class DAGStore:
     ) -> bool:
         """Cancela cooperativamente uma execução ainda não terminal.
 
-        A mutação é um CAS no estado da execução. Claims são invalidados antes
-        dos eventos, impedindo que um worker antigo finalize a etapa depois do
-        cancelamento. Workers já em execução devem observar o token perdido e
-        interromper seu trabalho; nenhuma etapa nova pode ser reivindicada.
+        A execução entra em ``cancelling``: etapas novas são bloqueadas, mas
+        workers já ativos mantêm o claim e podem terminar com resultado
+        registrado. O estado terminal ``cancelled`` só é publicado depois que
+        esses workers terminam.
         """
         actor = requested_by.strip()
         if not actor:
             raise DAGValidationError("requested_by é obrigatório")
         message = reason.strip() or "cancelamento solicitado"
         cur = await self.db.execute(
-            "UPDATE vectora_dag_executions SET status='cancelled' "
+            "UPDATE vectora_dag_executions SET status='cancelling' "
             "WHERE execution_id=? AND status='running'",
             (execution_id,),
         )
@@ -350,24 +466,50 @@ class DAGStore:
             await self.db.rollback()
             return False
         await self.db.execute(
-            "UPDATE vectora_dag_stages SET status='cancelled',claim_token=NULL,"
-            "claim_expires_at=NULL,error=? WHERE execution_id=? AND status IN ('pending','running')",
+            "UPDATE vectora_dag_stages SET status='cancelled',error=? "
+            "WHERE execution_id=? AND status='pending'",
             (message, execution_id),
         )
         await self._event(
             execution_id,
             None,
-            "execution_cancelled",
+            "execution_cancel_requested",
             {"requested_by": actor, "reason": message},
         )
-        await self._event(
-            execution_id,
-            None,
-            "execution_finished",
-            {"status": "cancelled"},
-        )
+        await self._refresh_execution_status(execution_id)
         await self.db.commit()
         return True
+
+    async def cancel_claimed_stage(
+        self,
+        execution_id: str,
+        stage_id: str,
+        *,
+        claim_token: str,
+        reason: str = "etapa cancelada a pedido do usuário",
+    ) -> bool:
+        """Release a claimed stage only after no further work will resume."""
+        cur = await self.db.execute(
+            "UPDATE vectora_dag_stages SET status='cancelled',claim_token=NULL,"
+            "claim_expires_at=NULL,error=? WHERE execution_id=? AND stage_id=? "
+            "AND status='running' AND claim_token=?",
+            (reason, execution_id, stage_id, claim_token),
+        )
+        if cur.rowcount != 1:
+            await self.db.rollback()
+            return False
+        await self._event(execution_id, stage_id, "stage_cancelled", {"reason": reason})
+        await self._refresh_execution_status(execution_id)
+        await self.db.commit()
+        return True
+
+    async def execution_status(self, execution_id: str) -> str | None:
+        async with self.db.execute(
+            "SELECT status FROM vectora_dag_executions WHERE execution_id=?",
+            (execution_id,),
+        ) as cur:
+            row = await cur.fetchone()
+        return str(row[0]) if row is not None else None
 
     async def heartbeat_stage(
         self,
@@ -479,12 +621,35 @@ class DAGStore:
     async def _refresh_execution_status(self, execution_id: str) -> None:
         """Derive the execution status from its persisted stage states."""
         async with self.db.execute(
+            "SELECT status FROM vectora_dag_executions WHERE execution_id=?",
+            (execution_id,),
+        ) as execution_cur:
+            execution_row = await execution_cur.fetchone()
+        if execution_row is None:
+            return
+        async with self.db.execute(
             "SELECT stage_id,status FROM vectora_dag_stages WHERE execution_id=?",
             (execution_id,),
         ) as cur:
             rows = await cur.fetchall()
         statuses = [str(row[1]) for row in rows]
         if not statuses:
+            return
+        if execution_row[0] == "cancelling":
+            if "running" in statuses:
+                return
+            cur = await self.db.execute(
+                "UPDATE vectora_dag_executions SET status='cancelled' "
+                "WHERE execution_id=? AND status='cancelling'",
+                (execution_id,),
+            )
+            if cur.rowcount == 1:
+                await self._event(
+                    execution_id,
+                    None,
+                    "execution_finished",
+                    {"status": "cancelled"},
+                )
             return
         # A failed stage makes the execution terminal.  Leaving unrelated
         # pending stages in place would keep the execution ``running``
@@ -538,52 +703,33 @@ class DAGStore:
         async with self.db.execute(
             "SELECT execution_id,stage_id,attempt FROM vectora_dag_stages "
             "WHERE status='running' AND claim_expires_at IS NOT NULL "
-            "AND claim_expires_at < ? AND attempt < ?",
-            (now, max_attempts),
-        ) as recover_cur:
-            recover_rows = await recover_cur.fetchall()
-        cur = await self.db.execute(
-            "UPDATE vectora_dag_stages SET status='pending',claim_token=NULL,claim_expires_at=NULL "
-            "WHERE status='running' AND claim_expires_at IS NOT NULL AND claim_expires_at < ? "
-            "AND attempt < ?",
-            (now, max_attempts),
+            "AND claim_expires_at < ?",
+            (now,),
+        ) as expired_cur:
+            expired_rows = await expired_cur.fetchall()
+        message = (
+            "lease expirada; o efeito pode ter ocorrido antes da interrupção. "
+            "A execução foi bloqueada para reconciliação humana, sem repetição automática."
         )
-        for row in recover_rows:
-            await self._event(
-                row["execution_id"],
-                row["stage_id"],
-                "stage_recovered",
-                {"attempt": int(row["attempt"])},
-            )
-            await self._refresh_execution_status(row["execution_id"])
-        async with self.db.execute(
-            "SELECT execution_id,stage_id FROM vectora_dag_stages "
-            "WHERE status='running' AND claim_expires_at IS NOT NULL AND claim_expires_at < ? "
-            "AND attempt >= ?",
-            (now, max_attempts),
-        ) as exhausted_cur:
-            exhausted_rows = await exhausted_cur.fetchall()
-        exhausted = await self.db.execute(
+        cur = await self.db.execute(
             "UPDATE vectora_dag_stages SET status='failed',claim_token=NULL,"
             "claim_expires_at=NULL,error=? "
-            "WHERE status='running' AND claim_expires_at IS NOT NULL AND claim_expires_at < ? "
-            "AND attempt >= ?",
-            (
-                "limite de tentativas excedido após expiração da lease",
-                now,
-                max_attempts,
-            ),
+            "WHERE status='running' AND claim_expires_at IS NOT NULL AND claim_expires_at < ?",
+            (message, now),
         )
-        for row in exhausted_rows:
+        for row in expired_rows:
             await self._event(
                 row["execution_id"],
                 row["stage_id"],
-                "stage_recovery_exhausted",
-                {"max_attempts": max_attempts},
+                "stage_recovery_required",
+                {
+                    "attempt": int(row["attempt"]),
+                    "configured_max_attempts": max_attempts,
+                },
             )
             await self._refresh_execution_status(row["execution_id"])
         await self.db.commit()
-        return cur.rowcount + exhausted.rowcount
+        return cur.rowcount
 
     async def _event(
         self,

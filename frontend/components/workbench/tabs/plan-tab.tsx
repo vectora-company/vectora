@@ -39,11 +39,17 @@ import {
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { useWorkbenchSWR } from "@/lib/hooks/workbench/use-swr";
 import { useChatInputStore } from "@/lib/stores/chat-input-store";
-import { getThreadActivity } from "@/lib/api/vectora-client";
+import {
+  approveThreadDAG,
+  cancelThreadDAG,
+  getThreadActivity,
+  getThreadDAG,
+  type DAGPlanView,
+} from "@/lib/api/vectora-client";
 import {
   WORKBENCH_STALE_MS,
   useWorkbenchStore,
@@ -169,7 +175,106 @@ function TodoStatusIcon({ status }: { status: TodoItem["status"] }) {
   }
 }
 
+function dagStatusLabel(plan: DAGPlanView): string {
+  if (plan.execution?.status === "running") return m.workbench_dag_running();
+  if (plan.execution?.status === "cancelling")
+    return m.workbench_dag_cancelling();
+  if (plan.execution?.status === "passed") return m.workbench_dag_passed();
+  if (plan.execution?.status === "failed") return m.workbench_dag_failed();
+  if (plan.execution?.status === "cancelled")
+    return m.workbench_dag_cancelled();
+  return plan.status === "draft"
+    ? m.workbench_dag_draft()
+    : m.workbench_dag_approved();
+}
+
+function dagStageStatusLabel(status: string): string {
+  if (status === "running") return m.workbench_dag_running();
+  if (status === "passed") return m.workbench_dag_passed();
+  if (status === "failed") return m.workbench_dag_failed();
+  if (status === "cancelled") return m.workbench_dag_cancelled();
+  return m.workbench_dag_pending();
+}
+
+export function DAGPlanCard({
+  plan,
+  busy,
+  error,
+  onApprove,
+  onCancel,
+}: {
+  plan: DAGPlanView;
+  busy: boolean;
+  error: string | null;
+  onApprove: () => void;
+  onCancel: () => void;
+}) {
+  const stages = plan.execution?.stages ?? plan.stages;
+  return (
+    <section
+      className="border-b border-border/50 p-2 space-y-2"
+      data-testid="dag-plan-card"
+      aria-label={m.workbench_dag_title()}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-medium">{m.workbench_dag_title()}</span>
+        <span className="text-[11px] text-muted-foreground">
+          {dagStatusLabel(plan)}
+        </span>
+      </div>
+      <ol className="space-y-1">
+        {stages.map((stage) => (
+          <li
+            key={stage.stage_id}
+            className="text-[11px] flex items-start gap-1.5 text-muted-foreground"
+          >
+            <Circle className="w-3 h-3 mt-0.5 shrink-0" />
+            <span className="min-w-0">
+              {stage.name}
+              {plan.execution && ` · ${dagStageStatusLabel(stage.status)}`}
+              {stage.error && (
+                <span className="block text-destructive">{stage.error}</span>
+              )}
+            </span>
+          </li>
+        ))}
+      </ol>
+      <div className="flex flex-wrap gap-1.5">
+        {plan.status === "draft" && (
+          <Button
+            size="sm"
+            className="h-7 text-xs"
+            disabled={busy}
+            onClick={onApprove}
+          >
+            {busy ? m.workbench_dag_approving() : m.workbench_dag_approve()}
+          </Button>
+        )}
+        {plan.execution?.status === "running" && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs"
+            disabled={busy}
+            onClick={onCancel}
+          >
+            {m.workbench_dag_cancel()}
+          </Button>
+        )}
+      </div>
+      {error && (
+        <p role="alert" className="text-[11px] text-destructive">
+          {error}
+        </p>
+      )}
+    </section>
+  );
+}
+
 export function PlanTab({ threadId, onOpenPlanDocument }: PlanTabProps) {
+  const queryClient = useQueryClient();
+  const [dagBusy, setDagBusy] = useState(false);
+  const [dagError, setDagError] = useState<string | null>(null);
   // A chave inclui a thread e o contador nunca é resetado. Reiniciar o mapa
   // ao trocar de thread permitia que uma resposta antiga e uma nova usassem
   // o mesmo epoch para o mesmo slug.
@@ -188,6 +293,49 @@ export function PlanTab({ threadId, onOpenPlanDocument }: PlanTabProps) {
   );
   const planAutoExpand = useSettingsStore((s) => s.planAutoExpand);
   const planSort = useSettingsStore((s) => s.planSort);
+  const dagQuery = useQuery({
+    queryKey: ["thread-dag", threadId],
+    queryFn: () => getThreadDAG(threadId),
+    refetchInterval: (query) => {
+      const plan = query.state.data;
+      return plan?.status === "draft" ||
+        plan?.execution?.status === "running" ||
+        plan?.execution?.status === "cancelling"
+        ? 3000
+        : false;
+    },
+  });
+  const dag = dagQuery.data;
+  const refreshDag = dagQuery.refetch;
+  useEffect(() => {
+    if (todos.length > 0) void refreshDag();
+  }, [refreshDag, todos]);
+  const updateDAG = useCallback(
+    async (action: "approve" | "cancel") => {
+      if (!dag) return;
+      setDagBusy(true);
+      setDagError(null);
+      try {
+        const updated =
+          action === "approve"
+            ? await approveThreadDAG(threadId, dag.plan_id, dag.plan_hash)
+            : await cancelThreadDAG(threadId, dag.plan_id);
+        queryClient.setQueryData(["thread-dag", threadId], updated);
+      } catch {
+        setDagError(
+          action === "approve"
+            ? m.workbench_dag_approval_failed()
+            : m.workbench_dag_cancel_failed(),
+        );
+        await queryClient.invalidateQueries({
+          queryKey: ["thread-dag", threadId],
+        });
+      } finally {
+        setDagBusy(false);
+      }
+    },
+    [dag, queryClient, threadId],
+  );
 
   const setPlanItems = useWorkbenchStore((s) => s.setPlanItems);
   const togglePlanOpenSlug = useWorkbenchStore((s) => s.togglePlanOpenSlug);
@@ -353,7 +501,7 @@ export function PlanTab({ threadId, onOpenPlanDocument }: PlanTabProps) {
   // "Sem planos" só quando NÃO há artifact salvo NEM checklist do write_todos.
   // Plan Mode gera o plano via write_todos (todos), sem create_artifact — olhar
   // só `items` (artifacts) escondia o plano inteiro atrás do empty-state.
-  if (items.length === 0 && todos.length === 0) {
+  if (items.length === 0 && todos.length === 0 && !dag) {
     return (
       <div className="h-full flex flex-col items-center justify-center gap-3 p-4 text-center">
         <FileText className="w-6 h-6 text-muted-foreground/40" />
@@ -379,6 +527,15 @@ export function PlanTab({ threadId, onOpenPlanDocument }: PlanTabProps) {
 
   return (
     <div className="h-full flex flex-col">
+      {dag && (
+        <DAGPlanCard
+          plan={dag}
+          busy={dagBusy}
+          error={dagError}
+          onApprove={() => void updateDAG("approve")}
+          onCancel={() => void updateDAG("cancel")}
+        />
+      )}
       <div className="flex-1 overflow-y-auto min-h-0">
         <Accordion
           type="multiple"

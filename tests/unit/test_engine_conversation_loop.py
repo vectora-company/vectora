@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 
+import aiosqlite
 import pytest
 
 from backend.engine.conversation_loop import (
@@ -38,6 +39,7 @@ from backend.engine.stream_events import (
     WorkbenchInvalidate,
 )
 from backend.persistence.native.session_store import SessionStore
+from backend.scheduling.dag import DAGStore
 from backend.services.context_planner import compute_transcript_hash
 from backend.services.policy_compiler import PolicySnapshot, compile_policy_snapshot
 from backend.storage.sqlite.pool import AsyncConnectionPool
@@ -1717,6 +1719,69 @@ class TestArgsPreview:
 
 
 class TestTodosUpdated:
+    async def test_plan_mode_persists_a_proposal_bound_to_run(
+        self, session_store, ctx, tmp_path, monkeypatch
+    ) -> None:
+        database = tmp_path / "plan-dag.db"
+
+        async def get_db():
+            return await aiosqlite.connect(database)
+
+        monkeypatch.setattr("backend.scheduling.background_tasks._get_db", get_db)
+        ctx.permission_mode = "plan"
+        registry = ToolRegistry()
+        _register(registry, "write_todos")
+        client = _ScriptedChatClient(
+            [
+                [
+                    _tool_call_chunk(
+                        index=0,
+                        id="call_plan",
+                        name="write_todos",
+                        args=json.dumps(
+                            {
+                                "todos": [
+                                    {
+                                        "content": "inspecionar",
+                                        "status": "pending",
+                                        "step_id": "inspect",
+                                    },
+                                    {
+                                        "content": "implementar",
+                                        "status": "pending",
+                                        "step_id": "implement",
+                                    },
+                                ]
+                            }
+                        ),
+                    )
+                ],
+                [_texto_chunk("plano pronto")],
+            ]
+        )
+
+        await run_conversation(
+            session_store=session_store,
+            chat_client=client,
+            tool_registry=registry,
+            ctx=ctx,
+            thread_id="thread-1",
+            config=LoopConfig(run_id="run-plan-dag"),
+        )
+
+        db = await aiosqlite.connect(database)
+        db.row_factory = aiosqlite.Row
+        store = DAGStore(db)
+        await store.setup()
+        plan = await store.get_plan_for_run("run-plan-dag")
+        assert plan is not None
+        assert plan["status"] == "draft"
+        assert plan["stages"] == [
+            {"stage_id": "inspect", "name": "inspecionar", "depends_on": []},
+            {"stage_id": "implement", "name": "implementar", "depends_on": ["inspect"]},
+        ]
+        await db.close()
+
     async def test_write_todos_emite_todos_updated_com_lista_completa(
         self, session_store, ctx
     ):

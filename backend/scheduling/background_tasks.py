@@ -1005,7 +1005,7 @@ async def _heartbeat_watchdog(task_id: str, run_id: str) -> None:
             )
 
 
-async def run_task(
+async def run_task(  # noqa: PLR0911
     task: BackgroundTask,
     trigger_source: str,
     payload: dict[str, Any] | None = None,
@@ -1015,6 +1015,17 @@ async def run_task(
     Defensiva: nunca propaga exceção — falha vira run com status 'error'. Retorna
     o `run_thread_id` em sucesso, ou None em erro.
     """
+    if task.trigger_config.get("dag_execution_id"):
+        from backend.scheduling.dag_runner import (
+            cancel_stage_from_task,
+            execution_cancelling_for_task,
+        )
+
+        if await execution_cancelling_for_task(task.trigger_config):
+            await cancel_stage_from_task(
+                task.trigger_config, reason="DAG cancelada antes da etapa iniciar."
+            )
+            return None
     # Corte por budget acontece **antes** de criar a run: barrar depois já
     # teria gasto. A run em andamento nunca é abortada no meio — ver
     # `backend/scheduling/budget.py`.
@@ -1261,6 +1272,9 @@ async def run_task(
         # gate/judge) — terminal como uma exceção seria, mas sem propagar.
         if goal_outcome is not None and goal_outcome.status == "error":
             await _finish_run(run_id, "error", goal_outcome.reason)
+            await _finish_dag_stage_for_task(
+                task, passed=False, result=goal_outcome.reason
+            )
             await _touch_last_run(task.id)
             _emit_run_event("error", task, run_id, run_thread_id, goal_outcome.reason)
             with contextlib.suppress(Exception):
@@ -1312,6 +1326,7 @@ async def run_task(
             )
 
         await _touch_last_run(task.id)
+        await _finish_dag_stage_for_task(task, passed=True, result=summary)
         _emit_run_event("done", task, run_id, run_thread_id, summary)
         await report_to_parent_session(task, run_thread_id, summary)
         return run_thread_id
@@ -1322,6 +1337,7 @@ async def run_task(
         )
         with contextlib.suppress(Exception):
             await _finish_run(run_id, "error", str(exc))
+        await _finish_dag_stage_for_task(task, passed=False, result=str(exc))
         _emit_run_event("error", task, run_id, run_thread_id, str(exc))
         with contextlib.suppress(Exception):
             from backend.scheduling.kanban import block_task
@@ -1340,6 +1356,20 @@ async def run_task(
         _watchdog_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await _watchdog_task
+
+
+async def _finish_dag_stage_for_task(
+    task: BackgroundTask, *, passed: bool, result: str
+) -> None:
+    """Commit a DAG stage only after its background run reaches a terminal result."""
+    if not task.trigger_config.get("dag_execution_id"):
+        return
+    try:
+        from backend.scheduling.dag_runner import finish_stage_from_task
+
+        await finish_stage_from_task(task.trigger_config, passed=passed, result=result)
+    except Exception:
+        logger.exception("background_tasks: não foi possível finalizar etapa DAG")
 
 
 async def _mark_kanban_after_success(
@@ -1521,6 +1551,7 @@ async def _resume_normal_run(
         reason = "Aprovação pendente não encontrada para a run retomada."
         finished = await _finish_run(run_id, "error", reason, expected_status="running")
         if finished:
+            await _finish_dag_stage_for_task(task, passed=False, result=reason)
             with contextlib.suppress(Exception):
                 from backend.scheduling.kanban import block_task
 
@@ -1555,12 +1586,15 @@ async def _resume_normal_run(
         run_id, task, summary, expected_status="running"
     ):
         return None
+    await _finish_dag_stage_for_task(task, passed=True, result=summary)
     _emit_run_event("done", task, run_id, run_thread_id, summary)
     await report_to_parent_session(task, run_thread_id, summary)
     return "done"
 
 
-async def resume_background_run(run_id: str, decision: str = "approve") -> str | None:
+async def resume_background_run(  # noqa: PLR0911
+    run_id: str, decision: str = "approve"
+) -> str | None:
     """Retoma uma run de background pausada em HITL (``awaiting_approval``).
 
     A aprovação pendente está persistida em ``SessionStore.pending_approvals``
@@ -1584,6 +1618,24 @@ async def resume_background_run(run_id: str, decision: str = "approve") -> str |
     task = await get_task(run["task_id"])
     if task is None or not run_thread_id:
         return None
+    if task.trigger_config.get("dag_execution_id"):
+        from backend.scheduling.dag_runner import (
+            cancel_stage_from_task,
+            execution_cancelling_for_task,
+        )
+
+        if await execution_cancelling_for_task(task.trigger_config):
+            await _finish_run(
+                run_id,
+                "cancelled",
+                "Execução cancelada antes de retomar a etapa.",
+                expected_status="awaiting_approval",
+            )
+            await cancel_stage_from_task(
+                task.trigger_config,
+                reason="DAG cancelada antes da etapa ser retomada.",
+            )
+            return None
     # Reserve the run before touching the task claim. The helper compensates
     # database failures so no reservation can strand a run in ``running``.
     if not await _reserve_resumed_run(run_id, task):
@@ -2222,12 +2274,15 @@ class BackgroundScheduler:
             # disparo das tarefas agendadas, que é a função principal do tick.
             logger.warning("background_tasks: tick do kanban falhou", exc_info=True)
 
-        # O DAG persistente tem leases próprios. Reconciliar aqui garante que
-        # uma etapa cujo worker morreu durante um restart volte a ficar elegível.
+        # O DAG persistente tem leases próprios. Uma lease expirada pode ter
+        # efeitos externos incertos; reconciliar bloqueia a execução para
+        # revisão humana em vez de repetir automaticamente a etapa.
         try:
             from backend.scheduling.dag import recover_expired_dag_claims
+            from backend.scheduling.dag_runner import dispatch_all_active
 
             await recover_expired_dag_claims()
+            await dispatch_all_active()
         except Exception:
             logger.warning("background_tasks: tick do DAG falhou", exc_info=True)
 
