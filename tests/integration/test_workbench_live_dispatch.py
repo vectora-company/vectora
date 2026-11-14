@@ -84,10 +84,10 @@ async def test_agent_dispatches_real_terminal_command() -> None:
 async def test_agent_dispatches_public_web_fetch_without_token(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A API web pública do GitHub funciona sem token no dispatcher nativo."""
+    """A página pública do GitHub funciona sem token no dispatcher nativo."""
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
     result = await _spec("fetch_url").ainvoke(
-        {"url": "https://api.github.com/repos/vectora-company/vectora"},
+        {"url": "https://github.com/vectora-company/vectora"},
         ToolContext(user_id="live-anonymous"),
     )
     assert not result.startswith("Error:")
