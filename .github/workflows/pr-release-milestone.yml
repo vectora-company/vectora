@@ -68,7 +68,10 @@ jobs:
               });
               const seen = new Set();
               let cursor = base;
-              while (cursor && !seen.has(cursor) && seen.size < 20) {
+              // A pilha pode ter até 100 PRs abertas (limite da consulta).
+              // O conjunto `seen` encerra ciclos; o teto acompanha o universo
+              // consultado em vez de truncar pilhas válidas após 20 níveis.
+              while (cursor && !seen.has(cursor) && seen.size < 100) {
                 seen.add(cursor);
                 const parent = open.find(
                   (pr) =>

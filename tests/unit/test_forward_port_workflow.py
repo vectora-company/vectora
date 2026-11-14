@@ -744,6 +744,9 @@ def test_milestone_workflow_resolves_the_release_line_of_stacked_prs() -> None:
     assert "head.repo?.full_name" in content
     # A busca é limitada e não entra em ciclo de bases.
     assert "seen.has(cursor)" in content
+    # O teto acompanha a paginação de 100 PRs abertas; pilhas maiores que 20
+    # precisam chegar até sua branch de release sem perder a raiz.
+    assert "seen.size < 100" in content
 
 
 def test_labeler_keeps_labels_owned_by_path_rules() -> None:
