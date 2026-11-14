@@ -357,6 +357,7 @@ async def test_close_tab_da_ultima_aba_libera_guards_antes_de_reusar_a_pagina(
             unroutes.append((pattern, route_handler))
 
     page = SimpleNamespace(
+        target_id="target-last-tab-guard",
         goto=AsyncMock(),
         _vectora_route_owner=_Owner(),
         _vectora_route_handler=handler,
