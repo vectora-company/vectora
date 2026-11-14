@@ -11,6 +11,7 @@ import { ChatInterface } from "../chat-interface";
 
 type StreamResult = {
   assistantContent: string;
+  runId?: string;
   requestReachedBackend: boolean;
 };
 
@@ -263,7 +264,7 @@ describe("ChatInterface — fila do composer", () => {
     expect(queue()).toEqual([]);
   });
 
-  it("alerta do sistema uma vez por turno quando a aba está oculta e a resposta demorou", async () => {
+  it("alerta do sistema uma vez por run quando a aba está oculta e a resposta demorou", async () => {
     sessionStorage.clear();
     const alerts = vi.fn();
     vi.stubGlobal(
@@ -281,11 +282,15 @@ describe("ChatInterface — fila do composer", () => {
       vi.advanceTimersByTime(20_000);
       h.streams[0].resolve({
         assistantContent: "ok",
+        runId: "run-1",
         requestReachedBackend: true,
       });
     });
     await flush();
     expect(alerts).toHaveBeenCalledTimes(1);
+    expect(
+      JSON.parse(sessionStorage.getItem("vectora:delivered-notifications")!),
+    ).toEqual(["thread-alerta:run-1:done"]);
 
     // Outro turno é outra chave: alerta de novo; o mesmo turno não repete.
     await submit("segunda");
@@ -293,6 +298,7 @@ describe("ChatInterface — fila do composer", () => {
       vi.advanceTimersByTime(20_000);
       h.streams[1].resolve({
         assistantContent: "ok",
+        runId: "run-2",
         requestReachedBackend: true,
       });
     });
@@ -309,6 +315,38 @@ describe("ChatInterface — fila do composer", () => {
     vi.stubGlobal(
       "Notification",
       Object.assign(alerts, { permission: "denied" }),
+    );
+    const visibility = vi
+      .spyOn(document, "visibilityState", "get")
+      .mockReturnValue("hidden");
+    render(<ChatInterface threadId="thread-alerta" />);
+    await flush();
+
+    await submit("primeira");
+    await act(async () => {
+      vi.advanceTimersByTime(20_000);
+      h.streams[0].resolve({
+        assistantContent: "ok",
+        runId: "run-1",
+        requestReachedBackend: true,
+      });
+    });
+    await flush();
+
+    expect(alerts).not.toHaveBeenCalled();
+    expect(
+      sessionStorage.getItem("vectora:delivered-notifications"),
+    ).toBeNull();
+    visibility.mockRestore();
+    vi.unstubAllGlobals();
+  });
+
+  it("não emite alerta se o stream não fornece um run_id estável", async () => {
+    sessionStorage.clear();
+    const alerts = vi.fn();
+    vi.stubGlobal(
+      "Notification",
+      Object.assign(alerts, { permission: "granted" }),
     );
     const visibility = vi
       .spyOn(document, "visibilityState", "get")
