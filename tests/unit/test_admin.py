@@ -765,14 +765,10 @@ class TestResolveAgent:
             for t in result["tools"]
         )
         assert result["system_prompt_length"] == len(result["system_prompt"])
-        # chat_mode=True não delega a subagentes (agent_factory._native_subagent_catalog)
         assert result["subagents"] == []
 
     @pytest.mark.asyncio
     async def test_sem_workspace_e_user_id_usa_defaults(self):
-        """Erro/borda: sem `user_id`/`workspace_id` (query params vazios,
-        caso real de um admin só testando o endpoint), resolve pro agente
-        'local' padrão em vez de lançar."""
         from backend.api.handlers.admin import resolve_agent
 
         result = await resolve_agent(self._req())
@@ -791,3 +787,107 @@ class TestResolveAgent:
             await resolve_agent(self._req(role="member"), user_id="alice")
 
         assert exc.value.status_code == 403
+
+
+class TestTracerAdministration:
+    @staticmethod
+    def _request(role: str = "admin") -> Any:
+        from unittest.mock import MagicMock
+
+        request = MagicMock()
+        request.state.user = MagicMock(role=role, id="admin-1")
+        return request
+
+    @pytest.mark.asyncio
+    async def test_list_traces_excludes_freeform_metadata(self, monkeypatch):
+        from unittest.mock import AsyncMock
+
+        from backend.api.handlers import admin
+        from backend.persistence.tracer import tracer
+
+        spans = [
+            {
+                "span_id": "span-1",
+                "node": "llm",
+                "status": "ok",
+                "metadata": '{"prompt":"private"}',
+            }
+        ]
+        get_recent = AsyncMock(return_value=spans)
+        monkeypatch.setattr(tracer, "get_recent", get_recent)
+
+        result = await admin.list_traces(self._request(), limit=20)
+
+        assert result == {
+            "traces": [
+                {
+                    "span_id": "span-1",
+                    "parent_id": None,
+                    "session_id": None,
+                    "node": "llm",
+                    "event": None,
+                    "status": "ok",
+                    "started_at": None,
+                    "ended_at": None,
+                    "duration_ms": None,
+                    "in_tokens": None,
+                    "out_tokens": None,
+                }
+            ]
+        }
+        assert "private" not in str(result)
+        get_recent.assert_awaited_once_with(n=20)
+
+    @pytest.mark.asyncio
+    async def test_member_cannot_list_or_clear_traces(self, monkeypatch):
+        from unittest.mock import AsyncMock
+
+        from fastapi import HTTPException
+
+        from backend.api.handlers import admin
+        from backend.persistence.tracer import tracer
+
+        get_recent = AsyncMock()
+        clear_all = AsyncMock()
+        monkeypatch.setattr(tracer, "get_recent", get_recent)
+        monkeypatch.setattr(tracer, "clear_all", clear_all)
+
+        with pytest.raises(HTTPException) as list_error:
+            await admin.list_traces(self._request("member"))
+        with pytest.raises(HTTPException) as clear_error:
+            await admin.clear_traces(self._request("member"), confirm=True)
+
+        assert list_error.value.status_code == clear_error.value.status_code == 403
+        get_recent.assert_not_awaited()
+        clear_all.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_clear_traces_requires_confirmation(self):
+        from fastapi import HTTPException
+
+        from backend.api.handlers import admin
+
+        with pytest.raises(HTTPException) as exc:
+            await admin.clear_traces(self._request(), confirm=False)
+
+        assert exc.value.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_clear_traces_can_be_scoped_to_session(self, monkeypatch):
+        from unittest.mock import AsyncMock
+
+        from backend.api.handlers import admin
+        from backend.persistence.tracer import tracer
+
+        clear_session = AsyncMock(return_value=3)
+        clear_all = AsyncMock()
+        monkeypatch.setattr(tracer, "clear_session", clear_session)
+        monkeypatch.setattr(tracer, "clear_all", clear_all)
+
+        result = await admin.clear_traces(
+            self._request("root"), confirm=True, session_id=42
+        )
+
+        assert result == {"deleted": 3}
+        clear_session.assert_awaited_once_with(42)
+        clear_all.assert_not_awaited()
