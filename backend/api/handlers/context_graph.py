@@ -11,6 +11,7 @@ Endpoints (todos exigem autenticação; workspace deve existir):
     POST   /workspaces/{workspace_id}/context-graph/explain    — explica nó
     POST   /workspaces/{workspace_id}/context-graph/path       — caminho entre nós
     POST   /workspaces/{workspace_id}/context-graph/affected   — impacto de mudança
+    POST   /workspaces/{workspace_id}/context-graph/cluster    — agrupa comunidades
 """
 
 from __future__ import annotations
@@ -104,6 +105,17 @@ class PathRequest(BaseModel):
 class AffectedRequest(BaseModel):
     node_query: str
     depth: int = 2
+
+
+class GraphCommunity(BaseModel):
+    id: int
+    name: str
+    node_ids: list[str]
+
+
+class ClusterResponse(BaseModel):
+    communities: list[GraphCommunity]
+    node_count: int
 
 
 class GraphQueryResponse(BaseModel):
@@ -548,6 +560,54 @@ async def post_affected(
 
     answer = affected_summary(data, body.node_query, depth=body.depth)
     return GraphQueryResponse(answer=answer, nodes=[], edges=[])
+
+
+@router.post("/cluster", response_model=ClusterResponse)
+async def post_cluster(request: Request, workspace_id: str) -> ClusterResponse:
+    """Detecta comunidades sem alterar o grafo persistido do workspace."""
+    _user_id(request)
+    data = _require_graph_json(workspace_id)
+    from backend.context_graph.cluster_service import (
+        ClusterBusyError,
+        ClusterTimeoutError,
+        GraphTooLargeError,
+        InvalidGraphDataError,
+        cluster_graph_data,
+    )
+
+    try:
+        result = await cluster_graph_data(data)
+    except GraphTooLargeError as exc:
+        raise HTTPException(
+            status_code=413, detail="Grafo grande demais para agrupar pela interface"
+        ) from exc
+    except InvalidGraphDataError as exc:
+        raise HTTPException(status_code=500, detail="Grafo inválido") from exc
+    except ClusterBusyError as exc:
+        raise HTTPException(
+            status_code=429, detail="Outro agrupamento de grafo já está em execução"
+        ) from exc
+    except ClusterTimeoutError as exc:
+        raise HTTPException(
+            status_code=503, detail="O agrupamento excedeu o tempo disponível"
+        ) from exc
+    except Exception as exc:
+        logger.exception("context-graph: falha ao agrupar comunidades")
+        raise HTTPException(
+            status_code=500, detail="Não foi possível agrupar este grafo"
+        ) from exc
+
+    return ClusterResponse(
+        communities=[
+            GraphCommunity(
+                id=community.id,
+                name=community.name,
+                node_ids=community.node_ids,
+            )
+            for community in result.communities
+        ],
+        node_count=result.node_count,
+    )
 
 
 @router.get("/export/{export_format}")

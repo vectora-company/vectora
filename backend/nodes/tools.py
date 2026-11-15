@@ -135,6 +135,7 @@ graph_query = _bridge("graph_query")
 graph_explain = _bridge("graph_explain")
 graph_path = _bridge("graph_path")
 graph_affected = _bridge("graph_affected")
+graph_cluster = _bridge("graph_cluster")
 file_read = _bridge("file_read")
 file_edit = _bridge("file_edit")
 file_write = _bridge("file_write")
@@ -464,6 +465,7 @@ GRAPH_TOOLS: list[ToolSpec] = [
     graph_explain,
     graph_path,
     graph_affected,
+    graph_cluster,
     graph_update,
     graph_cancel_build,
 ]
@@ -700,6 +702,7 @@ for _t in [
     graph_explain,
     graph_path,
     graph_affected,
+    graph_cluster,
     graph_update,
     graph_cancel_build,
     sequential_thinking,

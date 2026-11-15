@@ -3553,6 +3553,18 @@
   },
   {
     "category": "general",
+    "description": "Agrupa os nós do Context Graph do workspace em comunidades estruturais.",
+    "destructive": false,
+    "name": "graph_cluster",
+    "render_hint": "default",
+    "schema": {
+      "properties": {},
+      "title": "graph_clusterArgs",
+      "type": "object"
+    }
+  },
+  {
+    "category": "general",
     "description": "Explica um nó do grafo de contexto mostrando sua vizinhança e conexões.",
     "destructive": false,
     "name": "graph_explain",

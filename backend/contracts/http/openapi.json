@@ -1347,6 +1347,27 @@
         "title": "CloseBody",
         "type": "object"
       },
+      "ClusterResponse": {
+        "properties": {
+          "communities": {
+            "items": {
+              "$ref": "#/components/schemas/GraphCommunity"
+            },
+            "title": "Communities",
+            "type": "array"
+          },
+          "node_count": {
+            "title": "Node Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "communities",
+          "node_count"
+        ],
+        "title": "ClusterResponse",
+        "type": "object"
+      },
       "CodespaceInfo": {
         "properties": {
           "git_status": {
@@ -4256,6 +4277,32 @@
           "lines"
         ],
         "title": "GitignoreUpdateRequest",
+        "type": "object"
+      },
+      "GraphCommunity": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "node_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Node Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "node_ids"
+        ],
+        "title": "GraphCommunity",
         "type": "object"
       },
       "GraphQueryResponse": {
@@ -26209,6 +26256,49 @@
           }
         },
         "summary": "Post Build",
+        "tags": [
+          "context-graph"
+        ]
+      }
+    },
+    "/workspaces/{workspace_id}/context-graph/cluster": {
+      "post": {
+        "description": "Detecta comunidades sem alterar o grafo persistido do workspace.",
+        "operationId": "post_cluster_workspaces__workspace_id__context_graph_cluster_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClusterResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Cluster",
         "tags": [
           "context-graph"
         ]

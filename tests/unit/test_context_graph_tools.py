@@ -240,6 +240,53 @@ async def test_graph_affected_seed_found(tmp_path):
     assert len(result) > 0
 
 
+@pytest.mark.asyncio
+async def test_graph_cluster_returns_workspace_communities(tmp_path):
+    from backend.tools.context_graph import graph_cluster
+
+    ws, _ = _make_ws(tmp_path)
+    with _patch_registry(ws):
+        result = await graph_cluster(_ctx("ws1"))
+
+    assert "nós" in result
+    assert "comunidades" in result
+    assert "AuthService" in result or "login" in result
+
+
+@pytest.mark.asyncio
+async def test_graph_cluster_requires_workspace():
+    from backend.tools.context_graph import graph_cluster
+
+    assert await graph_cluster(_ctx()) == "Erro: nenhum workspace ativo."
+
+
+@pytest.mark.asyncio
+async def test_graph_cluster_handles_missing_graph(tmp_path):
+    from backend.tools.context_graph import graph_cluster
+
+    ws = MagicMock()
+    ws.cwd = str(tmp_path)
+    with _patch_registry(ws):
+        result = await graph_cluster(_ctx("ws1"))
+
+    assert "Grafo não encontrado" in result
+
+
+@pytest.mark.asyncio
+async def test_graph_cluster_reports_size_limit(tmp_path):
+    from backend.tools.context_graph import graph_cluster
+
+    ws, graph_file = _make_ws(tmp_path)
+    graph_file.write_text(
+        json.dumps({"nodes": [{"id": str(i)} for i in range(10_001)], "edges": []}),
+        encoding="utf-8",
+    )
+    with _patch_registry(ws):
+        result = await graph_cluster(_ctx("ws1"))
+
+    assert "excede os limites" in result
+
+
 # ---------------------------------------------------------------------------
 # graph_update — rebuild incremental
 # ---------------------------------------------------------------------------

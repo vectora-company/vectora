@@ -58,6 +58,17 @@ export interface GraphQueryResult {
   edges: RawGraphLink[];
 }
 
+export interface GraphCommunity {
+  id: number;
+  name: string;
+  node_ids: string[];
+}
+
+export interface GraphClusterResult {
+  communities: GraphCommunity[];
+  node_count: number;
+}
+
 export type ContextGraphExportFormat =
   "graphml" | "cypher" | "canvas" | "svg" | "obsidian";
 
@@ -262,6 +273,19 @@ export function useContextGraph(workspaceId: string | null | undefined) {
     [workspaceId],
   );
 
+  const clusterGraph = useCallback(async (): Promise<GraphClusterResult> => {
+    if (!workspaceId) throw new Error("Workspace indisponível");
+    const res = await fetch(`${base(workspaceId)}/cluster`, { method: "POST" });
+    if (!res.ok) {
+      const detail = await res.json().catch(() => null);
+      throw new Error(
+        (detail as { detail?: string } | null)?.detail ??
+          `Falha ao agrupar o grafo (${res.status})`,
+      );
+    }
+    return (await res.json()) as GraphClusterResult;
+  }, [workspaceId]);
+
   /** graph.json completo (nós/arestas/comunidades) — visualização nativa. */
   const fetchGraphData = useCallback(async (): Promise<RawGraphData | null> => {
     if (!workspaceId) return null;
@@ -384,6 +408,7 @@ export function useContextGraph(workspaceId: string | null | undefined) {
     resume,
     cancel,
     queryAffected,
+    clusterGraph,
     fetchStatus,
     getHtmlUrl,
     fetchGraphData,

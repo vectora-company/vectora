@@ -67,6 +67,40 @@ import { useContextGraph } from "@/lib/hooks/use-context-graph";
 // ── testes ───────────────────────────────────────────────────────────────────
 
 describe("useContextGraph", () => {
+  it("solicita agrupamento no workspace e devolve comunidades", async () => {
+    const resultBody = {
+      communities: [{ id: 0, name: "Auth", node_ids: ["n1"] }],
+      node_count: 1,
+    };
+    queueResponse("cluster", mockOk(resultBody));
+    const { result } = renderHook(() => useContextGraph("ws-cluster"));
+
+    await act(async () => {
+      await result.current.clusterGraph();
+    });
+
+    expect(FETCH_MOCK).toHaveBeenCalledWith(
+      expect.stringContaining("/workspaces/ws-cluster/context-graph/cluster"),
+      { method: "POST" },
+    );
+  });
+
+  it("propaga erro de limite do agrupamento", async () => {
+    queueResponse(
+      "cluster",
+      new Response(JSON.stringify({ detail: "grafo acima do limite" }), {
+        status: 413,
+      }),
+    );
+    const { result } = renderHook(() => useContextGraph("ws-cluster"));
+
+    await act(async () => {
+      await expect(result.current.clusterGraph()).rejects.toThrow(
+        "grafo acima do limite",
+      );
+    });
+  });
+
   it("busca status ao montar com workspaceId válido", async () => {
     queueResponse("status", mockOk({ status: "not_built" }));
 

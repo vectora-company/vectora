@@ -77,7 +77,10 @@ afterEach(async () => {
 });
 
 import { ContextGraphViewer } from "../context-graph-viewer";
-import type { GraphQueryResult } from "@/lib/hooks/use-context-graph";
+import type {
+  GraphClusterResult,
+  GraphQueryResult,
+} from "@/lib/hooks/use-context-graph";
 
 const GRAPH_DATA = {
   nodes: [
@@ -99,6 +102,7 @@ const GRAPH_DATA = {
 async function renderViewer(
   overrides: {
     fetchGraphData?: () => Promise<typeof GRAPH_DATA | null>;
+    clusterGraph?: () => Promise<GraphClusterResult>;
     pathBetween?: (
       source: string,
       target: string,
@@ -118,16 +122,34 @@ async function renderViewer(
         edges: [],
       }),
     );
+  const clusterGraph =
+    overrides.clusterGraph ??
+    vi.fn(() =>
+      Promise.resolve({
+        communities: [
+          { id: 3, name: "Payments", node_ids: ["n1", "n3"] },
+          { id: 4, name: "Utilities", node_ids: ["n2"] },
+        ],
+        node_count: 3,
+      }),
+    );
   render(
     <ContextGraphViewer
       fetchGraphData={fetchGraphData}
+      clusterGraph={clusterGraph}
       pathBetween={pathBetween}
       onExplainNode={onExplainNode}
       onAffectedNode={onAffectedNode}
     />,
   );
   await screen.findByTestId("graph-canvas-mock");
-  return { onExplainNode, onAffectedNode, fetchGraphData, pathBetween };
+  return {
+    onExplainNode,
+    onAffectedNode,
+    fetchGraphData,
+    pathBetween,
+    clusterGraph,
+  };
 }
 
 describe("ContextGraphViewer", () => {
@@ -136,6 +158,28 @@ describe("ContextGraphViewer", () => {
     expect(fetchGraphData).toHaveBeenCalledTimes(1);
     expect(canvasNodes().length).toBe(3);
     expect(canvasEdges().length).toBe(2);
+  });
+
+  it("calcula comunidades sob demanda e aplica o resultado só na visualização", async () => {
+    const { clusterGraph } = await renderViewer();
+    fireEvent.click(screen.getByTestId("graph-cluster-button"));
+    await waitFor(() => expect(screen.getByText("Payments")).toBeTruthy());
+    expect(clusterGraph).toHaveBeenCalledOnce();
+    expect(canvasNodes()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ cluster: "3" }),
+        expect.objectContaining({ cluster: "4" }),
+      ]),
+    );
+  });
+
+  it("mostra erro quando o agrupamento falha e preserva os dados visíveis", async () => {
+    await renderViewer({
+      clusterGraph: () => Promise.reject(new Error("falha")),
+    });
+    fireEvent.click(screen.getByTestId("graph-cluster-button"));
+    expect(await screen.findByTestId("graph-cluster-error")).toBeTruthy();
+    expect(canvasNodes()).toHaveLength(3);
   });
 
   it("fetchGraphData retornando null não quebra — canvas some sem grafo", async () => {

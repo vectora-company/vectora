@@ -2068,6 +2068,13 @@
     "methods": [
       "POST"
     ],
+    "name": "post_cluster_workspaces__workspace_id__context_graph_cluster_post",
+    "path": "/workspaces/{workspace_id}/context-graph/cluster"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
     "name": "post_explain_workspaces__workspace_id__context_graph_explain_post",
     "path": "/workspaces/{workspace_id}/context-graph/explain"
   },

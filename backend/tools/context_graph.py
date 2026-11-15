@@ -4,7 +4,8 @@ Cada tool é defensiva (§11): captura exceção e devolve string tipada — nun
 propaga. Registradas em nodes/tools.py (modo Dev).
 
 Toda a lógica de query/explain/path/affected vive em backend/context_graph/query.py
-(fonte única de verdade), compartilhada com api/handlers/context_graph.py.
+(fonte única de verdade), compartilhada com api/handlers/context_graph.py. O
+agrupamento de comunidades é compartilhado por backend/context_graph/cluster_service.py.
 """
 
 from __future__ import annotations
@@ -333,3 +334,64 @@ async def graph_affected(node_query: str, ctx: ToolContext, depth: int = 2) -> s
     except Exception as exc:
         logger.exception("graph: falha em graph_affected")
         return f"Erro ao calcular nós afetados: {exc}"
+
+
+@vtool(extras=ToolExtras())
+async def graph_cluster(ctx: ToolContext) -> str:
+    """Agrupa os nós do Context Graph do workspace em comunidades estruturais.
+
+    O agrupamento é calculado sob demanda, sem alterar o grafo persistido. A
+    resposta resume até 20 comunidades e até 5 membros por comunidade.
+    """
+    from backend.context_graph.cluster_service import (
+        ClusterBusyError,
+        ClusterTimeoutError,
+        GraphTooLargeError,
+        cluster_graph_data,
+    )
+
+    try:
+        if not ctx.workspace_id:
+            return "Erro: nenhum workspace ativo."
+
+        data, err = _load_graph_data(ctx.workspace_id)
+        if err or data is None:
+            return err or "Erro: grafo de contexto não disponível."
+
+        result = await cluster_graph_data(data)
+        if not result.communities:
+            return "O grafo não contém nós para agrupar."
+
+        node_labels = {
+            str(node.get("id")): str(node.get("label") or node.get("id") or "")
+            .replace("\n", " ")
+            .replace("\r", " ")[:120]
+            for node in data.get("nodes", [])
+            if isinstance(node, dict) and node.get("id")
+        }
+        lines = [
+            f"O grafo tem {result.node_count} nós em {len(result.communities)} comunidades:"
+        ]
+        for community in result.communities[:20]:
+            labels = [
+                node_labels.get(node_id, node_id) for node_id in community.node_ids[:5]
+            ]
+            sample = ", ".join(f'"{label}"' for label in labels)
+            lines.append(
+                f"- {community.name[:120]} ({len(community.node_ids)} nós): {sample}"
+            )
+        if len(result.communities) > 20:
+            lines.append(
+                f"Mais {len(result.communities) - 20} comunidades não exibidas."
+            )
+        return "\n".join(lines)
+
+    except GraphTooLargeError:
+        return "Erro: o grafo excede os limites para agrupamento (10.000 nós e 40.000 arestas)."
+    except ClusterBusyError:
+        return "Erro: outro agrupamento do Context Graph já está em execução."
+    except ClusterTimeoutError:
+        return "Erro: o agrupamento excedeu o tempo disponível."
+    except Exception:
+        logger.exception("graph: falha ao agrupar comunidades")
+        return "Erro ao agrupar o grafo de contexto."

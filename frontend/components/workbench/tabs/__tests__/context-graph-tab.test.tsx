@@ -42,6 +42,9 @@ const mockUpdate = vi.fn();
 const mockResume = vi.fn();
 const mockCancel = vi.fn(() => Promise.resolve());
 const mockQueryAffected = vi.fn(() => Promise.resolve(""));
+const mockClusterGraph = vi.fn(() =>
+  Promise.resolve({ communities: [], node_count: 0 }),
+);
 const mockGetHtmlUrl = vi.fn(() => "/workspaces/ws1/context-graph/html");
 const mockFetchStatus = vi.fn();
 const mockFetchGraphData = vi.fn(() =>
@@ -93,6 +96,7 @@ function setup(
     resume: mockResume,
     cancel: mockCancel,
     queryAffected: mockQueryAffected,
+    clusterGraph: mockClusterGraph,
     getHtmlUrl: mockGetHtmlUrl,
     fetchStatus: mockFetchStatus,
     fetchGraphData: mockFetchGraphData,

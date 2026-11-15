@@ -52,6 +52,7 @@ export function ContextGraphTab({
     resume,
     cancel,
     queryAffected,
+    clusterGraph,
     fetchGraphData,
     pathBetween,
     exportGraph,
@@ -530,7 +531,9 @@ export function ContextGraphTab({
             </div>
 
             <ContextGraphViewer
+              key={workspaceId ?? "no-workspace"}
               fetchGraphData={fetchGraphData}
+              clusterGraph={clusterGraph}
               pathBetween={pathBetween}
               onExplainNode={(label) =>
                 handleQuestion(`Explique o nó "${label}" no grafo de contexto`)

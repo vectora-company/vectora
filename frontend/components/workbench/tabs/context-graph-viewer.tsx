@@ -7,6 +7,8 @@ import type { GraphEdge, GraphNode } from "reagraph";
 import { Loader2, Search, Waypoints, X } from "lucide-react";
 
 import type {
+  GraphCommunity,
+  GraphClusterResult,
   GraphQueryResult,
   RawGraphData,
   RawGraphLink,
@@ -16,6 +18,7 @@ import { m } from "@/lib/paraglide/messages";
 
 interface ContextGraphViewerProps {
   fetchGraphData: () => Promise<RawGraphData | null>;
+  clusterGraph: () => Promise<GraphClusterResult>;
   pathBetween: (
     source: string,
     target: string,
@@ -54,6 +57,7 @@ interface CommunityInfo {
 
 export function ContextGraphViewer({
   fetchGraphData,
+  clusterGraph,
   pathBetween,
   onExplainNode,
   onAffectedNode,
@@ -70,6 +74,8 @@ export function ContextGraphViewer({
   const [pathSource, setPathSource] = useState<RawGraphNode | null>(null);
   const [pathResult, setPathResult] = useState<GraphQueryResult | null>(null);
   const [pathLoading, setPathLoading] = useState(false);
+  const [clusterLoading, setClusterLoading] = useState(false);
+  const [clusterError, setClusterError] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -176,6 +182,43 @@ export function ContextGraphViewer({
     setPathResult(null);
   }
 
+  async function handleCluster() {
+    setClusterLoading(true);
+    setClusterError(false);
+    try {
+      const result = await clusterGraph();
+      const assignments = new Map<
+        string,
+        Pick<GraphCommunity, "id" | "name">
+      >();
+      for (const community of result.communities) {
+        for (const nodeId of community.node_ids) {
+          assignments.set(nodeId, { id: community.id, name: community.name });
+        }
+      }
+      setData((current) =>
+        current
+          ? {
+              ...current,
+              nodes: current.nodes.map((node) => {
+                const assignment = assignments.get(node.id);
+                if (!assignment) return node;
+                return {
+                  ...node,
+                  community: assignment.id,
+                  community_name: assignment.name,
+                };
+              }),
+            }
+          : current,
+      );
+    } catch {
+      setClusterError(true);
+    } finally {
+      setClusterLoading(false);
+    }
+  }
+
   function clearPath() {
     setPathSource(null);
     setPathResult(null);
@@ -253,6 +296,17 @@ export function ContextGraphViewer({
             entre eles (POST /path, já existia no backend sem UI). */}
         <div className="absolute top-2 right-2 z-10 flex items-center gap-1.5">
           <button
+            onClick={() => void handleCluster()}
+            disabled={clusterLoading || rawNodes.length === 0}
+            data-testid="graph-cluster-button"
+            className="flex items-center gap-1 text-xs px-2 py-1 rounded border bg-card/90 text-muted-foreground border-border/60 hover:text-foreground disabled:opacity-50"
+          >
+            <Waypoints className="h-3 w-3" />
+            {clusterLoading
+              ? m.graph_cluster_loading()
+              : m.graph_cluster_button()}
+          </button>
+          <button
             onClick={togglePathMode}
             data-testid="graph-path-toggle"
             aria-pressed={pathMode}
@@ -266,6 +320,16 @@ export function ContextGraphViewer({
             {m.graph_path_mode_button()}
           </button>
         </div>
+
+        {clusterError && (
+          <p
+            role="alert"
+            data-testid="graph-cluster-error"
+            className="absolute top-11 right-2 z-10 max-w-xs bg-card/90 border border-destructive/50 rounded px-2 py-1.5 text-xs text-destructive"
+          >
+            {m.graph_cluster_error()}
+          </p>
+        )}
 
         {pathMode && (
           <div
