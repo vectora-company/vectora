@@ -666,6 +666,15 @@ describe("SessionPage — laterais compactas", () => {
       "sm:w-[min(32rem,85%)]",
       "z-40",
     );
+    fireEvent.click(screen.getByTestId("compact-workbench-backdrop"));
+    await waitFor(() =>
+      expect(screen.queryByTestId("compact-workbench-overlay")).toBeNull(),
+    );
+
+    fireEvent.click(screen.getByTestId("compact-toggle-workbench"));
+    expect(
+      await screen.findByTestId("compact-workbench-overlay"),
+    ).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
 
     fireEvent.click(screen.getByTestId("compact-open-sessions"));

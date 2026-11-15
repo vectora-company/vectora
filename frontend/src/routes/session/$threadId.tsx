@@ -1100,6 +1100,10 @@ function SessionPage() {
               inSheet: true,
               isCollapsed: false,
               onToggle: () => setIsMobileSidebarOpen(false),
+              onNewChat: () => {
+                setIsMobileSidebarOpen(false);
+                handleNewChat();
+              },
             })}
           </SheetContent>
         </Sheet>
@@ -1347,12 +1351,21 @@ function SessionPage() {
                       {renderChatPanel(false)}
                     </div>
                     {isCompactSession && assistantWorkbenchVisible && (
-                      <div
-                        data-testid="compact-workbench-overlay"
-                        className={`absolute inset-y-0 z-40 flex min-w-0 min-h-0 w-full overflow-hidden bg-background shadow-xl sm:w-[min(32rem,85%)] ${assistantWorkbenchSide === "left" ? "left-0 border-r" : "right-0 border-l"}`}
-                      >
-                        {assistantWorkbenchPanel}
-                      </div>
+                      <>
+                        <button
+                          type="button"
+                          data-testid="compact-workbench-backdrop"
+                          aria-label={m.workbench_close()}
+                          onClick={() => setWorkbenchOpen(threadId, false)}
+                          className="absolute inset-0 z-30 cursor-default bg-background/45"
+                        />
+                        <div
+                          data-testid="compact-workbench-overlay"
+                          className={`absolute inset-y-0 z-40 flex min-w-0 min-h-0 w-full overflow-hidden bg-background shadow-xl sm:w-[min(32rem,85%)] ${assistantWorkbenchSide === "left" ? "left-0 border-r" : "right-0 border-l"}`}
+                        >
+                          {assistantWorkbenchPanel}
+                        </div>
+                      </>
                     )}
                   </div>
                 }
