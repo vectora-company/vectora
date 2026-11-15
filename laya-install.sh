@@ -166,7 +166,7 @@ else
   mkdir -p "$LLAMA_ROOT/versions" "$LLAMA_MODELS"
   ARCH=$(uname -m)
   case "$ARCH" in x86_64|amd64) ASSET_SUFFIX=x64 ;; aarch64|arm64) ASSET_SUFFIX=arm64 ;; *) printf 'Arquitetura sem binário oficial CPU: %s.\n' "$ARCH" >&2; exit 1 ;; esac
-  RELEASE_JSON=$(curl --fail --location --silent --show-error --retry 5 --retry-all-errors --max-time 180 -H 'Accept: application/vnd.github+json' 'https://api.github.com/repos/ggml-org/llama.cpp/releases?per_page=10')
+  RELEASE_JSON=$(curl --fail --location --silent --show-error --retry 5 --retry-all-errors --max-time 90 -H 'Accept: application/vnd.github+json' 'https://api.github.com/repos/ggml-org/llama.cpp/releases?per_page=1')
   read -r RELEASE_TAG ASSET_NAME ASSET_URL ASSET_SHA < <(python3 -c '
 import json,sys
 r=json.load(sys.stdin); suffix=sys.argv[1]
