@@ -238,13 +238,72 @@ else: raise SystemExit("Laya-Q8_0.gguf ausente no repositório oficial")
   [[ "$MODEL_SIZE" =~ ^[0-9]+$ && "$MODEL_SHA" =~ ^[a-f0-9]{64}$ ]] || { printf 'Metadados inesperados para o GGUF oficial.\n' >&2; exit 1; }
   MODEL_FILE="$LLAMA_MODELS/Laya-Q8_0.gguf"
   if [[ ! -f "$MODEL_FILE" ]] || [[ $(stat -c %s "$MODEL_FILE") != "$MODEL_SIZE" ]] || ! printf '%s  %s\n' "$MODEL_SHA" "$MODEL_FILE" | sha256sum --check --status; then
-    PART="$MODEL_FILE.part"
-    curl --fail --location --silent --show-error --retry 10 --retry-all-errors --connect-timeout 20 --max-time 7200 -C - -o "$PART" "https://huggingface.co/ggml-org/Laya-GGUF/resolve/$MODEL_REV/Laya-Q8_0.gguf"
-    if [[ $(stat -c %s "$PART") != "$MODEL_SIZE" ]] || ! printf '%s  %s\n' "$MODEL_SHA" "$PART" | sha256sum --check --status; then
-      printf 'Tamanho ou SHA-256 do GGUF não confere.\n' >&2
-      exit 1
-    fi
-    mv -f -- "$PART" "$MODEL_FILE"
+    python3 - "$MODEL_FILE" "$MODEL_REV" "$MODEL_SIZE" "$MODEL_SHA" <<'PY'
+import concurrent.futures
+import hashlib
+import pathlib
+import shutil
+import sys
+import time
+import urllib.error
+import urllib.request
+
+model = pathlib.Path(sys.argv[1])
+revision, size, expected_sha = sys.argv[2], int(sys.argv[3]), sys.argv[4]
+source = f"https://huggingface.co/ggml-org/Laya-GGUF/resolve/{revision}/Laya-Q8_0.gguf"
+parts = model.parent / f".{model.name}.{revision}.parts"
+partial = model.with_suffix(model.suffix + ".part")
+chunk_size = 8 * 1024 * 1024
+workers = 8
+parts.mkdir(parents=True, exist_ok=True)
+partial.unlink(missing_ok=True)
+
+def fetch(index: int) -> pathlib.Path:
+    start = index * chunk_size
+    end = min(start + chunk_size, size) - 1
+    expected_length = end - start + 1
+    target = parts / f"{index:04d}.part"
+    if target.exists() and target.stat().st_size == expected_length:
+        return target
+    for attempt in range(6):
+        temporary = target.with_suffix(".tmp")
+        try:
+            request = urllib.request.Request(
+                source,
+                headers={"Range": f"bytes={start}-{end}", "User-Agent": "Vectora-Laya-Installer"},
+            )
+            with urllib.request.urlopen(request, timeout=180) as response:
+                content_range = response.headers.get("Content-Range", "")
+                payload = response.read()
+                if response.status != 206 or content_range != f"bytes {start}-{end}/{size}" or len(payload) != expected_length:
+                    raise RuntimeError(f"resposta de intervalo inválida para a parte {index}")
+            temporary.write_bytes(payload)
+            temporary.replace(target)
+            return target
+        except (OSError, urllib.error.URLError, RuntimeError):
+            temporary.unlink(missing_ok=True)
+            if attempt == 5:
+                raise
+            time.sleep(min(2 ** attempt, 30))
+    raise RuntimeError(f"não foi possível baixar a parte {index}")
+
+count = (size + chunk_size - 1) // chunk_size
+with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
+    list(executor.map(fetch, range(count)))
+
+digest = hashlib.sha256()
+with partial.open("wb") as output:
+    for index in range(count):
+        with (parts / f"{index:04d}.part").open("rb") as piece:
+            while block := piece.read(1024 * 1024):
+                output.write(block)
+                digest.update(block)
+if partial.stat().st_size != size or digest.hexdigest() != expected_sha:
+    raise SystemExit("tamanho ou SHA-256 do GGUF não confere; partes mantidas para retomar")
+partial.replace(model)
+shutil.rmtree(parts)
+print(f"GGUF baixado e verificado: {size} bytes; SHA-256 {expected_sha}")
+PY
   fi
   python3 - "$LLAMA_MODELS/Laya-Q8_0.gguf.source.json" "$MODEL_REV" "$MODEL_SHA" <<'PY'
 import json,pathlib,sys
