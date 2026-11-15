@@ -139,6 +139,24 @@ class CodespaceTransport:
         cwd: str,
         timeout: float = 30.0,  # noqa: ASYNC109
     ) -> RunResult:
+        try:
+            started = await ensure_started(self._name)
+        except FileNotFoundError:
+            return RunResult(
+                exit_code=127,
+                stdout="",
+                stderr="GitHub CLI (gh) não encontrado no host do Vectora.",
+            )
+        if not started:
+            return RunResult(
+                exit_code=1,
+                stdout="",
+                stderr=(
+                    f"Não foi possível iniciar o Codespace {self._name!r}; "
+                    "confira a autenticação e o estado no GitHub CLI."
+                ),
+            )
+
         joined = " ".join(shlex.quote(part) for part in cmd)
         effective_cwd = self._remote_path or cwd
         remote_cmd = (
