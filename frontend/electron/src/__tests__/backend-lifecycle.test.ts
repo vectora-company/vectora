@@ -13,6 +13,7 @@ import {
   isInstalledTestsMode,
   natsBinaryPath,
   resolveExternalBackendConnection,
+  backendTransportOptions,
 } from "../backend-lifecycle.js";
 
 // .cjs (não .js): frontend/package.json declara "type": "module" — sem a
@@ -158,6 +159,47 @@ describe("resolveExternalBackendConnection", () => {
         VECTORA_PORT: "not-a-number",
       })?.port,
     ).toBeNull();
+  });
+});
+
+describe("backendTransportOptions", () => {
+  it("uses loopback TCP for an externally managed backend on Linux and macOS", () => {
+    const external = { port: 8080, pipePath: null };
+    expect(
+      backendTransportOptions("linux", "/home/user/.vectora", external),
+    ).toEqual({
+      host: "127.0.0.1",
+      port: 8080,
+    });
+    expect(
+      backendTransportOptions("darwin", "/Users/user/.vectora", external),
+    ).toEqual({
+      host: "127.0.0.1",
+      port: 8080,
+    });
+  });
+
+  it("keeps the Unix socket for an Electron-owned Linux/macOS backend", () => {
+    expect(
+      backendTransportOptions("linux", "/home/user/.vectora", null),
+    ).toEqual({
+      socketPath: path.join("/home/user/.vectora", "vectora.sock"),
+    });
+  });
+
+  it("uses Windows named pipe when provided and TCP otherwise", () => {
+    expect(
+      backendTransportOptions("win32", "C:\\Vectora", {
+        port: 8080,
+        pipePath: "\\\\.\\pipe\\vectora-1",
+      }),
+    ).toEqual({ socketPath: "\\\\.\\pipe\\vectora-1" });
+    expect(
+      backendTransportOptions("win32", "C:\\Vectora", {
+        port: 8080,
+        pipePath: null,
+      }),
+    ).toEqual({ host: "127.0.0.1", port: 8080 });
   });
 });
 

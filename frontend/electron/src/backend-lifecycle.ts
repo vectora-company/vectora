@@ -76,6 +76,22 @@ export interface ExternalBackendConnection {
   pipePath: string | null;
 }
 
+/** Selects IPC for an Electron-owned backend and TCP for a web-owned backend. */
+export function backendTransportOptions(
+  platform: NodeJS.Platform,
+  runtimeHome: string,
+  external: ExternalBackendConnection | null,
+): http.RequestOptions {
+  if (platform === "win32") {
+    if (external?.pipePath) return { socketPath: external.pipePath };
+    return { host: "127.0.0.1", port: external?.port ?? undefined };
+  }
+  if (external) {
+    return { host: "127.0.0.1", port: external.port ?? undefined };
+  }
+  return { socketPath: path.join(runtimeHome, "vectora.sock") };
+}
+
 export function resolveExternalBackendConnection(env: {
   VECTORA_EXTERNAL_BACKEND?: string;
   VECTORA_PORT?: string;
