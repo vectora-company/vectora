@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import os
 import shlex
 import socket
 import ssl
@@ -38,6 +39,36 @@ from tests.unit.test_sandbox_hardening import _bwrap_works, _exec
 real_bwrap = pytest.mark.skipif(
     not _bwrap_works(), reason="bwrap sem user namespaces neste ambiente"
 )
+
+
+def _process_memory_contains(pid: int, needle: bytes) -> bool:
+    """Procura um segredo no espaço legível do processo filho do teste."""
+    maps = Path(f"/proc/{pid}/maps").read_text(encoding="ascii")
+    memory_fd = os.open(f"/proc/{pid}/mem", os.O_RDONLY)
+    try:
+        for line in maps.splitlines():
+            address_range, permissions, *_ = line.split(maxsplit=2)
+            if "r" not in permissions:
+                continue
+            start_text, end_text = address_range.split("-", maxsplit=1)
+            offset = int(start_text, 16)
+            end = int(end_text, 16)
+            overlap = b""
+            while offset < end:
+                try:
+                    chunk = os.pread(memory_fd, min(1024 * 1024, end - offset), offset)
+                except OSError:
+                    break
+                if not chunk:
+                    break
+                searchable = overlap + chunk
+                if needle in searchable:
+                    return True
+                overlap = searchable[-(len(needle) - 1) :]
+                offset += len(chunk)
+    finally:
+        os.close(memory_fd)
+    return False
 
 
 @pytest.fixture(autouse=True)
@@ -570,6 +601,12 @@ async def test_jail_real_usa_placeholder_e_proxy_injeta_segredo_no_destino(
         result = await _exec(worker, command)
         assert result["exit_code"] == 0, result
         received = await asyncio.wait_for(forwarded, 10)
+        assert not _process_memory_contains(worker.proc.pid, b"server-only-secret")
+        assert all(
+            b"server-only-secret" not in path.read_bytes()
+            for path in tmp_path.rglob("*")
+            if path.is_file() and not path.is_symlink()
+        )
     finally:
         await manager.close("ws-credential")
         server.close()
