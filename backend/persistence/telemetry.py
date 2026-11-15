@@ -221,14 +221,22 @@ class VectoraTelemetry:
             fields["error_message"] = _truncate(str(error))
         self._emit(logging.INFO if success else logging.ERROR, "tool_call", **fields)
 
-    def record_error(self, source: str, exc: BaseException, **extra: Any) -> None:
+    def record_error(
+        self,
+        source: str,
+        exc: BaseException,
+        *,
+        include_message: bool = True,
+        **extra: Any,
+    ) -> None:
         """Grava um erro não tratado. Síncrono — chamável de qualquer bloco except."""
         fields: dict[str, Any] = {
             "source": source,
             "error_type": type(exc).__name__,
-            "error_message": _truncate(str(exc)),
             **extra,
         }
+        if include_message:
+            fields["error_message"] = _truncate(str(exc))
         self._emit(logging.ERROR, "unhandled_error", **fields)
 
     def record_media_quota(self, event: str, **fields: Any) -> None:
