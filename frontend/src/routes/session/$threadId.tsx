@@ -1349,7 +1349,7 @@ function SessionPage() {
                     {isCompactSession && assistantWorkbenchVisible && (
                       <div
                         data-testid="compact-workbench-overlay"
-                        className="absolute inset-0 z-40 flex min-w-0 min-h-0 overflow-hidden bg-background"
+                        className={`absolute inset-y-0 z-40 flex min-w-0 min-h-0 w-full overflow-hidden bg-background shadow-xl sm:w-[min(32rem,85%)] ${assistantWorkbenchSide === "left" ? "left-0 border-r" : "right-0 border-l"}`}
                       >
                         {assistantWorkbenchPanel}
                       </div>

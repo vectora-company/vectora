@@ -661,6 +661,11 @@ describe("SessionPage — laterais compactas", () => {
     expect(
       await screen.findByTestId("compact-workbench-overlay"),
     ).toBeInTheDocument();
+    expect(screen.getByTestId("compact-workbench-overlay")).toHaveClass(
+      "right-0",
+      "sm:w-[min(32rem,85%)]",
+      "z-40",
+    );
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
 
     fireEvent.click(screen.getByTestId("compact-open-sessions"));
