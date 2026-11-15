@@ -72,4 +72,35 @@ describe("DAGPlanCard", () => {
     fireEvent.click(screen.getByText("workbench_dag_cancel"));
     expect(onCancel).toHaveBeenCalledOnce();
   });
+
+  it("shows persisted failure and the blocked-stage reason", () => {
+    render(
+      <DAGPlanCard
+        plan={{
+          ...plan,
+          status: "approved",
+          execution: {
+            execution_id: "exec-1",
+            status: "failed",
+            stages: [
+              {
+                ...plan.stages[0],
+                status: "failed",
+                error: "stage blocked because a dependency failed",
+              },
+            ],
+          },
+        }}
+        busy={false}
+        error={null}
+        onApprove={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("workbench_dag_failed")).toBeTruthy();
+    expect(
+      screen.getByText("stage blocked because a dependency failed"),
+    ).toBeTruthy();
+  });
 });
