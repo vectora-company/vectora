@@ -9,9 +9,7 @@ from starlette.requests import Request
 
 
 def _request(user: object | None) -> Request:
-    request = Request(
-        {"type": "http", "method": "GET", "path": "/auth/secrets/keys"}
-    )
+    request = Request({"type": "http", "method": "GET", "path": "/auth/secrets/keys"})
     request.state.user = user
     return request
 
