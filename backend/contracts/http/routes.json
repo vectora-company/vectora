@@ -2131,6 +2131,13 @@
   },
   {
     "methods": [
+      "POST"
+    ],
+    "name": "post_resolve_symbol_workspaces__workspace_id__context_graph_resolve_symbol_post",
+    "path": "/workspaces/{workspace_id}/context-graph/resolve-symbol"
+  },
+  {
+    "methods": [
       "GET"
     ],
     "name": "get_status_workspaces__workspace_id__context_graph_status_get",

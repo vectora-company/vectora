@@ -101,6 +101,32 @@ describe("useContextGraph", () => {
     });
   });
 
+  it("resolve símbolos no contexto do workspace", async () => {
+    queueResponse(
+      "resolve-symbol",
+      mockOk({
+        status: "ambiguous",
+        query: "run",
+        candidates: [],
+        total: 2,
+        truncated: false,
+      }),
+    );
+    const { result } = renderHook(() => useContextGraph("ws-symbol"));
+    await act(async () => {
+      await result.current.resolveSymbol("run");
+    });
+    expect(FETCH_MOCK).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/workspaces/ws-symbol/context-graph/resolve-symbol",
+      ),
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ symbol: "run" }),
+      }),
+    );
+  });
+
   it("busca status ao montar com workspaceId válido", async () => {
     queueResponse("status", mockOk({ status: "not_built" }));
 

@@ -69,6 +69,22 @@ export interface GraphClusterResult {
   node_count: number;
 }
 
+export interface GraphSymbolCandidate {
+  id: string;
+  label: string;
+  source_file: string;
+  source_location: string;
+  community: number | null;
+}
+
+export interface GraphSymbolResolution {
+  status: "resolved" | "ambiguous" | "not_found";
+  query: string;
+  candidates: GraphSymbolCandidate[];
+  total: number;
+  truncated: boolean;
+}
+
 export type ContextGraphExportFormat =
   "graphml" | "cypher" | "canvas" | "svg" | "obsidian";
 
@@ -286,6 +302,26 @@ export function useContextGraph(workspaceId: string | null | undefined) {
     return (await res.json()) as GraphClusterResult;
   }, [workspaceId]);
 
+  const resolveSymbol = useCallback(
+    async (symbol: string): Promise<GraphSymbolResolution> => {
+      if (!workspaceId) throw new Error("Workspace indisponível");
+      const res = await fetch(`${base(workspaceId)}/resolve-symbol`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ symbol }),
+      });
+      if (!res.ok) {
+        const detail = await res.json().catch(() => null);
+        throw new Error(
+          (detail as { detail?: string } | null)?.detail ??
+            `Falha ao buscar símbolo (${res.status})`,
+        );
+      }
+      return (await res.json()) as GraphSymbolResolution;
+    },
+    [workspaceId],
+  );
+
   /** graph.json completo (nós/arestas/comunidades) — visualização nativa. */
   const fetchGraphData = useCallback(async (): Promise<RawGraphData | null> => {
     if (!workspaceId) return null;
@@ -409,6 +445,7 @@ export function useContextGraph(workspaceId: string | null | undefined) {
     cancel,
     queryAffected,
     clusterGraph,
+    resolveSymbol,
     fetchStatus,
     getHtmlUrl,
     fetchGraphData,

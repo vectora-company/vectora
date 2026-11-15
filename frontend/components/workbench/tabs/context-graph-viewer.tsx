@@ -10,6 +10,7 @@ import type {
   GraphCommunity,
   GraphClusterResult,
   GraphQueryResult,
+  GraphSymbolResolution,
   RawGraphData,
   RawGraphLink,
   RawGraphNode,
@@ -19,6 +20,7 @@ import { m } from "@/lib/paraglide/messages";
 interface ContextGraphViewerProps {
   fetchGraphData: () => Promise<RawGraphData | null>;
   clusterGraph: () => Promise<GraphClusterResult>;
+  resolveSymbol: (symbol: string) => Promise<GraphSymbolResolution>;
   pathBetween: (
     source: string,
     target: string,
@@ -58,6 +60,7 @@ interface CommunityInfo {
 export function ContextGraphViewer({
   fetchGraphData,
   clusterGraph,
+  resolveSymbol,
   pathBetween,
   onExplainNode,
   onAffectedNode,
@@ -76,6 +79,10 @@ export function ContextGraphViewer({
   const [pathLoading, setPathLoading] = useState(false);
   const [clusterLoading, setClusterLoading] = useState(false);
   const [clusterError, setClusterError] = useState(false);
+  const [symbolResolution, setSymbolResolution] =
+    useState<GraphSymbolResolution | null>(null);
+  const [symbolLoading, setSymbolLoading] = useState(false);
+  const [symbolError, setSymbolError] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -219,6 +226,34 @@ export function ContextGraphViewer({
     }
   }
 
+  async function handleResolveSymbol() {
+    if (!search.trim()) return;
+    setSymbolLoading(true);
+    setSymbolError(false);
+    try {
+      setSymbolResolution(await resolveSymbol(search));
+    } catch {
+      setSymbolResolution(null);
+      setSymbolError(true);
+    } finally {
+      setSymbolLoading(false);
+    }
+  }
+
+  function selectResolvedSymbol(id: string) {
+    const node = rawNodes.find((candidate) => candidate.id === id);
+    if (!node) return;
+    if (node.community != null) {
+      setHiddenCommunities((current) => {
+        const next = new Set(current);
+        next.delete(node.community!);
+        return next;
+      });
+    }
+    setSelected(node);
+    setSymbolResolution(null);
+  }
+
   function clearPath() {
     setPathSource(null);
     setPathResult(null);
@@ -276,11 +311,30 @@ export function ContextGraphViewer({
           <Search className="h-3 w-3 text-muted-foreground shrink-0" />
           <input
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setSymbolResolution(null);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void handleResolveSymbol();
+            }}
             placeholder={m.graph_search_placeholder()}
             data-testid="graph-search-input"
             className="bg-transparent text-xs outline-none w-36 placeholder:text-muted-foreground/60"
           />
+          <button
+            type="button"
+            onClick={() => void handleResolveSymbol()}
+            disabled={symbolLoading || !search.trim()}
+            aria-label={m.graph_symbol_resolve()}
+            data-testid="graph-symbol-resolve"
+          >
+            {symbolLoading ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <Search className="h-3 w-3" />
+            )}
+          </button>
           {search && (
             <button
               onClick={() => setSearch("")}
@@ -291,6 +345,45 @@ export function ContextGraphViewer({
             </button>
           )}
         </div>
+        {(symbolResolution || symbolError) && (
+          <div
+            className="absolute top-10 left-2 z-20 max-w-sm max-h-64 overflow-auto rounded border bg-card p-2 text-xs shadow"
+            data-testid="graph-symbol-results"
+          >
+            {symbolError ? (
+              <p role="alert">{m.graph_symbol_error()}</p>
+            ) : symbolResolution?.status === "not_found" ? (
+              <p>{m.graph_symbol_not_found()}</p>
+            ) : (
+              <>
+                <p className="mb-1">
+                  {symbolResolution?.status === "ambiguous"
+                    ? m.graph_symbol_ambiguous({
+                        count: symbolResolution.total,
+                      })
+                    : m.graph_symbol_resolved()}
+                </p>
+                {symbolResolution?.candidates.map((candidate) => (
+                  <button
+                    key={candidate.id}
+                    type="button"
+                    onClick={() => selectResolvedSymbol(candidate.id)}
+                    className="block w-full rounded px-2 py-1 text-left hover:bg-muted"
+                    data-testid="graph-symbol-candidate"
+                  >
+                    <span className="font-medium">{candidate.label}</span>
+                    <span className="block text-muted-foreground">
+                      {candidate.source_file}
+                      {candidate.source_location
+                        ? `:${candidate.source_location}`
+                        : ""}
+                    </span>
+                  </button>
+                ))}
+              </>
+            )}
+          </div>
+        )}
 
         {/* Modo caminho — clique em dois nós pra destacar o menor caminho
             entre eles (POST /path, já existia no backend sem UI). */}

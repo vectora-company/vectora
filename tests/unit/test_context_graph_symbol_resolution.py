@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 
 def _code_node(nid: str, label: str, source_file: str = "mod.py") -> dict:
     return {"id": nid, "label": label, "file_type": "code", "source_file": source_file}
@@ -477,3 +479,49 @@ class TestResolvePythonImportGuidedCalls:
             per_file, [consumer], nodes, existing
         )
         assert len(edges) == 0
+
+
+class TestResolveGraphSymbol:
+    def test_exact_match_is_normalized_and_code_only(self):
+        from backend.context_graph.symbol_resolution import resolve_graph_symbol
+
+        result = resolve_graph_symbol(
+            [
+                {
+                    "id": "fn",
+                    "label": "Authenticate()",
+                    "file_type": "code",
+                    "source_file": "auth.py",
+                },
+                {"id": "doc", "label": "authenticate", "file_type": "document"},
+            ],
+            " authenticate() ",
+        )
+        assert result["status"] == "resolved"
+        assert [candidate["id"] for candidate in result["candidates"]] == ["fn"]
+
+    def test_ambiguity_is_deterministic_and_bounded(self):
+        from backend.context_graph.symbol_resolution import resolve_graph_symbol
+
+        nodes = [
+            {
+                "id": f"{i:02}",
+                "label": "run",
+                "file_type": "code",
+                "source_file": f"{i:02}.py",
+            }
+            for i in range(25)
+        ]
+        result = resolve_graph_symbol(nodes, "run", limit=3)
+        assert result["status"] == "ambiguous"
+        assert result["total"] == 25
+        assert result["truncated"] is True
+        assert [item["id"] for item in result["candidates"]] == ["00", "01", "02"]
+
+    def test_rejects_empty_and_overlong_queries(self):
+        from backend.context_graph.symbol_resolution import resolve_graph_symbol
+
+        with pytest.raises(ValueError):
+            resolve_graph_symbol([], "  ")
+        with pytest.raises(ValueError):
+            resolve_graph_symbol([], "x" * 201)

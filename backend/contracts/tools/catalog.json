@@ -3640,6 +3640,26 @@
   },
   {
     "category": "general",
+    "description": "Busca identificadores exatos e informa ambiguidades sem adivinhar.",
+    "destructive": false,
+    "name": "graph_resolve_symbol",
+    "render_hint": "default",
+    "schema": {
+      "properties": {
+        "symbol": {
+          "title": "Symbol",
+          "type": "string"
+        }
+      },
+      "required": [
+        "symbol"
+      ],
+      "title": "graph_resolve_symbolArgs",
+      "type": "object"
+    }
+  },
+  {
+    "category": "general",
     "description": "Atualiza o grafo de contexto incrementalmente (só arquivos novos/modificados).",
     "destructive": false,
     "name": "graph_update",

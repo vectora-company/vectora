@@ -9377,6 +9377,99 @@
         "title": "StructuredQuestionResponse",
         "type": "object"
       },
+      "SymbolCandidate": {
+        "properties": {
+          "community": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Community"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "source_file": {
+            "title": "Source File",
+            "type": "string"
+          },
+          "source_location": {
+            "title": "Source Location",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "source_file",
+          "source_location"
+        ],
+        "title": "SymbolCandidate",
+        "type": "object"
+      },
+      "SymbolResolutionRequest": {
+        "properties": {
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol"
+        ],
+        "title": "SymbolResolutionRequest",
+        "type": "object"
+      },
+      "SymbolResolutionResponse": {
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/SymbolCandidate"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "resolved",
+              "ambiguous",
+              "not_found"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "status",
+          "query",
+          "candidates",
+          "total",
+          "truncated"
+        ],
+        "title": "SymbolResolutionResponse",
+        "type": "object"
+      },
       "SystemOneStatusResponse": {
         "properties": {
           "allow_remote_fallback": {
@@ -26784,6 +26877,59 @@
           }
         },
         "summary": "Get Report",
+        "tags": [
+          "context-graph"
+        ]
+      }
+    },
+    "/workspaces/{workspace_id}/context-graph/resolve-symbol": {
+      "post": {
+        "description": "Resolve an exact code symbol, returning ambiguity instead of guessing.",
+        "operationId": "post_resolve_symbol_workspaces__workspace_id__context_graph_resolve_symbol_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SymbolResolutionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SymbolResolutionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Resolve Symbol",
         "tags": [
           "context-graph"
         ]
