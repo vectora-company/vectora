@@ -170,10 +170,12 @@ else
       mkdir -p "$BUILD_SOURCE/source"
       ARCHIVE_URL="https://codeload.github.com/ggml-org/llama.cpp/tar.gz/$LLAMA_COMMIT"
       CURL_ARGS=(--fail --location --silent --show-error --retry 10 --retry-all-errors --connect-timeout 20 --max-time 1200)
-      if [[ -f "$ARCHIVE" ]]; then
-        curl "${CURL_ARGS[@]}" --continue-at - -o "$ARCHIVE" "$ARCHIVE_URL"
-      else
-        curl "${CURL_ARGS[@]}" -o "$ARCHIVE" "$ARCHIVE_URL"
+      if ! tar -tzf "$ARCHIVE" >/dev/null 2>&1; then
+        if [[ -f "$ARCHIVE" ]]; then
+          curl "${CURL_ARGS[@]}" --continue-at - -o "$ARCHIVE" "$ARCHIVE_URL"
+        else
+          curl "${CURL_ARGS[@]}" -o "$ARCHIVE" "$ARCHIVE_URL"
+        fi
       fi
       if ! tar -tzf "$ARCHIVE" >/dev/null 2>&1; then
         rm -f -- "$ARCHIVE"
