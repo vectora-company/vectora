@@ -8,9 +8,12 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
+from types import SimpleNamespace
+from typing import Any
 
 import aiosqlite
 import pytest
+from fastapi import Request
 
 from backend.engine.conversation_loop import (
     LoopConfig,
@@ -2729,3 +2732,130 @@ async def test_plan_approval_reload_discards_stale_or_untrusted_proof(
     ctx._extra["plan_approved_tool_call_ids"] = ["stale"]
     await _hydrate_plan_approvals(session_store, ctx, "approval-proof", history)
     assert ctx._extra["plan_approved_tool_call_ids"] == []
+
+
+@pytest.mark.asyncio
+async def test_plan_proposal_approval_and_stages_complete_through_harness(
+    session_store, ctx, tmp_path, monkeypatch
+) -> None:
+    """Percorre proposta do harness, aprovação HTTP e execução persistida das etapas."""
+    from backend.api.handlers import dag as dag_api
+    from backend.persistence.native.agent_run import AgentRun
+    from backend.scheduling import dag_runner
+    from backend.scheduling.dag import DAGStore
+
+    database = tmp_path / "dag-harness-integration.db"
+    run_id = "run-plan-harness-integration"
+    await session_store.upsert_agent_run(
+        AgentRun(
+            run_id=run_id,
+            thread_id="thread-1",
+            user_id="alice",
+            workspace_id="workspace-1",
+            status="running",
+        )
+    )
+
+    async def get_db():
+        return await aiosqlite.connect(database)
+
+    monkeypatch.setattr("backend.scheduling.background_tasks._get_db", get_db)
+    ctx.permission_mode = "plan"
+    registry = ToolRegistry()
+    _register(registry, "write_todos")
+    client = _ScriptedChatClient(
+        [
+            [
+                _tool_call_chunk(
+                    index=0,
+                    id="call_plan_integration",
+                    name="write_todos",
+                    args=json.dumps(
+                        {
+                            "todos": [
+                                {
+                                    "content": "inspecionar",
+                                    "status": "pending",
+                                    "step_id": "inspect",
+                                },
+                                {
+                                    "content": "implementar",
+                                    "status": "pending",
+                                    "step_id": "implement",
+                                },
+                            ]
+                        }
+                    ),
+                )
+            ],
+            [_texto_chunk("proposta concluída")],
+        ]
+    )
+    await run_conversation(
+        session_store=session_store,
+        chat_client=client,
+        tool_registry=registry,
+        ctx=ctx,
+        thread_id="thread-1",
+        config=LoopConfig(run_id=run_id),
+    )
+
+    async def get_sessions():
+        return session_store
+
+    async def assert_thread(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(dag_api, "_assert_owns_thread", assert_thread)
+    monkeypatch.setattr(dag_api, "_get_session_store", get_sessions)
+    monkeypatch.setattr(dag_api, "_user_id", lambda _request: "alice")
+    monkeypatch.setattr(
+        "backend.services.agent_factory.get_session_store", get_sessions
+    )
+
+    scheduled: list[dict[str, Any]] = []
+
+    async def create_task(**kwargs):
+        scheduled.append(kwargs)
+        return SimpleNamespace(id=f"task-{len(scheduled)}")
+
+    monkeypatch.setattr("backend.scheduling.background_tasks.create_task", create_task)
+    request = Request({"type": "http", "method": "POST", "path": "/", "headers": []})
+    db = await get_db()
+    store = DAGStore(db)
+    await store.setup()
+    plan = await store.get_plan_for_run(run_id)
+    assert plan is not None
+    assert plan["status"] == "draft"
+
+    approved = await dag_api.approve_dag(
+        "thread-1",
+        plan["plan_id"],
+        dag_api.ApproveDAGRequest(plan_hash=plan["plan_hash"]),
+        request=request,
+    )
+    assert approved.plan is not None
+    assert approved.plan.status == "approved"
+    assert approved.plan.approved_by == "alice"
+    assert [task["trigger_config"]["dag_stage_id"] for task in scheduled] == ["inspect"]
+
+    await dag_runner.finish_stage_from_task(
+        scheduled[0]["trigger_config"], passed=True, result="inspeção pronta"
+    )
+    assert [task["trigger_config"]["dag_stage_id"] for task in scheduled] == [
+        "inspect",
+        "implement",
+    ]
+    assert "inspeção pronta" in scheduled[1]["instruction"]
+    await dag_runner.finish_stage_from_task(
+        scheduled[1]["trigger_config"], passed=True, result="implementação concluída"
+    )
+
+    final = await store.get_plan(plan["plan_id"])
+    assert final is not None
+    assert final["execution"]["status"] == "passed"
+    assert [stage["status"] for stage in final["execution"]["stages"]] == [
+        "passed",
+        "passed",
+    ]
+    await db.close()
