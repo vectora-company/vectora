@@ -423,6 +423,13 @@
   },
   {
     "methods": [
+      "GET"
+    ],
+    "name": "list_secret_keys_auth_secrets_keys_get",
+    "path": "/auth/secrets/keys"
+  },
+  {
+    "methods": [
       "POST"
     ],
     "name": "setup_local_endpoint_auth_setup_local_post",

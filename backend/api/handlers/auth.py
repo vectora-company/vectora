@@ -377,6 +377,27 @@ async def get_usage(request: Request) -> dict:
     return usage_tracker.usage(user.id)
 
 
+@router.get("/secrets/keys")
+async def list_secret_keys(request: Request) -> dict[str, list[str]]:
+    """Lista somente os nomes das credenciais do usuário autenticado."""
+    user = getattr(request.state, "user", None)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Não autenticado.")
+    from backend.secrets import get_secrets_provider
+
+    try:
+        keys = await get_secrets_provider().list_keys(user.id)
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=423, detail="O cofre de credenciais está bloqueado."
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503, detail="Não foi possível consultar o cofre."
+        ) from exc
+    return {"keys": sorted(set(keys))}
+
+
 # ---------------------------------------------------------------------------
 # Chaves SSH por usuário (workspaces remotos)
 # ---------------------------------------------------------------------------
