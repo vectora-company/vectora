@@ -91,11 +91,7 @@ async def test_harness_telemetry_records_complete_turn_lifecycle(
         result = await decorated(config=config, thread_id="thread-1")
         assert result.stopped_reason == "completed"
     else:
-        exception = (
-            ValueError
-            if outcome == "error"
-            else asyncio.CancelledError
-        )
+        exception = ValueError if outcome == "error" else asyncio.CancelledError
         with pytest.raises(exception):
             await decorated(config=config, thread_id="thread-1")
 
