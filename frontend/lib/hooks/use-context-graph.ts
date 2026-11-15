@@ -69,7 +69,7 @@ export interface GraphClusterResult {
   node_count: number;
 }
 
-export interface GraphSymbolCandidate {
+interface GraphSymbolCandidate {
   id: string;
   label: string;
   source_file: string;
