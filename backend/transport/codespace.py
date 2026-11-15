@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import posixpath
 import shlex
 
 from backend.transport.base import DirEntry, RunResult
@@ -92,46 +93,74 @@ class CodespaceTransport:
         self._remote_path = remote_path
 
     async def list_dir(self, path: str) -> list[DirEntry]:
+        script = (
+            "import json,os,sys; out=[]; "
+            "\nfor e in os.scandir(sys.argv[1]):\n"
+            " try:\n  d=e.is_dir(follow_symlinks=False); "
+            "s=None if d else e.stat(follow_symlinks=False).st_size; "
+            " out.append({'name':e.name,'is_dir':d,'size':s})\n"
+            " except OSError: pass\n"
+            "print(json.dumps(out))"
+        )
         result = await self.run(
-            ["sh", "-c", f"ls -la --time-style=long-iso {shlex.quote(path)}"],
+            ["python3", "-c", script, path],
             cwd=".",
             timeout=15.0,
         )
-        entries: list[DirEntry] = []
-        for line in result.stdout.splitlines():
-            parts = line.split()
-            if len(parts) < 8:
-                continue
-            mode = parts[0]
-            name = parts[-1]
-            if name in (".", ".."):
-                continue
-            entries.append(
-                DirEntry(
-                    name=name,
-                    path=f"{path.rstrip('/')}/{name}",
-                    is_dir=mode.startswith("d"),
-                )
+        if result.exit_code != 0:
+            raise RuntimeError(result.stderr or "Falha ao listar diretório remoto.")
+        try:
+            values = json.loads(result.stdout)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("Resposta inválida ao listar diretório remoto.") from exc
+        return [
+            DirEntry(
+                name=item["name"],
+                path=f"{path.rstrip('/')}/{item['name']}",
+                is_dir=item["is_dir"],
+                size=item["size"],
             )
-        return entries
+            for item in values
+            if isinstance(item, dict) and item.get("name") not in {".", ".."}
+        ]
 
     async def read_file(self, path: str, max_bytes: int = 1_048_576) -> bytes:
+        import base64
+
+        script = (
+            "import base64,sys; "
+            "sys.stdout.write(base64.b64encode(open(sys.argv[1],'rb').read(int(sys.argv[2]))).decode())"
+        )
         result = await self.run(
-            ["sh", "-c", f"head -c {max_bytes} {shlex.quote(path)}"],
+            ["python3", "-c", script, path, str(max_bytes)],
             cwd=".",
             timeout=30.0,
         )
-        return result.stdout.encode("utf-8", errors="replace")
+        if result.exit_code != 0:
+            if "no such file or directory" in result.stderr.lower():
+                raise FileNotFoundError(path)
+            raise RuntimeError(result.stderr or "Falha ao ler arquivo remoto.")
+        try:
+            return base64.b64decode(result.stdout, validate=True)
+        except ValueError as exc:
+            raise RuntimeError("Resposta inválida ao ler arquivo remoto.") from exc
 
     async def write_file(self, path: str, data: bytes) -> None:
         import base64
 
         b64 = base64.b64encode(data).decode("ascii")
-        await self.run(
-            ["sh", "-c", f"echo '{b64}' | base64 -d > {shlex.quote(path)}"],
+        parent = shlex.quote(posixpath.dirname(path) or ".")
+        result = await self.run(
+            [
+                "sh",
+                "-c",
+                f"mkdir -p -- {parent} && echo '{b64}' | base64 -d > {shlex.quote(path)}",
+            ],
             cwd=".",
             timeout=60.0,
         )
+        if result.exit_code != 0:
+            raise RuntimeError(result.stderr or "Falha ao gravar arquivo remoto.")
 
     async def run(
         self,
