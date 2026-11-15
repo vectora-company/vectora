@@ -461,6 +461,107 @@ class TestPostAffected:
         assert exc.value.status_code == 404
 
 
+class TestPostCluster:
+    @pytest.mark.asyncio
+    async def test_returns_community_members_without_persisting_them(self, tmp_path):
+        from backend.api.handlers.context_graph import post_cluster
+
+        _write_graph(tmp_path, SAMPLE_DATA)
+        registry, _ = _make_registry(tmp_path)
+        communities = {0: ["n_auth", "n_login"], 1: ["n_token"]}
+        with (
+            patch("backend.workspace.workspace.workspace_registry", registry),
+            patch("backend.context_graph.cluster.cluster", return_value=communities),
+        ):
+            response = await post_cluster(_fake_request(), "ws1")
+
+        assert response.node_count == len(SAMPLE_DATA["nodes"])
+        assert [item.id for item in response.communities] == [0, 1]
+        assert response.communities[0].node_ids == ["n_auth", "n_login"]
+        persisted = json.loads(
+            (tmp_path / ".vectora" / "context-graph" / "graph.json").read_text()
+        )
+        assert all("community" not in node for node in persisted["nodes"])
+
+    @pytest.mark.asyncio
+    async def test_rejects_graph_over_the_processing_limit(self, tmp_path):
+        from fastapi import HTTPException
+
+        from backend.api.handlers.context_graph import post_cluster
+
+        data = {"nodes": [{"id": str(i)} for i in range(10_001)], "links": []}
+        _write_graph(tmp_path, data)
+        registry, _ = _make_registry(tmp_path)
+        with patch("backend.workspace.workspace.workspace_registry", registry):
+            with pytest.raises(HTTPException) as exc:
+                await post_cluster(_fake_request(), "ws1")
+        assert exc.value.status_code == 413
+
+    @pytest.mark.asyncio
+    async def test_keeps_isolated_nodes_as_singleton_communities(self, tmp_path):
+        from backend.api.handlers.context_graph import post_cluster
+
+        _write_graph(tmp_path, {"nodes": [{"id": "n1"}, {"id": "n2"}], "links": []})
+        registry, _ = _make_registry(tmp_path)
+        with patch("backend.workspace.workspace.workspace_registry", registry):
+            response = await post_cluster(_fake_request(), "ws1")
+
+        assert [community.node_ids for community in response.communities] == [
+            ["n1"],
+            ["n2"],
+        ]
+
+    @pytest.mark.asyncio
+    async def test_sanitizes_detector_failure(self, tmp_path):
+        from fastapi import HTTPException
+
+        from backend.api.handlers.context_graph import post_cluster
+
+        _write_graph(tmp_path, SAMPLE_DATA)
+        registry, _ = _make_registry(tmp_path)
+        with (
+            patch("backend.workspace.workspace.workspace_registry", registry),
+            patch(
+                "backend.context_graph.cluster.cluster",
+                side_effect=RuntimeError("private graph details"),
+            ),
+        ):
+            with pytest.raises(HTTPException) as exc:
+                await post_cluster(_fake_request(), "ws1")
+
+        assert exc.value.status_code == 500
+        assert exc.value.detail == "Não foi possível agrupar este grafo"
+
+    @pytest.mark.asyncio
+    async def test_rejects_a_second_concurrent_cluster_request(self, tmp_path):
+        from fastapi import HTTPException
+
+        from backend.api.handlers import context_graph
+
+        _write_graph(tmp_path, SAMPLE_DATA)
+        registry, _ = _make_registry(tmp_path)
+        await context_graph._cluster_semaphore.acquire()
+        try:
+            with patch("backend.workspace.workspace.workspace_registry", registry):
+                with pytest.raises(HTTPException) as exc:
+                    await context_graph.post_cluster(_fake_request(), "ws1")
+            assert exc.value.status_code == 429
+        finally:
+            context_graph._cluster_semaphore.release()
+
+    @pytest.mark.asyncio
+    async def test_missing_graph_returns_404(self, tmp_path):
+        from fastapi import HTTPException
+
+        from backend.api.handlers.context_graph import post_cluster
+
+        registry, _ = _make_registry(tmp_path)
+        with patch("backend.workspace.workspace.workspace_registry", registry):
+            with pytest.raises(HTTPException) as exc:
+                await post_cluster(_fake_request(), "ws1")
+        assert exc.value.status_code == 404
+
+
 # ---------------------------------------------------------------------------
 # post_build / delete_build
 # ---------------------------------------------------------------------------

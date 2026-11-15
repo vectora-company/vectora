@@ -11,6 +11,7 @@ Endpoints (todos exigem autenticação; workspace deve existir):
     POST   /workspaces/{workspace_id}/context-graph/explain    — explica nó
     POST   /workspaces/{workspace_id}/context-graph/path       — caminho entre nós
     POST   /workspaces/{workspace_id}/context-graph/affected   — impacto de mudança
+    POST   /workspaces/{workspace_id}/context-graph/cluster    — agrupa comunidades
 """
 
 from __future__ import annotations
@@ -29,6 +30,7 @@ from pydantic import BaseModel
 logger = logging.getLogger(__name__)
 
 _active_builds: dict[str, asyncio.Task[None]] = {}
+_cluster_semaphore = asyncio.Semaphore(1)
 
 
 def _check_workspace_access(request: Request, workspace_id: str) -> None:
@@ -104,6 +106,17 @@ class PathRequest(BaseModel):
 class AffectedRequest(BaseModel):
     node_query: str
     depth: int = 2
+
+
+class GraphCommunity(BaseModel):
+    id: int
+    name: str
+    node_ids: list[str]
+
+
+class ClusterResponse(BaseModel):
+    communities: list[GraphCommunity]
+    node_count: int
 
 
 class GraphQueryResponse(BaseModel):
@@ -548,6 +561,73 @@ async def post_affected(
 
     answer = affected_summary(data, body.node_query, depth=body.depth)
     return GraphQueryResponse(answer=answer, nodes=[], edges=[])
+
+
+@router.post("/cluster", response_model=ClusterResponse)
+async def post_cluster(request: Request, workspace_id: str) -> ClusterResponse:
+    """Detecta comunidades sem alterar o grafo persistido do workspace."""
+    _user_id(request)
+    data = _require_graph_json(workspace_id)
+    nodes = data.get("nodes")
+    links = data.get("links", data.get("edges", []))
+    if not isinstance(nodes, list) or not isinstance(links, list):
+        raise HTTPException(status_code=500, detail="Grafo inválido")
+    if len(nodes) > 10_000 or len(links) > 40_000:
+        raise HTTPException(
+            status_code=413,
+            detail="Grafo grande demais para agrupar pela interface (limite: 10.000 nós e 40.000 arestas)",
+        )
+
+    def _detect() -> tuple[dict[int, list[str]], dict[int, str]]:
+        from backend.context_graph.build import build_from_json
+        from backend.context_graph.cluster import cluster, label_communities_by_hub
+
+        graph = build_from_json(data)
+        communities = cluster(graph)
+        labels = label_communities_by_hub(graph, communities)
+        return communities, labels
+
+    if _cluster_semaphore.locked():
+        raise HTTPException(
+            status_code=429, detail="Outro agrupamento de grafo já está em execução"
+        )
+    await _cluster_semaphore.acquire()
+    task = asyncio.create_task(asyncio.to_thread(_detect))
+    try:
+        communities, labels = await asyncio.wait_for(asyncio.shield(task), timeout=30)
+    except TimeoutError as exc:
+        task.add_done_callback(lambda _task: _cluster_semaphore.release())
+        raise HTTPException(
+            status_code=503, detail="O agrupamento excedeu o tempo disponível"
+        ) from exc
+    except Exception as exc:
+        _cluster_semaphore.release()
+        logger.exception("context-graph: falha ao agrupar comunidades")
+        raise HTTPException(
+            status_code=500, detail="Não foi possível agrupar este grafo"
+        ) from exc
+    except asyncio.CancelledError:
+        task.add_done_callback(lambda _task: _cluster_semaphore.release())
+        raise
+    except BaseException:
+        _cluster_semaphore.release()
+        raise
+    else:
+        _cluster_semaphore.release()
+
+    response_communities = [
+        GraphCommunity(
+            id=community_id,
+            name=labels.get(community_id, f"Comunidade {community_id}"),
+            node_ids=sorted(str(node_id) for node_id in node_ids),
+        )
+        for community_id, node_ids in sorted(communities.items())
+    ]
+
+    return ClusterResponse(
+        communities=response_communities,
+        node_count=sum(len(community.node_ids) for community in response_communities),
+    )
 
 
 @router.get("/export/{export_format}")
