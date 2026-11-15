@@ -8,11 +8,32 @@ import { renderHook, act } from "@testing-library/react";
 
 // ── fetch global mockado ─────────────────────────────────────────────────────
 
-const FETCH_MOCK = vi.fn();
+const FETCH_MOCK = vi.fn<typeof fetch>();
+const queuedResponses = new Map<string, Array<Response | Error>>();
 
 beforeEach(() => {
   vi.stubGlobal("fetch", FETCH_MOCK);
   FETCH_MOCK.mockReset();
+  queuedResponses.clear();
+  FETCH_MOCK.mockImplementation((input, init) => {
+    const pathname = new URL(String(input), "http://vectora.test").pathname;
+    if (
+      pathname.endsWith("/falkordb/config") &&
+      (init?.method ?? "GET") !== "PUT"
+    ) {
+      return Promise.resolve(
+        mockOk({
+          configured: false,
+          has_username: false,
+          has_password: false,
+        }),
+      );
+    }
+    const operation = pathname.split("/").at(-1) ?? "";
+    const response = queuedResponses.get(operation)?.shift();
+    if (response instanceof Error) return Promise.reject(response);
+    return Promise.resolve(response ?? mockFail(404));
+  });
 });
 
 afterEach(() => {
@@ -31,13 +52,23 @@ function mockFail(status = 404): Response {
   return new Response(JSON.stringify({ detail: "not found" }), { status });
 }
 
+function queueResponse(
+  operation: string,
+  ...responses: Array<Response | Error>
+) {
+  queuedResponses.set(operation, [
+    ...(queuedResponses.get(operation) ?? []),
+    ...responses,
+  ]);
+}
+
 import { useContextGraph } from "@/lib/hooks/use-context-graph";
 
 // ── testes ───────────────────────────────────────────────────────────────────
 
 describe("useContextGraph", () => {
   it("busca status ao montar com workspaceId válido", async () => {
-    FETCH_MOCK.mockResolvedValueOnce(mockOk({ status: "not_built" }));
+    queueResponse("status", mockOk({ status: "not_built" }));
 
     const { result } = renderHook(() => useContextGraph("ws1"));
     await act(async () => {});
@@ -61,20 +92,22 @@ describe("useContextGraph", () => {
   });
 
   it("busca report automaticamente quando status é done", async () => {
-    FETCH_MOCK.mockResolvedValueOnce(
+    queueResponse(
+      "status",
       mockOk({ status: "done", node_count: 5, edge_count: 3 }),
-    ).mockResolvedValueOnce(mockOk({ report: "**God nodes**\n- Auth\n" }));
+    );
+    queueResponse("report", mockOk({ report: "**God nodes**\n- Auth\n" }));
 
     const { result } = renderHook(() => useContextGraph("ws1"));
     await act(async () => {});
 
-    expect(FETCH_MOCK).toHaveBeenCalledTimes(2);
+    expect(FETCH_MOCK).toHaveBeenCalledTimes(3);
     expect(result.current.report).toContain("God nodes");
     expect(result.current.status.node_count).toBe(5);
   });
 
   it("mantém report null quando status não é done", async () => {
-    FETCH_MOCK.mockResolvedValueOnce(mockOk({ status: "running" }));
+    queueResponse("status", mockOk({ status: "running" }));
 
     const { result } = renderHook(() => useContextGraph("ws1"));
     await act(async () => {});
@@ -83,9 +116,9 @@ describe("useContextGraph", () => {
   });
 
   it("build POST e seta status running após resposta ok", async () => {
-    FETCH_MOCK.mockResolvedValueOnce(
-      mockOk({ status: "not_built" }),
-    ).mockResolvedValueOnce(
+    queueResponse("status", mockOk({ status: "not_built" }));
+    queueResponse(
+      "build",
       mockOk({ status: "queued", message: "enfileirado" }),
     );
 
@@ -104,9 +137,8 @@ describe("useContextGraph", () => {
   });
 
   it("build envia opções model/mode/update no body", async () => {
-    FETCH_MOCK.mockResolvedValueOnce(
-      mockOk({ status: "not_built" }),
-    ).mockResolvedValueOnce(mockOk({ status: "queued" }));
+    queueResponse("status", mockOk({ status: "not_built" }));
+    queueResponse("build", mockOk({ status: "queued" }));
 
     const { result } = renderHook(() => useContextGraph("ws2"));
     await act(async () => {});
@@ -129,9 +161,8 @@ describe("useContextGraph", () => {
   });
 
   it("resume envia resume=true no body do build (retoma pausado)", async () => {
-    FETCH_MOCK.mockResolvedValueOnce(
-      mockOk({ status: "paused" }),
-    ).mockResolvedValueOnce(mockOk({ status: "queued" }));
+    queueResponse("status", mockOk({ status: "paused" }));
+    queueResponse("build", mockOk({ status: "queued" }));
 
     const { result } = renderHook(() => useContextGraph("ws-resume"));
     await act(async () => {});
@@ -150,9 +181,8 @@ describe("useContextGraph", () => {
   });
 
   it("build falha silenciosamente se fetch rejeita (sem lançar)", async () => {
-    FETCH_MOCK.mockResolvedValueOnce(
-      mockOk({ status: "not_built" }),
-    ).mockRejectedValueOnce(new Error("Network error"));
+    queueResponse("status", mockOk({ status: "not_built" }));
+    queueResponse("build", new Error("Network error"));
 
     const { result } = renderHook(() => useContextGraph("ws1"));
     await act(async () => {});
@@ -165,7 +195,7 @@ describe("useContextGraph", () => {
   });
 
   it("getHtmlUrl retorna URL com workspaceId codificado", async () => {
-    FETCH_MOCK.mockResolvedValue(mockOk({ status: "unknown" }));
+    queueResponse("status", mockOk({ status: "unknown" }));
     const { result } = renderHook(() => useContextGraph("ws-abc"));
     await act(async () => {});
     expect(result.current.getHtmlUrl()).toContain(
@@ -179,7 +209,7 @@ describe("useContextGraph", () => {
   });
 
   it("fetch com erro de rede não quebra o hook", async () => {
-    FETCH_MOCK.mockRejectedValueOnce(new Error("offline"));
+    queueResponse("status", new Error("offline"));
 
     const { result } = renderHook(() => useContextGraph("ws1"));
     await act(async () => {});
@@ -188,7 +218,7 @@ describe("useContextGraph", () => {
   });
 
   it("resposta não-ok do status não altera o estado além do fallback", async () => {
-    FETCH_MOCK.mockResolvedValueOnce(mockFail(500));
+    queueResponse("status", mockFail(500));
 
     const { result } = renderHook(() => useContextGraph("ws1"));
     await act(async () => {});
@@ -197,7 +227,8 @@ describe("useContextGraph", () => {
   });
 
   it("status JSON malformado cai no fallback unknown", async () => {
-    FETCH_MOCK.mockResolvedValueOnce(
+    queueResponse(
+      "status",
       new Response("NOTJSON{", {
         status: 200,
         headers: { "Content-Type": "application/json" },
@@ -209,32 +240,30 @@ describe("useContextGraph", () => {
   });
 
   it("status queued é preservado", async () => {
-    FETCH_MOCK.mockResolvedValueOnce(mockOk({ status: "queued" }));
+    queueResponse("status", mockOk({ status: "queued" }));
     const { result } = renderHook(() => useContextGraph("ws1"));
     await act(async () => {});
     expect(result.current.status.status).toBe("queued");
   });
 
   it("report não é setado quando o backend devolve report vazio", async () => {
-    FETCH_MOCK.mockResolvedValueOnce(
-      mockOk({ status: "done" }),
-    ).mockResolvedValueOnce(mockOk({ report: "" }));
+    queueResponse("status", mockOk({ status: "done" }));
+    queueResponse("report", mockOk({ report: "" }));
     const { result } = renderHook(() => useContextGraph("ws1"));
     await act(async () => {});
     expect(result.current.report).toBeNull();
   });
 
   it("report não-ok mantém report null", async () => {
-    FETCH_MOCK.mockResolvedValueOnce(
-      mockOk({ status: "done" }),
-    ).mockResolvedValueOnce(mockFail(500));
+    queueResponse("status", mockOk({ status: "done" }));
+    queueResponse("report", mockFail(500));
     const { result } = renderHook(() => useContextGraph("ws1"));
     await act(async () => {});
     expect(result.current.report).toBeNull();
   });
 
   it("getHtmlUrl codifica caracteres especiais do workspaceId", async () => {
-    FETCH_MOCK.mockResolvedValue(mockOk({ status: "unknown" }));
+    queueResponse("status", mockOk({ status: "unknown" }));
     const { result } = renderHook(() => useContextGraph("a b/c"));
     await act(async () => {});
     const url = result.current.getHtmlUrl();
@@ -244,9 +273,8 @@ describe("useContextGraph", () => {
   // ── queryAffected ──────────────────────────────────────────────────────────
 
   it("queryAffected: POST /affected com node_query e depth no body", async () => {
-    FETCH_MOCK.mockResolvedValueOnce(
-      mockOk({ status: "not_built" }),
-    ).mockResolvedValueOnce(mockOk({ answer: "impacto: X" }));
+    queueResponse("status", mockOk({ status: "not_built" }));
+    queueResponse("affected", mockOk({ answer: "impacto: X" }));
     const { result } = renderHook(() => useContextGraph("ws1"));
     await act(async () => {});
     let out = "";
@@ -263,9 +291,8 @@ describe("useContextGraph", () => {
   });
 
   it("queryAffected: depth padrão é 2", async () => {
-    FETCH_MOCK.mockResolvedValueOnce(
-      mockOk({ status: "not_built" }),
-    ).mockResolvedValueOnce(mockOk({ answer: "ok" }));
+    queueResponse("status", mockOk({ status: "not_built" }));
+    queueResponse("affected", mockOk({ answer: "ok" }));
     const { result } = renderHook(() => useContextGraph("ws1"));
     await act(async () => {});
     await act(async () => {
@@ -278,9 +305,8 @@ describe("useContextGraph", () => {
   });
 
   it("queryAffected: resposta não-ok retorna string vazia", async () => {
-    FETCH_MOCK.mockResolvedValueOnce(
-      mockOk({ status: "not_built" }),
-    ).mockResolvedValueOnce(mockFail(404));
+    queueResponse("status", mockOk({ status: "not_built" }));
+    queueResponse("affected", mockFail(404));
     const { result } = renderHook(() => useContextGraph("ws1"));
     await act(async () => {});
     let out = "x";
@@ -298,9 +324,8 @@ describe("useContextGraph", () => {
   });
 
   it("queryAffected: fetch rejeitado retorna string vazia", async () => {
-    FETCH_MOCK.mockResolvedValueOnce(
-      mockOk({ status: "not_built" }),
-    ).mockRejectedValueOnce(new Error("offline"));
+    queueResponse("status", mockOk({ status: "not_built" }));
+    queueResponse("affected", new Error("offline"));
     const { result } = renderHook(() => useContextGraph("ws1"));
     await act(async () => {});
     let out = "x";
@@ -311,9 +336,8 @@ describe("useContextGraph", () => {
   });
 
   it("queryAffected: answer ausente retorna string vazia", async () => {
-    FETCH_MOCK.mockResolvedValueOnce(
-      mockOk({ status: "not_built" }),
-    ).mockResolvedValueOnce(mockOk({ nada: 1 }));
+    queueResponse("status", mockOk({ status: "not_built" }));
+    queueResponse("affected", mockOk({ nada: 1 }));
     const { result } = renderHook(() => useContextGraph("ws1"));
     await act(async () => {});
     let out = "x";
@@ -326,9 +350,8 @@ describe("useContextGraph", () => {
   // ── update (incremental) ─────────────────────────────────────────────────────
 
   it("update chama build com update:true", async () => {
-    FETCH_MOCK.mockResolvedValueOnce(
-      mockOk({ status: "not_built" }),
-    ).mockResolvedValueOnce(mockOk({ status: "queued" }));
+    queueResponse("status", mockOk({ status: "not_built" }));
+    queueResponse("build", mockOk({ status: "queued" }));
     const { result } = renderHook(() => useContextGraph("ws1"));
     await act(async () => {});
     await act(async () => {
@@ -341,9 +364,8 @@ describe("useContextGraph", () => {
   });
 
   it("update propaga o model para o build", async () => {
-    FETCH_MOCK.mockResolvedValueOnce(
-      mockOk({ status: "not_built" }),
-    ).mockResolvedValueOnce(mockOk({ status: "queued" }));
+    queueResponse("status", mockOk({ status: "not_built" }));
+    queueResponse("build", mockOk({ status: "queued" }));
     const { result } = renderHook(() => useContextGraph("ws1"));
     await act(async () => {});
     await act(async () => {
@@ -360,7 +382,7 @@ describe("useContextGraph", () => {
   it("status running agenda polling a cada 3s", async () => {
     vi.useFakeTimers();
     try {
-      FETCH_MOCK.mockResolvedValue(mockOk({ status: "running" }));
+      queueResponse("status", mockOk({ status: "running" }));
       renderHook(() => useContextGraph("ws1"));
       await act(async () => {
         await Promise.resolve();
@@ -380,7 +402,7 @@ describe("useContextGraph", () => {
   it("status not_built não agenda polling", async () => {
     vi.useFakeTimers();
     try {
-      FETCH_MOCK.mockResolvedValue(mockOk({ status: "not_built" }));
+      queueResponse("status", mockOk({ status: "not_built" }));
       renderHook(() => useContextGraph("ws1"));
       await act(async () => {
         await Promise.resolve();
@@ -399,7 +421,8 @@ describe("useContextGraph", () => {
   // ── status paused (Parte C — quota esgotada) ──────────────────────────────────
 
   it("status paused é preservado com a mensagem de erro", async () => {
-    FETCH_MOCK.mockResolvedValueOnce(
+    queueResponse(
+      "status",
       mockOk({ status: "paused", error: "quota esgotada" }),
     );
     const { result } = renderHook(() => useContextGraph("ws1"));
@@ -409,17 +432,17 @@ describe("useContextGraph", () => {
   });
 
   it("status paused não dispara busca de report (só done busca)", async () => {
-    FETCH_MOCK.mockResolvedValueOnce(mockOk({ status: "paused" }));
+    queueResponse("status", mockOk({ status: "paused" }));
     const { result } = renderHook(() => useContextGraph("ws1"));
     await act(async () => {});
-    expect(FETCH_MOCK).toHaveBeenCalledTimes(1);
+    expect(FETCH_MOCK).toHaveBeenCalledTimes(2);
     expect(result.current.report).toBeNull();
   });
 
   it("status paused não agenda polling", async () => {
     vi.useFakeTimers();
     try {
-      FETCH_MOCK.mockResolvedValue(mockOk({ status: "paused" }));
+      queueResponse("status", mockOk({ status: "paused" }));
       renderHook(() => useContextGraph("ws1"));
       await act(async () => {
         await Promise.resolve();
@@ -436,9 +459,7 @@ describe("useContextGraph", () => {
   });
 
   it("status error é preservado com a mensagem", async () => {
-    FETCH_MOCK.mockResolvedValueOnce(
-      mockOk({ status: "error", error: "boom" }),
-    );
+    queueResponse("status", mockOk({ status: "error", error: "boom" }));
     const { result } = renderHook(() => useContextGraph("ws1"));
     await act(async () => {});
     expect(result.current.status.status).toBe("error");
@@ -446,9 +467,8 @@ describe("useContextGraph", () => {
   });
 
   it("rebuild a partir de paused chama /build (Continuar)", async () => {
-    FETCH_MOCK.mockResolvedValueOnce(
-      mockOk({ status: "paused" }),
-    ).mockResolvedValueOnce(mockOk({ status: "queued" }));
+    queueResponse("status", mockOk({ status: "paused" }));
+    queueResponse("build", mockOk({ status: "queued" }));
     const { result } = renderHook(() => useContextGraph("ws1"));
     await act(async () => {});
     await act(async () => {
