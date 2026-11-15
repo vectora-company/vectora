@@ -242,7 +242,6 @@ python3 - "$VECTORA_ENV" "$ENGINE" "$BASE_URL" "$MODEL_ID" "$LAYA_KEY" <<'PY'
 import pathlib, sys
 path = pathlib.Path(sys.argv[1]); mode, base, model, key = sys.argv[2:]
 updates = {
-    "SYSTEMONE_ENABLED": "true",
     "SYSTEMONE_PROVIDER": "laya-local",
     "SYSTEMONE_LAYA_BASE_URL": base,
     "SYSTEMONE_LAYA_MODEL": model,
