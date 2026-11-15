@@ -64,6 +64,32 @@ describe("Header — navegação compacta", () => {
 
     expect(onOpenSessions).toHaveBeenCalledOnce();
     expect(onToggleWorkbench).toHaveBeenCalledOnce();
+    expect(screen.getByTestId("header-start-controls")).toContainElement(
+      screen.getByTestId("compact-open-sessions"),
+    );
+    expect(screen.getByTestId("header-end-controls")).toContainElement(
+      screen.getByTestId("compact-toggle-workbench"),
+    );
+  });
+
+  it("espelha os controles quando as sessões ficam à direita", () => {
+    render(
+      <Header
+        compactNavigation={{
+          onOpenSessions: vi.fn(),
+          sessionsSide: "right",
+          onToggleWorkbench: vi.fn(),
+          workbenchSide: "left",
+        }}
+      />,
+    );
+
+    expect(screen.getByTestId("header-end-controls")).toContainElement(
+      screen.getByTestId("compact-open-sessions"),
+    );
+    expect(screen.getByTestId("header-start-controls")).toContainElement(
+      screen.getByTestId("compact-toggle-workbench"),
+    );
   });
 
   it("oferece voltar ao chat enquanto o workbench está aberto", () => {

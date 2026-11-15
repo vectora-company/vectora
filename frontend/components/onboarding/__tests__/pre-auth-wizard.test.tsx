@@ -70,6 +70,23 @@ describe("PreAuthWizard — username: autocomplete a partir do nome + obrigatór
     expect(screen.getByLabelText("Username")).toHaveValue("brunosoares");
   });
 
+  it("atualiza o rascunho sem setState durante o render", () => {
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+
+    render(<PreAuthWizard />);
+    fireEvent.change(screen.getByLabelText("Your name"), {
+      target: { value: "Bruno Soares" },
+    });
+
+    expect(screen.getByLabelText("Username")).toHaveValue("brunosoares");
+    expect(consoleError.mock.calls.flat().join(" ")).not.toContain(
+      "Cannot update a component",
+    );
+    consoleError.mockRestore();
+  });
+
   it("editar o username manualmente para de seguir o nome (par de erro: mudar o nome depois não sobrescreve)", () => {
     render(<PreAuthWizard />);
 

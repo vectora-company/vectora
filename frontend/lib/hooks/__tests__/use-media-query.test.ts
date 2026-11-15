@@ -19,9 +19,11 @@ describe("getSessionLayoutState", () => {
     [767, "compact"],
     [768, "compact"],
     [899, "compact"],
-    [900, "wide"],
-    [1023, "wide"],
-    [1024, "wide"],
+    [900, "compact"],
+    [1023, "compact"],
+    [1024, "compact"],
+    [1099, "compact"],
+    [1100, "wide"],
     [1440, "wide"],
   ])("classifica %s px como %s", (width, expected) => {
     expect(getSessionLayoutState(width)).toBe(expected);
@@ -113,10 +115,10 @@ describe("useSessionLayoutState", () => {
     const visualListener = vi.fn();
     let onWindowResize: (() => void) | undefined;
     let onVisualResize: (() => void) | undefined;
-    const viewport = { width: 1024 };
+    const viewport = { width: 1200 };
     Object.defineProperty(window, "innerWidth", {
       configurable: true,
-      value: 1024,
+      value: 1200,
     });
     Object.defineProperty(window, "visualViewport", {
       configurable: true,

@@ -37,6 +37,8 @@ interface SidebarProps {
   paging?: ThreadsPaging;
   /** Oculta a barra de título local quando o app header já ocupa a coluna central. */
   showHeader?: boolean;
+  /** A sidebar está dentro do Sheet responsivo do shell. */
+  inSheet?: boolean;
 }
 
 export const Sidebar = memo(function Sidebar({
@@ -52,6 +54,7 @@ export const Sidebar = memo(function Sidebar({
   onRefreshThreads,
   paging,
   showHeader = true,
+  inSheet = false,
 }: SidebarProps) {
   const reducedMotion = useReducedMotion();
   const panelTransition = reducedMotion ? MOTION_INSTANT : PANEL_TRANSITION;
@@ -196,7 +199,7 @@ export const Sidebar = memo(function Sidebar({
 
   return (
     <>
-      {!isCollapsed && (
+      {!inSheet && !isCollapsed && (
         <div
           className="md:hidden fixed inset-0 z-30 bg-background/60 backdrop-blur-sm"
           onClick={onToggle}
@@ -209,7 +212,7 @@ export const Sidebar = memo(function Sidebar({
           aba). Precisa dos dois estados na mesma árvore pra animar a
           transição entre eles; um early-return por estado não permite. */}
       <AnimatePresence mode="wait" initial={false}>
-        {isCollapsed ? (
+        {isCollapsed && !inSheet ? (
           <motion.div
             key="collapsed"
             initial={{ opacity: 0, x: -8 }}
@@ -235,7 +238,13 @@ export const Sidebar = memo(function Sidebar({
             transition={panelTransition}
             className="contents"
           >
-            <aside className="fixed md:relative inset-y-0 left-0 z-40 flex w-72 md:w-full bg-sidebar border-r border-border/40 flex-col">
+            <aside
+              className={
+                inSheet
+                  ? "relative flex h-full min-h-0 w-full min-w-0 bg-sidebar flex-col"
+                  : "fixed md:relative inset-y-0 left-0 z-40 flex w-72 md:w-full bg-sidebar border-r border-border/40 flex-col"
+              }
+            >
               <SidebarHeader onToggle={onToggle} compact={!showHeader} />
 
               <SidebarModeToggle compact={!showHeader} />

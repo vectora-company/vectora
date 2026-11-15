@@ -157,16 +157,12 @@ export function PreAuthWizard({
   const [backupImported, setBackupImported] = useState(false);
   const [backupResult, setBackupResult] = useState<BackupPreview | null>(null);
 
-  // Auto-preenche o username a partir do nome enquanto não houver edição
-  // manual — mesmo padrão do /auth/signup real. Comparação durante o render
-  // (não num effect) é o padrão que o React recomenda pra "ajustar estado
-  // quando uma prop muda":
-  // https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes
-  const [prevName, setPrevName] = useState<string | null>(null);
-  if (name !== prevName) {
-    setPrevName(name);
+  // O rascunho vive em um store externo ao wizard. Sincronizar seu username
+  // durante o render atualiza outro componente e dispara o aviso do React;
+  // o effect aplica o valor derivado após o nome ser confirmado no store.
+  useEffect(() => {
     if (!usernameEdited) setUsername(slugifyUsername(name));
-  }
+  }, [name, setUsername, usernameEdited]);
 
   // Checagem de disponibilidade com debounce — mesmo padrão do /auth/signup
   // real (lib/api/username.ts::checkUsername), reaproveitado aqui.

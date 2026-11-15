@@ -10,8 +10,10 @@ import { m } from "@/lib/paraglide/messages";
 
 interface CompactNavigation {
   onOpenSessions: () => void;
+  sessionsSide?: "left" | "right";
   workbenchOpen?: boolean;
   onToggleWorkbench?: () => void;
+  workbenchSide?: "left" | "right";
 }
 
 interface HeaderProps {
@@ -31,6 +33,56 @@ export function Header({
   compactNavigation,
 }: HeaderProps) {
   const [rowRef, rowWidth] = useElementWidth<HTMLDivElement>();
+  const sessionsSide = compactNavigation?.sessionsSide ?? "left";
+  const workbenchSide = compactNavigation?.workbenchSide ?? "right";
+
+  const renderSessionsButton = () => (
+    <button
+      type="button"
+      data-testid="compact-open-sessions"
+      aria-label={m.mobile_open_sessions()}
+      title={m.mobile_open_sessions()}
+      onClick={compactNavigation?.onOpenSessions}
+      className="flex size-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+    >
+      {sessionsSide === "left" ? (
+        <PanelLeftOpen className="size-4" aria-hidden="true" />
+      ) : (
+        <PanelRightOpen className="size-4" aria-hidden="true" />
+      )}
+    </button>
+  );
+
+  const renderWorkbenchButton = () => {
+    if (!compactNavigation?.onToggleWorkbench) return null;
+
+    const SideIcon = workbenchSide === "left" ? PanelLeftOpen : PanelRightOpen;
+    return (
+      <button
+        type="button"
+        data-testid="compact-toggle-workbench"
+        aria-label={
+          compactNavigation.workbenchOpen
+            ? m.mobile_show_chat()
+            : m.mobile_show_workbench()
+        }
+        title={
+          compactNavigation.workbenchOpen
+            ? m.mobile_show_chat()
+            : m.mobile_show_workbench()
+        }
+        aria-pressed={compactNavigation.workbenchOpen ?? false}
+        onClick={compactNavigation.onToggleWorkbench}
+        className="flex size-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+      >
+        {compactNavigation.workbenchOpen ? (
+          <MessageSquare className="size-4" aria-hidden="true" />
+        ) : (
+          <SideIcon className="size-4" aria-hidden="true" />
+        )}
+      </button>
+    );
+  };
 
   return (
     <header
@@ -42,54 +94,32 @@ export function Header({
       className="safe-area-top-header border-b border-border/60 bg-background min-h-[var(--app-header-height)] flex items-center"
     >
       <div className="flex items-center justify-between w-full min-w-0 px-4 sm:px-6">
-        {compactNavigation && (
-          <div
-            role="group"
-            aria-label={m.mobile_shell_controls()}
-            className="flex shrink-0 items-center gap-1"
-          >
-            <button
-              type="button"
-              aria-label={m.mobile_open_sessions()}
-              title={m.mobile_open_sessions()}
-              onClick={compactNavigation.onOpenSessions}
-              className="flex size-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-            >
-              <PanelLeftOpen className="size-4" aria-hidden="true" />
-            </button>
-            {compactNavigation.onToggleWorkbench && (
-              <button
-                type="button"
-                aria-label={
-                  compactNavigation.workbenchOpen
-                    ? m.mobile_show_chat()
-                    : m.mobile_show_workbench()
-                }
-                title={
-                  compactNavigation.workbenchOpen
-                    ? m.mobile_show_chat()
-                    : m.mobile_show_workbench()
-                }
-                aria-pressed={compactNavigation.workbenchOpen ?? false}
-                onClick={compactNavigation.onToggleWorkbench}
-                className="flex size-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-              >
-                {compactNavigation.workbenchOpen ? (
-                  <MessageSquare className="size-4" aria-hidden="true" />
-                ) : (
-                  <PanelRightOpen className="size-4" aria-hidden="true" />
-                )}
-              </button>
-            )}
-          </div>
-        )}
+        <div
+          data-testid="header-start-controls"
+          role={compactNavigation ? "group" : undefined}
+          aria-label={compactNavigation ? m.mobile_shell_controls() : undefined}
+          className="flex shrink-0 items-center gap-1"
+        >
+          {compactNavigation?.sessionsSide !== "right" &&
+            compactNavigation &&
+            renderSessionsButton()}
+          {compactNavigation?.workbenchSide === "left" &&
+            renderWorkbenchButton()}
+        </div>
         {showModeSwitch && (
           <div className="flex-1 flex justify-center min-w-0">
             <ModeSwitch show width={rowWidth} />
           </div>
         )}
 
-        <div className="ml-auto flex items-center gap-3 shrink-0">
+        <div
+          data-testid="header-end-controls"
+          className="ml-auto flex items-center gap-3 shrink-0"
+        >
+          {compactNavigation?.sessionsSide === "right" &&
+            renderSessionsButton()}
+          {compactNavigation?.workbenchSide !== "left" &&
+            renderWorkbenchButton()}
           <GitStatusBadge />
           <ContextualHelp onShowShortcuts={onShowShortcuts} />
           <SettingsMenu />
