@@ -7,7 +7,7 @@
  */
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { fireEvent, render, screen, cleanup } from "@testing-library/react";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn() }),
@@ -42,6 +42,7 @@ async function renderContaTab(user: {
 
 afterEach(() => {
   cleanup();
+  window.localStorage.clear();
   vi.resetModules();
   vi.restoreAllMocks();
 });
@@ -72,5 +73,23 @@ describe("ContaTab — identidade da conta", () => {
 
     expect(screen.getByText("bruno")).toBeInTheDocument();
     expect(screen.getByText("Root")).toBeInTheDocument();
+  });
+
+  it("permite editar o nome local do cliente sem alterar o nome da conta", async () => {
+    await renderContaTab({
+      id: "local",
+      username: "bruno",
+      role: "root",
+      name: "Bruno",
+    });
+
+    const clientName = await screen.findByRole("textbox");
+    fireEvent.change(clientName, { target: { value: "Notebook" } });
+    fireEvent.click(
+      screen.getByRole("button", { name: "account_client_profile_save" }),
+    );
+
+    expect(screen.getByText("Bruno")).toBeInTheDocument();
+    expect(window.localStorage.getItem("client-profile")).toContain("Notebook");
   });
 });

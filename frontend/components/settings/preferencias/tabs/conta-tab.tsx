@@ -19,6 +19,7 @@ import { Separator } from "@/components/ui/separator";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { m } from "@/lib/paraglide/messages";
 import type { AuthUser } from "@/lib/types/auth";
+import { ClientProfileSettings } from "./client-profile-settings";
 
 const ROLE_LABELS: Record<string, string> = {
   root: "Root",
@@ -196,6 +197,10 @@ export function ContaTab() {
           {ROLE_LABELS[user.role] ?? user.role}
         </Badge>
       </div>
+
+      <Separator />
+
+      <ClientProfileSettings />
 
       <Separator />
 
