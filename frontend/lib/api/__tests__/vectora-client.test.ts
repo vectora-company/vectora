@@ -21,6 +21,9 @@ import {
   listConversationBranches,
   compareConversationBranch,
   selectConversationBranch,
+  getThreadDAG,
+  approveThreadDAG,
+  cancelThreadDAG,
 } from "@/lib/api/vectora-client";
 
 function jsonResponse(data: unknown, status = 200) {
@@ -40,6 +43,32 @@ beforeEach(() => {
 });
 
 describe("RPCs simples", () => {
+  it("carrega o plano persistido da thread com credenciais", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ plan: null }));
+    expect(await getThreadDAG("thread/a")).toBeNull();
+    expect(fetchMock.mock.calls[0]?.[0]).toContain("/threads/thread%2Fa/dag");
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+      credentials: "include",
+    });
+  });
+
+  it("aprova pelo hash imutável e permite cancelar a execução", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ plan: null }))
+      .mockResolvedValueOnce(jsonResponse({ plan: null }));
+    await approveThreadDAG("thread-1", "plan-1", "a".repeat(64));
+    await cancelThreadDAG("thread-1", "plan-1");
+    expect(fetchMock.mock.calls[0]?.[0]).toContain(
+      "/threads/thread-1/dag/plan-1/approve",
+    );
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toEqual({
+      plan_hash: "a".repeat(64),
+    });
+    expect(fetchMock.mock.calls[1]?.[0]).toContain(
+      "/threads/thread-1/dag/plan-1/cancel",
+    );
+  });
+
   it("markThreadRead: faz POST com id codificado e credenciais", async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ unread_count: 0 }));
 

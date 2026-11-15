@@ -1989,6 +1989,47 @@ async def run_conversation(  # noqa: PLR0911
                 todos = _parse_todos_result(resultado.text())
                 if todos is not None:
                     await emit(TodosUpdated(todos=todos))
+                    if config.run_id and ctx.permission_mode == "plan" and todos:
+                        try:
+                            from backend.scheduling.background_tasks import _get_db
+                            from backend.scheduling.dag import DAGStage, DAGStore
+
+                            dag_db = await _get_db()
+                            try:
+                                dag_store = DAGStore(dag_db)
+                                await dag_store.setup()
+                                used_ids: set[str] = set()
+                                stages: list[DAGStage] = []
+                                previous_id: str | None = None
+                                for index, todo in enumerate(todos):
+                                    requested_id = (todo.step_id or "").strip()
+                                    stage_id = (
+                                        requested_id
+                                        if requested_id and requested_id not in used_ids
+                                        else f"step-{index + 1}"
+                                    )
+                                    used_ids.add(stage_id)
+                                    stages.append(
+                                        DAGStage(
+                                            stage_id=stage_id,
+                                            name=todo.content,
+                                            depends_on=(previous_id,)
+                                            if previous_id
+                                            else (),
+                                        )
+                                    )
+                                    previous_id = stage_id
+                                await dag_store.upsert_draft(
+                                    run_id=config.run_id,
+                                    stages=stages,
+                                    workspace_id=ctx.workspace_id or None,
+                                )
+                            finally:
+                                await dag_db.close()
+                        except Exception:
+                            logger.exception(
+                                "conversation_loop: não foi possível persistir o rascunho DAG"
+                            )
                     if (
                         config.run_id
                         and hasattr(session_store, "get_agent_run")
