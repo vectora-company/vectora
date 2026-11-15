@@ -197,6 +197,9 @@ describe("ContextGraphViewer", () => {
     });
     fireEvent.click(screen.getByTestId("graph-symbol-resolve"));
     expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(screen.getByTestId("graph-symbol-error")).toHaveTextContent(
+      "graph_symbol_error",
+    );
   });
 
   it("busca o grafo ao montar e passa nós/arestas de todas as comunidades pro canvas", async () => {
