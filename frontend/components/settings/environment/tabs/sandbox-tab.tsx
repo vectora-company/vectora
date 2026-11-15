@@ -1,16 +1,20 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { m } from "@/lib/paraglide/messages";
 import { useWorkspacesStore } from "@/lib/stores/workspaces-store";
 import {
   getSandboxAudit,
   getSandboxDryRun,
+  getSandboxCredentials,
   getSandboxPolicy,
   getSandboxStatus,
   putSandboxPolicy,
+  putSandboxCredential,
+  deleteSandboxCredential,
+  unlockSandboxCredentials,
   type IsolationDimension,
   type IsolationLevel,
   type IsolationState,
@@ -107,6 +111,7 @@ function toInput(draft: Draft, current: SandboxPolicy): SandboxPolicyInput {
     require_full_isolation: draft.requireFull,
     network: draft.network,
     allow_hosts: lines(draft.allowHosts),
+    credential_bindings: current.credential_bindings,
     registry_hosts: draft.registryHosts,
     max_file_mb: Number(draft.maxFileMb) || current.max_file_mb,
     memory_limit_mb:
@@ -128,6 +133,11 @@ function describeEvent(event: SandboxAuditEvent): string {
         : m.sandbox_event_egress_blocked({ host: String(data.host) });
     case "policy_changed":
       return m.sandbox_event_policy_changed();
+    case "credential_injected":
+      return m.sandbox_event_credential_injected({
+        host: String(data.host),
+        name: String(data.credential_name),
+      });
     default:
       return event.event;
   }
@@ -168,6 +178,11 @@ export function SandboxTab() {
     queryFn: () => getSandboxAudit(workspaceId as string),
     enabled: workspaceId !== null,
   });
+  const credentials = useQuery({
+    queryKey: ["sandbox", workspaceId, "credentials"],
+    queryFn: () => getSandboxCredentials(workspaceId as string),
+    enabled: workspaceId !== null,
+  });
 
   const [draft, setDraft] = useState<Draft | null>(null);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(
@@ -176,6 +191,47 @@ export function SandboxTab() {
   const [saving, setSaving] = useState(false);
   const [showCommand, setShowCommand] = useState(false);
   const [command, setCommand] = useState<string[] | null>(null);
+  const [credentialName, setCredentialName] = useState("");
+  const [credentialHost, setCredentialHost] = useState("");
+  const [credentialHeader, setCredentialHeader] = useState("Authorization");
+  const [credentialPrefix, setCredentialPrefix] = useState("Bearer ");
+  const [credentialValue, setCredentialValue] = useState("");
+  const [vaultPassword, setVaultPassword] = useState("");
+  const [credentialMessage, setCredentialMessage] = useState<string | null>(
+    null,
+  );
+
+  const refreshCredentials = () =>
+    queryClient.invalidateQueries({
+      queryKey: ["sandbox", workspaceId, "credentials"],
+    });
+  const unlockVault = useMutation({
+    mutationFn: () => unlockSandboxCredentials(workspaceId!, vaultPassword),
+    onSuccess: () =>
+      setCredentialMessage(m.sandbox_credential_vault_unlocked()),
+    onError: (error) => setCredentialMessage(error.message),
+  });
+  const saveCredential = useMutation({
+    mutationFn: () =>
+      putSandboxCredential(workspaceId!, {
+        name: credentialName.trim(),
+        host: credentialHost.trim(),
+        header: credentialHeader.trim(),
+        prefix: credentialPrefix,
+        value: credentialValue,
+        password: vaultPassword,
+      }),
+    onSuccess: async () => {
+      setCredentialValue("");
+      setCredentialName("");
+      setCredentialMessage(m.sandbox_credential_saved());
+      await refreshCredentials();
+      await queryClient.invalidateQueries({
+        queryKey: ["sandbox", workspaceId],
+      });
+    },
+    onError: (error) => setCredentialMessage(error.message),
+  });
 
   // A tela edita um rascunho; ele reinicia quando a política do servidor muda
   // (outro workspace, ou depois de salvar). Derivado durante a renderização,
@@ -462,6 +518,139 @@ export function SandboxTab() {
             )}
           </div>
         </fieldset>
+      </section>
+
+      <section className="space-y-3" aria-labelledby="sandbox-credentials">
+        <h3 id="sandbox-credentials" className="text-sm font-semibold">
+          {m.sandbox_credential_title()}
+        </h3>
+        <p className="text-xs text-muted-foreground">
+          {m.sandbox_credential_description()}
+        </p>
+        <label className="block text-sm">
+          <span className="mb-1 block font-medium">
+            {m.sandbox_credential_password()}
+          </span>
+          <input
+            type="password"
+            autoComplete="current-password"
+            className="w-full rounded-md border border-border bg-background p-2 text-sm"
+            value={vaultPassword}
+            onChange={(event) => setVaultPassword(event.target.value)}
+          />
+        </label>
+        <button
+          type="button"
+          disabled={
+            !workspace.trusted || !vaultPassword || unlockVault.isPending
+          }
+          onClick={() => unlockVault.mutate()}
+          className="rounded-md border px-3 py-1.5 text-xs disabled:opacity-50"
+        >
+          {m.sandbox_credential_unlock()}
+        </button>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <label className="text-xs">
+            {m.sandbox_credential_name()}
+            <input
+              className="mt-1 w-full rounded-md border border-border bg-background p-2 font-mono"
+              value={credentialName}
+              onChange={(event) => setCredentialName(event.target.value)}
+              placeholder={m.sandbox_credential_name_placeholder()}
+            />
+          </label>
+          <label className="text-xs">
+            {m.sandbox_credential_host()}
+            <input
+              className="mt-1 w-full rounded-md border border-border bg-background p-2"
+              value={credentialHost}
+              onChange={(event) => setCredentialHost(event.target.value)}
+              placeholder={m.sandbox_credential_host_placeholder()}
+            />
+          </label>
+          <label className="text-xs">
+            {m.sandbox_credential_header()}
+            <input
+              className="mt-1 w-full rounded-md border border-border bg-background p-2"
+              value={credentialHeader}
+              onChange={(event) => setCredentialHeader(event.target.value)}
+            />
+          </label>
+          <label className="text-xs">
+            {m.sandbox_credential_prefix()}
+            <input
+              className="mt-1 w-full rounded-md border border-border bg-background p-2"
+              value={credentialPrefix}
+              onChange={(event) => setCredentialPrefix(event.target.value)}
+            />
+          </label>
+          <label className="text-xs sm:col-span-2">
+            {m.sandbox_credential_value()}
+            <input
+              type="password"
+              autoComplete="new-password"
+              className="mt-1 w-full rounded-md border border-border bg-background p-2 font-mono"
+              value={credentialValue}
+              onChange={(event) => setCredentialValue(event.target.value)}
+            />
+          </label>
+        </div>
+        <button
+          type="button"
+          disabled={
+            !workspace.trusted ||
+            !vaultPassword ||
+            !credentialName.trim() ||
+            !credentialHost.trim() ||
+            !credentialValue ||
+            saveCredential.isPending
+          }
+          onClick={() => saveCredential.mutate()}
+          className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground disabled:opacity-50"
+        >
+          {m.sandbox_credential_save()}
+        </button>
+        {credentialMessage && (
+          <p role="status" className="text-xs text-muted-foreground">
+            {credentialMessage}
+          </p>
+        )}
+        <ul className="divide-y divide-border/60">
+          {(credentials.data ?? []).map((credential) => (
+            <li
+              className="flex items-center justify-between gap-2 py-2 text-xs"
+              key={credential.name}
+            >
+              <span className="min-w-0 truncate font-mono">
+                {credential.name} · {credential.host} · {credential.header}
+              </span>
+              <button
+                type="button"
+                disabled={!vaultPassword}
+                onClick={async () => {
+                  if (!window.confirm(m.sandbox_credential_remove_confirm()))
+                    return;
+                  try {
+                    await deleteSandboxCredential(
+                      workspaceId!,
+                      credential.name,
+                      vaultPassword,
+                    );
+                    await refreshCredentials();
+                    setCredentialMessage(m.sandbox_credential_removed());
+                  } catch (error) {
+                    setCredentialMessage(
+                      error instanceof Error ? error.message : String(error),
+                    );
+                  }
+                }}
+                className="rounded-md border px-2 py-1 disabled:opacity-50"
+              >
+                {m.sandbox_credential_remove()}
+              </button>
+            </li>
+          ))}
+        </ul>
       </section>
 
       <section className="space-y-2" aria-labelledby="sandbox-command">

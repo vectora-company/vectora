@@ -2490,6 +2490,22 @@
   },
   {
     "methods": [
+      "DELETE",
+      "GET",
+      "PUT"
+    ],
+    "name": "list_sandbox_credentials_workspaces__workspace_id__sandbox_credentials_get",
+    "path": "/workspaces/{workspace_id}/sandbox/credentials"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "name": "unlock_sandbox_credentials_workspaces__workspace_id__sandbox_credentials_unlock_post",
+    "path": "/workspaces/{workspace_id}/sandbox/credentials/unlock"
+  },
+  {
+    "methods": [
       "GET"
     ],
     "name": "workspace_sandbox_dry_run_workspaces__workspace_id__sandbox_dry_run_get",

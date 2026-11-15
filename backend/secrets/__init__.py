@@ -62,4 +62,10 @@ def get_secrets_provider() -> Any:
         return InternalSecretsProvider()
 
 
-__all__ = ["get_secrets_provider"]
+async def lock_secrets(user_id: str) -> None:
+    """Fecha o cofre do usuário e descarta a chave em memória."""
+    provider = get_secrets_provider()
+    await provider.lock(user_id)
+
+
+__all__ = ["get_secrets_provider", "lock_secrets"]

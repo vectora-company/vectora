@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import os
+import shlex
 import socket
+import ssl
 import sys
 from pathlib import Path
 
@@ -23,6 +26,7 @@ from backend.sandbox.egress_proxy import (
 )
 from backend.sandbox.policy import (
     REGISTRY_HOSTS,
+    CredentialBinding,
     SandboxPolicy,
     effective_allow_hosts,
     effective_network,
@@ -35,6 +39,36 @@ from tests.unit.test_sandbox_hardening import _bwrap_works, _exec
 real_bwrap = pytest.mark.skipif(
     not _bwrap_works(), reason="bwrap sem user namespaces neste ambiente"
 )
+
+
+def _process_memory_contains(pid: int, needle: bytes) -> bool:
+    """Procura um segredo no espaço legível do processo filho do teste."""
+    maps = Path(f"/proc/{pid}/maps").read_text(encoding="ascii")
+    memory_fd = os.open(f"/proc/{pid}/mem", os.O_RDONLY)
+    try:
+        for line in maps.splitlines():
+            address_range, permissions, *_ = line.split(maxsplit=2)
+            if "r" not in permissions:
+                continue
+            start_text, end_text = address_range.split("-", maxsplit=1)
+            offset = int(start_text, 16)
+            end = int(end_text, 16)
+            overlap = b""
+            while offset < end:
+                try:
+                    chunk = os.pread(memory_fd, min(1024 * 1024, end - offset), offset)
+                except OSError:
+                    break
+                if not chunk:
+                    break
+                searchable = overlap + chunk
+                if needle in searchable:
+                    return True
+                overlap = searchable[-(len(needle) - 1) :]
+                offset += len(chunk)
+    finally:
+        os.close(memory_fd)
+    return False
 
 
 @pytest.fixture(autouse=True)
@@ -130,6 +164,16 @@ def test_repositorio_nao_amplia_destinos(tmp_path):
 
     assert policy.allow_hosts == ("a.com",)
     assert "allow_hosts" in policy.ignored_repo_keys
+
+
+def test_politica_recusa_binding_com_variavel_de_ambiente_reservada(tmp_path):
+    path = tmp_path / "policy.toml"
+    path.write_text(
+        '[sandbox]\ncredential_bindings = [{name = "PATH", '
+        'host = "api.example.com", header = "Authorization"}]\n'
+    )
+
+    assert parse_policy(path).lockdown is True
 
 
 def test_repositorio_pode_tirar_os_registries(tmp_path):
@@ -312,6 +356,270 @@ async def test_destino_permitido_abre_o_tunel_ate_o_ip_validado(monkeypatch):
     assert cabecalho.startswith(b"HTTP/1.1 200")
     assert dados == b"eco:ola"
     assert proxy.decisions[0].allowed is True
+
+
+@pytest.mark.asyncio
+async def test_credencial_so_e_injetada_no_host_vinculado(monkeypatch, tmp_path):
+    from backend.sandbox.tls_interception import WorkspaceTLSAuthority
+
+    authority = WorkspaceTLSAuthority(tmp_path)
+    upstream_seen: asyncio.Future[bytes] = asyncio.get_running_loop().create_future()
+
+    async def upstream(reader, writer):
+        request = await reader.readuntil(b"\r\n\r\n")
+        upstream_seen.set_result(request)
+        writer.write(
+            b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok"
+        )
+        await writer.drain()
+        writer.close()
+
+    upstream_server_context = authority.server_context("api.example.com")
+    upstream_server = await asyncio.start_server(
+        upstream, "127.0.0.1", 0, ssl=upstream_server_context
+    )
+    port = upstream_server.sockets[0].getsockname()[1]
+
+    async def allow_local(url, policy=None):
+        return True, "", "127.0.0.1"
+
+    original_open_connection = asyncio.open_connection
+
+    async def connect_upstream(host=None, port=None, *args, **kwargs):
+        if host == "127.0.0.1" and port == 443:
+            port = upstream_server.sockets[0].getsockname()[1]
+        return await original_open_connection(host, port, *args, **kwargs)
+
+    class Secrets:
+        async def get(self, user_id, key):
+            assert (user_id, key) == ("owner", "sandbox:ws:API_TOKEN")
+            return "top-secret-value"
+
+    monkeypatch.setattr(egress_proxy, "async_is_url_allowed", allow_local)
+    monkeypatch.setattr(asyncio, "open_connection", connect_upstream)
+    monkeypatch.setattr(egress_proxy, "_workspace_credential_user", lambda _: "owner")
+    monkeypatch.setattr("backend.secrets.get_secrets_provider", Secrets)
+    monkeypatch.setattr(ssl, "create_default_context", ssl._create_unverified_context)
+    proxy = EgressProxy(
+        SandboxPolicy(
+            enabled=True,
+            allow_hosts=("api.example.com",),
+            credential_bindings=(
+                CredentialBinding(
+                    "API_TOKEN", "api.example.com", "Authorization", "Bearer "
+                ),
+            ),
+        ),
+        workspace_id="ws",
+    )
+    directory = await proxy.start()
+    try:
+        reader, writer = await asyncio.open_unix_connection(
+            str(Path(directory) / SOCKET_NAME)
+        )
+        writer.write(b"CONNECT api.example.com:443 HTTP/1.1\r\n\r\n")
+        await writer.drain()
+        assert (await reader.readuntil(b"\r\n\r\n")).startswith(b"HTTP/1.1 200")
+        client_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        client_context.load_verify_locations(
+            cafile=str(Path(directory) / "sandbox-ca.pem")
+        )
+        client_context.check_hostname = True
+        # start_tls wraps the existing proxy stream after CONNECT.
+        await writer.start_tls(client_context, server_hostname="api.example.com")
+        writer.write(
+            b"GET /private HTTP/1.1\r\nHost: api.example.com\r\n"
+            b"Authorization: attacker-value\r\nConnection: keep-alive\r\n\r\n"
+        )
+        await writer.drain()
+        response = await asyncio.wait_for(reader.read(4096), 5)
+        assert upstream_seen.done(), response
+        forwarded = await asyncio.wait_for(upstream_seen, 5)
+        writer.close()
+    finally:
+        await proxy.stop()
+        upstream_server.close()
+        await upstream_server.wait_closed()
+        authority.close()
+
+    assert b"HTTP/1.1 200 OK" in response
+    assert b"Authorization: Bearer top-secret-value\r\n" in forwarded
+    assert b"attacker-value" not in forwarded
+    assert b"top-secret-value" not in response
+
+
+@pytest.mark.asyncio
+async def test_host_sem_binding_permanece_tunel_tls_sem_credencial(
+    monkeypatch, tmp_path
+):
+    from backend.sandbox.tls_interception import WorkspaceTLSAuthority
+
+    authority = WorkspaceTLSAuthority(tmp_path)
+    upstream_seen = asyncio.get_running_loop().create_future()
+
+    async def upstream(reader, writer):
+        upstream_seen.set_result(await reader.readuntil(b"\r\n\r\n"))
+        writer.write(
+            b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok"
+        )
+        await writer.drain()
+        writer.close()
+
+    server = await asyncio.start_server(
+        upstream, "127.0.0.1", 0, ssl=authority.server_context("other.example.com")
+    )
+    upstream_port = server.sockets[0].getsockname()[1]
+    original_open_connection = asyncio.open_connection
+
+    async def connect_upstream(host=None, port=None, *args, **kwargs):
+        if host == "127.0.0.1" and port == 443:
+            port = upstream_port
+        return await original_open_connection(host, port, *args, **kwargs)
+
+    async def allow_local(url, policy=None):
+        return True, "", "127.0.0.1"
+
+    monkeypatch.setattr(asyncio, "open_connection", connect_upstream)
+    monkeypatch.setattr(egress_proxy, "async_is_url_allowed", allow_local)
+    proxy = EgressProxy(
+        SandboxPolicy(
+            enabled=True,
+            allow_hosts=("api.example.com", "other.example.com"),
+            credential_bindings=(
+                CredentialBinding(
+                    "API_TOKEN", "api.example.com", "Authorization", "Bearer "
+                ),
+            ),
+        ),
+        workspace_id="ws",
+    )
+    directory = await proxy.start()
+    try:
+        reader, writer = await asyncio.open_unix_connection(
+            str(Path(directory) / SOCKET_NAME)
+        )
+        writer.write(b"CONNECT other.example.com:443 HTTP/1.1\r\n\r\n")
+        await writer.drain()
+        assert (await reader.readuntil(b"\r\n\r\n")).startswith(b"HTTP/1.1 200")
+        context = ssl.create_default_context(cafile=str(authority.ca_file))
+        await writer.start_tls(context, server_hostname="other.example.com")
+        writer.write(
+            b"GET / HTTP/1.1\r\nHost: other.example.com\r\nConnection: close\r\n\r\n"
+        )
+        await writer.drain()
+        response = await asyncio.wait_for(reader.read(4096), 5)
+        forwarded = await asyncio.wait_for(upstream_seen, 5)
+        writer.close()
+    finally:
+        await proxy.stop()
+        server.close()
+        await server.wait_closed()
+        authority.close()
+
+    assert b"HTTP/1.1 200 OK" in response
+    assert b"Authorization:" not in forwarded
+    assert b"Bearer " not in forwarded
+
+
+@real_bwrap
+@pytest.mark.asyncio
+async def test_jail_real_usa_placeholder_e_proxy_injeta_segredo_no_destino(
+    monkeypatch, tmp_path
+):
+    from backend.sandbox.tls_interception import WorkspaceTLSAuthority
+    from backend.vtypes import Workspace
+    from backend.workspace import workspace as ws_mod
+
+    workspace = Workspace(
+        id="ws-credential",
+        name="ws-credential",
+        cwd=str(tmp_path),
+        created_at="2024-01-01T00:00:00+00:00",
+        trusted=True,
+        trusted_by="owner",
+    )
+    monkeypatch.setattr(
+        ws_mod.workspace_registry,
+        "get",
+        lambda workspace_id: workspace if workspace_id == "ws-credential" else None,
+    )
+    authority = WorkspaceTLSAuthority(tmp_path)
+    forwarded = asyncio.get_running_loop().create_future()
+
+    async def upstream(reader, writer):
+        forwarded.set_result(await reader.readuntil(b"\r\n\r\n"))
+        writer.write(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok")
+        await writer.drain()
+        writer.close()
+
+    server = await asyncio.start_server(
+        upstream,
+        "127.0.0.1",
+        0,
+        ssl=authority.server_context("api.example.com"),
+    )
+    upstream_port = server.sockets[0].getsockname()[1]
+    original_open_connection = asyncio.open_connection
+
+    async def connect_upstream(host=None, port=None, *args, **kwargs):
+        if host == "127.0.0.1" and port == 443:
+            port = upstream_port
+        return await original_open_connection(host, port, *args, **kwargs)
+
+    async def allow_local(url, policy=None):
+        return True, "", "127.0.0.1"
+
+    class Secrets:
+        async def get(self, user_id, key):
+            assert (user_id, key) == (
+                "owner",
+                "sandbox:ws-credential:API_TOKEN",
+            )
+            return "server-only-secret"
+
+    monkeypatch.setattr(asyncio, "open_connection", connect_upstream)
+    monkeypatch.setattr(egress_proxy, "async_is_url_allowed", allow_local)
+    monkeypatch.setattr(ssl, "create_default_context", ssl._create_unverified_context)
+    monkeypatch.setattr("backend.secrets.get_secrets_provider", Secrets)
+    policy = SandboxPolicy(
+        enabled=True,
+        allow_hosts=("api.example.com",),
+        credential_bindings=(
+            CredentialBinding(
+                "API_TOKEN", "api.example.com", "Authorization", "Bearer "
+            ),
+        ),
+    )
+    manager = workspace_jail.WorkspaceJailManager()
+    try:
+        worker = await manager.get_or_spawn("ws-credential", str(tmp_path), policy)
+        command = f"{sys.executable} -c " + shlex.quote(
+            "import os,urllib.request; "
+            "print(os.environ['API_TOKEN']); "
+            "print(urllib.request.urlopen('https://api.example.com/', timeout=8).read().decode())"
+        )
+        result = await _exec(worker, command)
+        assert result["exit_code"] == 0, result
+        received = await asyncio.wait_for(forwarded, 10)
+        assert not _process_memory_contains(worker.proc.pid, b"server-only-secret")
+        assert all(
+            b"server-only-secret" not in path.read_bytes()
+            for path in tmp_path.rglob("*")
+            if path.is_file() and not path.is_symlink()
+        )
+    finally:
+        await manager.close("ws-credential")
+        server.close()
+        await server.wait_closed()
+        authority.close()
+
+    assert result["exit_code"] == 0
+    assert result["stdout"].splitlines() == [
+        "__VECTORA_CREDENTIAL_API_TOKEN__",
+        "ok",
+    ]
+    assert b"Authorization: Bearer server-only-secret\r\n" in received
+    assert "server-only-secret" not in result["stdout"]
 
 
 @pytest.mark.asyncio

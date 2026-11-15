@@ -272,15 +272,29 @@ def jail_environment(policy: SandboxPolicy, pythonpath: str = "") -> dict[str, s
             env[name] = value
     if pythonpath:
         env["PYTHONPATH"] = pythonpath
+    for binding in policy.credential_bindings:
+        env[binding.name] = f"__VECTORA_CREDENTIAL_{binding.name}__"
     return env
 
 
-def proxy_environment() -> dict[str, str]:
+def proxy_environment(
+    ca_bundle: str | None = None, ca_file: str | None = None
+) -> dict[str, str]:
     """Variáveis que apontam as ferramentas ao proxy de saída (loopback do jail)."""
     url = f"http://127.0.0.1:{JAIL_PROXY_PORT}"
     names = ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy")
     environment = dict.fromkeys(names, url)
     environment["NO_PROXY"] = environment["no_proxy"] = "127.0.0.1,localhost,::1"
+    if ca_bundle is not None and ca_file is not None:
+        environment.update(
+            {
+                "SSL_CERT_FILE": ca_bundle,
+                "REQUESTS_CA_BUNDLE": ca_bundle,
+                "CURL_CA_BUNDLE": ca_bundle,
+                "GIT_SSL_CAINFO": ca_bundle,
+                "NODE_EXTRA_CA_CERTS": ca_file,
+            }
+        )
     return environment
 
 
@@ -341,6 +355,28 @@ def build_bwrap_command(
     pastas somente leitura além do sistema (onde mora o programa do usuário)."""
     network = effective_network(policy)
     filtered = network == "filtered" and egress_dir is not None
+    ca_bundle_source = (
+        str(Path(egress_dir) / "sandbox-ca-bundle.pem")
+        if filtered and egress_dir is not None and policy.credential_bindings
+        else None
+    )
+    ca_source = (
+        str(Path(egress_dir) / "sandbox-ca.pem")
+        if filtered and egress_dir is not None and policy.credential_bindings
+        else None
+    )
+    preview = bool(egress_dir and egress_dir.startswith("<"))
+    if (
+        policy.credential_bindings
+        and not preview
+        and (
+            ca_bundle_source is None
+            or ca_source is None
+            or not Path(ca_bundle_source).is_file()
+            or not Path(ca_source).is_file()
+        )
+    ):
+        raise RuntimeError("a autoridade TLS das credenciais não está disponível")
     argv: list[str] = [
         "bwrap",
         "--unshare-pid",
@@ -378,11 +414,27 @@ def build_bwrap_command(
                 [*(f"{p}/bin" for p in extra_ro_paths), environment["PATH"]]
             )
     if filtered:
-        environment.update(proxy_environment())
+        environment.update(
+            proxy_environment(
+                f"{JAIL_SOCKET_DIR}/sandbox-ca-bundle.pem"
+                if ca_bundle_source is not None
+                else None,
+                f"{JAIL_SOCKET_DIR}/sandbox-ca.pem" if ca_source is not None else None,
+            )
+        )
     for name, value in environment.items():
         argv += ["--setenv", name, value]
     if filtered and egress_dir is not None:
         argv += ["--bind", egress_dir, JAIL_SOCKET_DIR]
+        if ca_bundle_source is not None and ca_source is not None:
+            argv += [
+                "--ro-bind",
+                ca_bundle_source,
+                f"{JAIL_SOCKET_DIR}/sandbox-ca-bundle.pem",
+                "--ro-bind",
+                ca_source,
+                f"{JAIL_SOCKET_DIR}/sandbox-ca.pem",
+            ]
     argv += ["--bind", workspace_dir, workspace_dir]
     for path in policy.rw_paths:
         argv += ["--bind", path, path]
@@ -426,6 +478,14 @@ def build_bwrap_command(
                 *map(_runtime_real, runtime),
                 *extra_ro_paths,
                 "/proc",
+                *(
+                    [
+                        f"{JAIL_SOCKET_DIR}/sandbox-ca-bundle.pem",
+                        f"{JAIL_SOCKET_DIR}/sandbox-ca.pem",
+                    ]
+                    if ca_bundle_source is not None
+                    else []
+                ),
             ]
         ),
     ]

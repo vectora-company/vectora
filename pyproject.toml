@@ -41,6 +41,8 @@ dependencies = [
     "slowapi>=0.1.10",
     "keyring>=25.7.0",
     "pykeepass>=4.1.1",
+    "cryptography>=44.0.0",
+    "certifi>=2026.10.18",
     "gitpython>=3.2.1",
     "httpx>=0.28.1",
     "pywinpty>=3.0.5 ; sys_platform == 'win32'",

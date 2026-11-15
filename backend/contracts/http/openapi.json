@@ -8041,6 +8041,103 @@
         "title": "SandboxAuditResponse",
         "type": "object"
       },
+      "SandboxCredentialBinding": {
+        "properties": {
+          "header": {
+            "title": "Header",
+            "type": "string"
+          },
+          "host": {
+            "title": "Host",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "prefix": {
+            "default": "",
+            "title": "Prefix",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "host",
+          "header"
+        ],
+        "title": "SandboxCredentialBinding",
+        "type": "object"
+      },
+      "SandboxCredentialDelete": {
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "password": {
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "password"
+        ],
+        "title": "SandboxCredentialDelete",
+        "type": "object"
+      },
+      "SandboxCredentialVaultRequest": {
+        "properties": {
+          "password": {
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "password"
+        ],
+        "title": "SandboxCredentialVaultRequest",
+        "type": "object"
+      },
+      "SandboxCredentialWrite": {
+        "properties": {
+          "header": {
+            "default": "Authorization",
+            "title": "Header",
+            "type": "string"
+          },
+          "host": {
+            "title": "Host",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "password": {
+            "title": "Password",
+            "type": "string"
+          },
+          "prefix": {
+            "default": "Bearer ",
+            "title": "Prefix",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "host",
+          "value",
+          "password"
+        ],
+        "title": "SandboxCredentialWrite",
+        "type": "object"
+      },
       "SandboxDryRunResponse": {
         "properties": {
           "argv": {
@@ -8085,6 +8182,13 @@
               "type": "integer"
             },
             "title": "Allow Tcp Ports",
+            "type": "array"
+          },
+          "credential_bindings": {
+            "items": {
+              "$ref": "#/components/schemas/SandboxCredentialBinding"
+            },
+            "title": "Credential Bindings",
             "type": "array"
           },
           "enabled": {
@@ -8208,6 +8312,13 @@
               "type": "integer"
             },
             "title": "Allow Tcp Ports",
+            "type": "array"
+          },
+          "credential_bindings": {
+            "items": {
+              "$ref": "#/components/schemas/SandboxCredentialBinding"
+            },
+            "title": "Credential Bindings",
             "type": "array"
           },
           "enabled": {
@@ -29412,6 +29523,222 @@
           }
         },
         "summary": "Workspace Sandbox Audit",
+        "tags": [
+          "workspaces-view"
+        ]
+      }
+    },
+    "/workspaces/{workspace_id}/sandbox/credentials": {
+      "delete": {
+        "operationId": "delete_sandbox_credential_workspaces__workspace_id__sandbox_credentials_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SandboxCredentialDelete"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response Delete Sandbox Credential Workspaces  Workspace Id  Sandbox Credentials Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Sandbox Credential",
+        "tags": [
+          "workspaces-view"
+        ]
+      },
+      "get": {
+        "operationId": "list_sandbox_credentials_workspaces__workspace_id__sandbox_credentials_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "items": {
+                      "additionalProperties": {
+                        "type": "string"
+                      },
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "title": "Response List Sandbox Credentials Workspaces  Workspace Id  Sandbox Credentials Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Sandbox Credentials",
+        "tags": [
+          "workspaces-view"
+        ]
+      },
+      "put": {
+        "operationId": "put_sandbox_credential_workspaces__workspace_id__sandbox_credentials_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SandboxCredentialWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Put Sandbox Credential Workspaces  Workspace Id  Sandbox Credentials Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Sandbox Credential",
+        "tags": [
+          "workspaces-view"
+        ]
+      }
+    },
+    "/workspaces/{workspace_id}/sandbox/credentials/unlock": {
+      "post": {
+        "operationId": "unlock_sandbox_credentials_workspaces__workspace_id__sandbox_credentials_unlock_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SandboxCredentialVaultRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response Unlock Sandbox Credentials Workspaces  Workspace Id  Sandbox Credentials Unlock Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Unlock Sandbox Credentials",
         "tags": [
           "workspaces-view"
         ]
