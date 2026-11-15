@@ -881,6 +881,309 @@ class TestGraphExport:
                 asyncio.run(response.background())
         assert not Path(response.path).exists()
 
+
+class TestFalkorDBDestination:
+    async def test_configuration_keeps_credentials_out_of_runtime_settings(self):
+        from backend.api.handlers.context_graph import (
+            FalkorDBConfigRequest,
+            put_falkordb_config,
+        )
+
+        settings = MagicMock()
+        provider = MagicMock()
+        provider.set = AsyncMock()
+        with (
+            patch("backend.workspace.runtime_settings.runtime_settings", settings),
+            patch("backend.secrets.get_secrets_provider", return_value=provider),
+            patch(
+                "backend.api.handlers.context_graph._validate_falkordb_destination",
+                new=AsyncMock(return_value="203.0.113.8"),
+            ),
+        ):
+            response = await put_falkordb_config(
+                _fake_request(),
+                "ws1",
+                FalkorDBConfigRequest(
+                    host="graph.example.com",
+                    port=6379,
+                    graph_name="workspace graph",
+                    username="operator",
+                    password="top-secret",
+                ),
+            )
+
+        assert response.configured and response.has_password
+        stored = settings.set.call_args.args[1]
+        assert stored == {
+            "host": "graph.example.com",
+            "port": 6379,
+            "graph_name": "workspace graph",
+            "has_username": True,
+            "has_password": True,
+        }
+        assert "top-secret" not in repr(stored)
+        provider.set.assert_any_await(
+            "u1", "CONTEXT_GRAPH_FALKORDB_PASSWORD", "top-secret"
+        )
+
+    async def test_rejects_destination_before_saving_credentials(self):
+        from fastapi import HTTPException
+
+        from backend.api.handlers.context_graph import (
+            FalkorDBConfigRequest,
+            put_falkordb_config,
+        )
+
+        provider = MagicMock()
+        provider.set = AsyncMock()
+        with (
+            patch("backend.secrets.get_secrets_provider", return_value=provider),
+            patch(
+                "backend.api.handlers.context_graph._validate_falkordb_destination",
+                new=AsyncMock(
+                    side_effect=HTTPException(status_code=403, detail="bloqueado")
+                ),
+            ),
+            pytest.raises(HTTPException) as exc,
+        ):
+            await put_falkordb_config(
+                _fake_request(),
+                "ws1",
+                FalkorDBConfigRequest(
+                    host="localhost", port=6379, password="must-not-save"
+                ),
+            )
+        assert exc.value.status_code == 403
+        provider.set.assert_not_awaited()
+
+    async def test_push_requires_explicit_confirmation(self):
+        from fastapi import HTTPException
+
+        from backend.api.handlers.context_graph import (
+            FalkorDBPushRequest,
+            push_graph_to_falkordb,
+        )
+
+        with pytest.raises(HTTPException) as exc:
+            await push_graph_to_falkordb(
+                _fake_request(), "ws1", FalkorDBPushRequest(confirmed=False)
+            )
+        assert exc.value.status_code == 400
+
+    async def test_push_uses_validated_destination_and_returns_counts(self, tmp_path):
+        from backend.api.handlers.context_graph import (
+            FalkorDBPushRequest,
+            push_graph_to_falkordb,
+        )
+
+        settings = MagicMock()
+        settings.get.return_value = {
+            "host": "graph.example.com",
+            "port": 6380,
+            "graph_name": "workspace graph",
+        }
+        provider = MagicMock()
+        provider.get = AsyncMock(return_value="credential")
+        _write_graph(tmp_path, {"nodes": [{"id": "a"}], "links": []})
+        with (
+            patch("backend.workspace.runtime_settings.runtime_settings", settings),
+            patch("backend.secrets.get_secrets_provider", return_value=provider),
+            patch(
+                "backend.api.handlers.context_graph._validate_falkordb_destination",
+                new=AsyncMock(return_value="203.0.113.8"),
+            ),
+            patch(
+                "backend.api.handlers.context_graph._require_graph_json",
+                return_value={"nodes": [{"id": "a"}], "links": []},
+            ),
+            patch(
+                "backend.api.handlers.context_graph._require_graph_dir",
+                return_value=tmp_path / ".vectora" / "context-graph",
+            ),
+            patch("backend.context_graph.build.build_from_json", return_value=object()),
+            patch(
+                "backend.context_graph.export.push_to_falkordb",
+                return_value={"nodes": 1, "edges": 0},
+            ) as push,
+        ):
+            response = await push_graph_to_falkordb(
+                _fake_request(), "ws1", FalkorDBPushRequest(confirmed=True)
+            )
+
+        assert response.nodes == 1 and response.edges == 0
+        args = push.call_args.args
+        assert args[1] == "redis://graph.example.com:6380"
+        assert args[-1] is True  # TLS obrigatório no endpoint de envio
+        assert push.call_args.kwargs["pinned_ip"] == "203.0.113.8"
+
+    async def test_push_fails_closed_when_vault_is_locked(self):
+        from fastapi import HTTPException
+
+        from backend.api.handlers.context_graph import (
+            FalkorDBPushRequest,
+            push_graph_to_falkordb,
+        )
+
+        settings = MagicMock()
+        settings.get.return_value = {
+            "host": "graph.example.com",
+            "port": 6379,
+            "graph_name": "project",
+        }
+        provider = MagicMock()
+        provider.get = AsyncMock(side_effect=RuntimeError("vault locked"))
+        with (
+            patch("backend.workspace.runtime_settings.runtime_settings", settings),
+            patch("backend.secrets.get_secrets_provider", return_value=provider),
+            patch(
+                "backend.api.handlers.context_graph._validate_falkordb_destination",
+                new=AsyncMock(return_value="203.0.113.8"),
+            ),
+            patch("backend.api.handlers.context_graph._require_graph_json") as graph,
+            pytest.raises(HTTPException) as exc,
+        ):
+            await push_graph_to_falkordb(
+                _fake_request(), "ws1", FalkorDBPushRequest(confirmed=True)
+            )
+
+        assert exc.value.status_code == 503
+        assert "vault locked" not in str(exc.value.detail)
+        graph.assert_not_called()
+
+    async def test_push_sanitizes_remote_authentication_failure(self, tmp_path, caplog):
+        from fastapi import HTTPException
+
+        from backend.api.handlers.context_graph import (
+            FalkorDBPushRequest,
+            push_graph_to_falkordb,
+        )
+
+        settings = MagicMock()
+        settings.get.return_value = {
+            "host": "graph.example.com",
+            "port": 6379,
+            "graph_name": "project",
+        }
+        provider = MagicMock()
+        provider.get = AsyncMock(side_effect=["operator", "remote-secret"])
+        _write_graph(tmp_path, {"nodes": [{"id": "a"}], "links": []})
+        with (
+            patch("backend.workspace.runtime_settings.runtime_settings", settings),
+            patch("backend.secrets.get_secrets_provider", return_value=provider),
+            patch(
+                "backend.api.handlers.context_graph._validate_falkordb_destination",
+                new=AsyncMock(return_value="203.0.113.8"),
+            ),
+            patch(
+                "backend.api.handlers.context_graph._require_graph_json",
+                return_value={"nodes": [{"id": "a"}], "links": []},
+            ),
+            patch(
+                "backend.api.handlers.context_graph._require_graph_dir",
+                return_value=tmp_path / ".vectora" / "context-graph",
+            ),
+            patch("backend.context_graph.build.build_from_json", return_value=object()),
+            patch(
+                "backend.context_graph.export.push_to_falkordb",
+                side_effect=RuntimeError("AUTH remote-secret failed"),
+            ),
+            pytest.raises(HTTPException) as exc,
+        ):
+            await push_graph_to_falkordb(
+                _fake_request(), "ws1", FalkorDBPushRequest(confirmed=True)
+            )
+
+        assert exc.value.status_code == 502
+        assert "remote-secret" not in str(exc.value.detail)
+        assert "remote-secret" not in caplog.text
+
+    def test_exporter_pins_socket_and_keeps_tls_hostname(self):
+        import socket
+        import sys
+        import types
+
+        import networkx as nx
+
+        from backend.context_graph.export import push_to_falkordb
+
+        connections = {}
+        queries = []
+
+        class FakeSSLConnection:
+            def __init__(self, **kwargs):
+                self.__dict__.update(kwargs)
+
+            def _wrap_socket_with_ssl(self, sock):
+                host = self.__dict__["host"]
+                connections["tls_hostname"] = host
+                return (sock, host)
+
+        class FakeConnectionPool:
+            def __init__(self, **kwargs):
+                connections["pool"] = kwargs
+
+        class FakeGraph:
+            def query(self, query, params):
+                queries.append((query, params))
+
+        class FakeFalkorDB:
+            def __init__(self, *, connection_pool):
+                self.connection_pool = connection_pool
+
+            def select_graph(self, _name):
+                return FakeGraph()
+
+            def close(self):
+                connections["closed"] = True
+
+        falkordb_module = types.ModuleType("falkordb")
+        vars(falkordb_module)["FalkorDB"] = FakeFalkorDB
+        redis_module = types.ModuleType("redis")
+        redis_module.__path__ = []
+        redis_connection = types.ModuleType("redis.connection")
+        vars(redis_connection)["ConnectionPool"] = FakeConnectionPool
+        vars(redis_connection)["SSLConnection"] = FakeSSLConnection
+        graph = nx.Graph()
+        graph.add_node("A")
+
+        with (
+            patch.dict(
+                sys.modules,
+                {
+                    "falkordb": falkordb_module,
+                    "redis": redis_module,
+                    "redis.connection": redis_connection,
+                },
+            ),
+            patch.object(socket, "create_connection", return_value="socket") as connect,
+        ):
+            result = push_to_falkordb(
+                graph,
+                "redis://graph.example.com:6380",
+                "operator",
+                "secret",
+                ssl=True,
+                pinned_ip="203.0.113.8",
+            )
+            pool = connections["pool"]
+            assert pool["host"] == "graph.example.com"
+            assert pool["ssl_check_hostname"] is True
+            connection = pool["connection_class"](
+                validated_ip="203.0.113.8",
+                host=pool["host"],
+                port=pool["port"],
+                socket_connect_timeout=5,
+                source_address=None,
+            )
+            assert connection._connect() == ("socket", "graph.example.com")
+            connect.assert_called_with(("203.0.113.8", 6380), 5, None)
+        assert connections["tls_hostname"] == "graph.example.com"
+        assert connections["closed"] is True
+        assert len(queries) == 1
+        assert result == {"nodes": 1, "edges": 0}
+
+
+class TestGraphExportRemaining:
     def test_rejects_unknown_export_format(self):
         from typing import Literal, cast
 

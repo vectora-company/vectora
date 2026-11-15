@@ -112,6 +112,32 @@ class GraphQueryResponse(BaseModel):
     edges: list[dict[str, Any]] = []
 
 
+class FalkorDBConfigRequest(BaseModel):
+    host: str
+    port: int = 6379
+    graph_name: str = "context graph"
+    username: str | None = None
+    password: str | None = None
+
+
+class FalkorDBConfigResponse(BaseModel):
+    configured: bool
+    host: str | None = None
+    port: int | None = None
+    graph_name: str | None = None
+    has_username: bool = False
+    has_password: bool = False
+
+
+class FalkorDBPushRequest(BaseModel):
+    confirmed: bool
+
+
+class FalkorDBPushResponse(BaseModel):
+    nodes: int
+    edges: int
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -150,6 +176,43 @@ def _require_graph_json(workspace_id: str) -> dict[str, Any]:
     except Exception as exc:
         logger.exception("context-graph: falha ao ler graph.json")
         raise HTTPException(status_code=500, detail="Grafo corrompido") from exc
+
+
+_FALKORDB_CONFIG_PREFIX = "context_graph:falkordb:"
+
+
+def _falkordb_config_key(user_id: str) -> str:
+    return f"{_FALKORDB_CONFIG_PREFIX}{user_id}"
+
+
+async def _falkordb_secrets(user_id: str) -> tuple[str | None, str | None]:
+    from backend.secrets import get_secrets_provider
+
+    provider = get_secrets_provider()
+    username = await provider.get(user_id, "CONTEXT_GRAPH_FALKORDB_USERNAME")
+    password = await provider.get(user_id, "CONTEXT_GRAPH_FALKORDB_PASSWORD")
+    return username, password
+
+
+async def _validate_falkordb_destination(
+    host: str, port: int, workspace_id: str
+) -> str:
+    """Aplica allow/deny de egress e SSRF e retorna o IP resolvido validado."""
+    from backend.services.egress_policy import EgressPolicy, async_is_url_allowed
+
+    if not host or host != host.strip() or any(c in host for c in "/\\@?#"):
+        raise HTTPException(status_code=422, detail="Host FalkorDB inválido")
+    if not 1 <= port <= 65535:
+        raise HTTPException(status_code=422, detail="Porta FalkorDB inválida")
+    allowed, reason, ip = await async_is_url_allowed(
+        f"https://{host}:{port}", EgressPolicy.for_workspace(workspace_id)
+    )
+    if not allowed or not ip:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Destino FalkorDB bloqueado pela política de egress: {reason}",
+        )
+    return ip
 
 
 def _write_status(graph_dir: Path, status: str, **extra: Any) -> None:
@@ -655,3 +718,199 @@ def get_export(
         filename=filename,
         background=BackgroundTask(lambda: shutil.rmtree(temp_dir, ignore_errors=True)),
     )
+
+
+@router.get("/falkordb/config", response_model=FalkorDBConfigResponse)
+async def get_falkordb_config(request: Request) -> FalkorDBConfigResponse:
+    from backend.workspace.runtime_settings import runtime_settings
+
+    user_id = _user_id(request)
+    raw = runtime_settings.get(_falkordb_config_key(user_id))
+    if not isinstance(raw, dict):
+        return FalkorDBConfigResponse(configured=False)
+    return FalkorDBConfigResponse(
+        configured=True,
+        host=str(raw.get("host", "")),
+        port=int(raw.get("port", 6379)),
+        graph_name=str(raw.get("graph_name", "context graph")),
+        has_username=bool(raw.get("has_username", False)),
+        has_password=bool(raw.get("has_password", False)),
+    )
+
+
+@router.put("/falkordb/config", response_model=FalkorDBConfigResponse)
+async def put_falkordb_config(
+    request: Request, workspace_id: str, body: FalkorDBConfigRequest
+) -> FalkorDBConfigResponse:
+    from backend.secrets import get_secrets_provider
+    from backend.workspace.runtime_settings import runtime_settings
+
+    user_id = _user_id(request)
+    host = body.host.strip().lower().rstrip(".")
+    graph_name = body.graph_name.strip()
+    if (
+        not graph_name
+        or len(graph_name) > 128
+        or any(ord(char) < 32 for char in graph_name)
+    ):
+        raise HTTPException(status_code=422, detail="Nome do grafo FalkorDB inválido")
+    await _validate_falkordb_destination(host, body.port, workspace_id)
+
+    provider = get_secrets_provider()
+    try:
+        if body.username is not None:
+            if body.username:
+                await provider.set(
+                    user_id, "CONTEXT_GRAPH_FALKORDB_USERNAME", body.username
+                )
+            else:
+                await provider.delete(user_id, "CONTEXT_GRAPH_FALKORDB_USERNAME")
+        if body.password is not None:
+            if body.password:
+                await provider.set(
+                    user_id, "CONTEXT_GRAPH_FALKORDB_PASSWORD", body.password
+                )
+            else:
+                await provider.delete(user_id, "CONTEXT_GRAPH_FALKORDB_PASSWORD")
+    except Exception as exc:
+        logger.warning("context-graph: credencial FalkorDB não pôde ser salva")
+        raise HTTPException(
+            status_code=503,
+            detail="O cofre de credenciais precisa estar desbloqueado para salvar a conexão",
+        ) from exc
+
+    previous = runtime_settings.get(_falkordb_config_key(user_id))
+    previous = previous if isinstance(previous, dict) else {}
+    has_username = (
+        bool(body.username)
+        if body.username is not None
+        else bool(previous.get("has_username", False))
+    )
+    has_password = (
+        bool(body.password)
+        if body.password is not None
+        else bool(previous.get("has_password", False))
+    )
+    runtime_settings.set(
+        _falkordb_config_key(user_id),
+        {
+            "host": host,
+            "port": body.port,
+            "graph_name": graph_name,
+            "has_username": has_username,
+            "has_password": has_password,
+        },
+    )
+    return FalkorDBConfigResponse(
+        configured=True,
+        host=host,
+        port=body.port,
+        graph_name=graph_name,
+        has_username=has_username,
+        has_password=has_password,
+    )
+
+
+@router.delete("/falkordb/config", response_model=FalkorDBConfigResponse)
+async def delete_falkordb_config(request: Request) -> FalkorDBConfigResponse:
+    from backend.secrets import get_secrets_provider
+    from backend.workspace.runtime_settings import runtime_settings
+
+    user_id = _user_id(request)
+    provider = get_secrets_provider()
+    try:
+        await provider.delete(user_id, "CONTEXT_GRAPH_FALKORDB_USERNAME")
+        await provider.delete(user_id, "CONTEXT_GRAPH_FALKORDB_PASSWORD")
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503, detail="Não foi possível acessar o cofre de credenciais"
+        ) from exc
+    runtime_settings.set(_falkordb_config_key(user_id), None)
+    return FalkorDBConfigResponse(configured=False)
+
+
+@router.post("/falkordb/push", response_model=FalkorDBPushResponse)
+async def push_graph_to_falkordb(
+    request: Request, workspace_id: str, body: FalkorDBPushRequest
+) -> FalkorDBPushResponse:
+    from backend.secrets import get_secrets_provider
+    from backend.workspace.runtime_settings import runtime_settings
+
+    user_id = _user_id(request)
+    if not body.confirmed:
+        raise HTTPException(
+            status_code=400, detail="A gravação exige confirmação explícita"
+        )
+    raw = runtime_settings.get(_falkordb_config_key(user_id))
+    if not isinstance(raw, dict):
+        raise HTTPException(
+            status_code=409, detail="Configure um destino FalkorDB primeiro"
+        )
+
+    host = str(raw.get("host", ""))
+    try:
+        port = int(raw.get("port", 6379))
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=409, detail="Configuração FalkorDB inválida"
+        ) from exc
+    pinned_ip = await _validate_falkordb_destination(host, port, workspace_id)
+    try:
+        username, password = await _falkordb_secrets(user_id)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503, detail="Desbloqueie o cofre de credenciais antes de enviar"
+        ) from exc
+
+    data = _require_graph_json(workspace_id)
+    graph_file = _require_graph_dir(workspace_id) / "graph.json"
+    if graph_file.stat().st_size > 32 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Grafo excede o limite de envio")
+    nodes = data.get("nodes", [])
+    edges = data.get("links", data.get("edges", []))
+    if (
+        not isinstance(nodes, list)
+        or not isinstance(edges, list)
+        or len(nodes) > 10_000
+        or len(edges) > 50_000
+    ):
+        raise HTTPException(status_code=413, detail="Grafo excede o limite de envio")
+
+    from backend.context_graph import export as graph_export
+    from backend.context_graph.build import build_from_json
+
+    graph = build_from_json(data, directed=bool(data.get("directed", False)))
+    community_nodes: dict[int, list[str]] = {}
+    for node in nodes:
+        if not isinstance(node, dict) or not isinstance(node.get("community"), int):
+            continue
+        community_nodes.setdefault(node["community"], []).append(
+            str(node.get("id", ""))
+        )
+    uri_host = f"[{host}]" if ":" in host and not host.startswith("[") else host
+    uri = f"redis://{uri_host}:{port}"
+    try:
+        result = await asyncio.to_thread(
+            graph_export.push_to_falkordb,
+            graph,
+            uri,
+            username,
+            password,
+            community_nodes,
+            str(raw.get("graph_name", "context graph")),
+            True,
+            pinned_ip=pinned_ip,
+        )
+    except ImportError as exc:
+        raise HTTPException(
+            status_code=501, detail="A integração FalkorDB não está instalada"
+        ) from exc
+    except Exception as exc:
+        logger.warning(
+            "context-graph: gravação FalkorDB falhou (%s)", type(exc).__name__
+        )
+        raise HTTPException(
+            status_code=502,
+            detail="Falha ao gravar no FalkorDB; verifique a conexão e as credenciais",
+        ) from exc
+    return FalkorDBPushResponse(nodes=result["nodes"], edges=result["edges"])
