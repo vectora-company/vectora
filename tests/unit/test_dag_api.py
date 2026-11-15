@@ -106,7 +106,7 @@ async def test_dag_operations_reject_a_thread_the_user_cannot_access(
     monkeypatch.setattr(dag, "_get_session_store", unexpected)
     request = _request()
 
-    with pytest.raises(HTTPException) as exc:
+    async def perform_operation() -> None:
         if operation == "read":
             await dag.get_latest_dag("thread-private", request)
         elif operation == "approve":
@@ -118,6 +118,9 @@ async def test_dag_operations_reject_a_thread_the_user_cannot_access(
             )
         else:
             await dag.cancel_dag("thread-private", "plan-private", request)
+
+    with pytest.raises(HTTPException) as exc:
+        await perform_operation()
 
     assert exc.value.status_code == 404
 
