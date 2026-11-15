@@ -6,6 +6,7 @@ import { GraphCanvas, darkTheme, lightTheme } from "reagraph";
 import type { GraphEdge, GraphNode } from "reagraph";
 import { Loader2, Search, Waypoints, X } from "lucide-react";
 
+import { Callout } from "@/components/ui/callout";
 import type {
   GraphCommunity,
   GraphClusterResult,
@@ -351,7 +352,13 @@ export function ContextGraphViewer({
             data-testid="graph-symbol-results"
           >
             {symbolError ? (
-              <p role="alert">{m.graph_symbol_error()}</p>
+              <Callout
+                type="error"
+                data-testid="graph-symbol-error"
+                className="rounded border-0 bg-transparent p-0 text-xs shadow-none [&>div>div]:text-xs [&>div>svg]:h-3 [&>div>svg]:w-3"
+              >
+                {m.graph_symbol_error()}
+              </Callout>
             ) : symbolResolution?.status === "not_found" ? (
               <p>{m.graph_symbol_not_found()}</p>
             ) : (
