@@ -188,8 +188,10 @@ raise SystemExit("releases recentes sem binário CPU oficial com SHA-256")
     tar -xzf "$TMP_DIR/$ASSET_NAME" -C "$TMP_DIR/unpacked"
     BIN=$(find "$TMP_DIR/unpacked" -type f -name llama-server -print -quit)
     [[ -n "$BIN" ]] || { printf 'O release não contém llama-server.\n' >&2; exit 1; }
-    mkdir -p "$VERSION_DIR/bin"
-    cp -a "$(dirname "$BIN")/." "$VERSION_DIR/bin/"
+    BINARY_DIR=$(dirname "$BIN")
+    PACKAGE_DIR=$(dirname "$BINARY_DIR")
+    mkdir -p "$VERSION_DIR"
+    cp -a "$PACKAGE_DIR/." "$VERSION_DIR/"
     chmod 755 "$VERSION_DIR/bin/llama-server"
     "$VERSION_DIR/bin/llama-server" --version >/dev/null
     rm -rf -- "$TMP_DIR"; trap - EXIT
