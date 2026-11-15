@@ -154,7 +154,8 @@ describe("useContextGraph", () => {
     const call = FETCH_MOCK.mock.calls.find((args) =>
       String(args[0]).includes("/build"),
     );
-    const body = JSON.parse(call![1].body as string);
+    expect(call).toBeDefined();
+    const body = JSON.parse(call?.[1]?.body as string);
     expect(body.model).toBe("gpt-4o");
     expect(body.mode).toBe("ast");
     expect(body.update).toBe(true);
@@ -175,7 +176,8 @@ describe("useContextGraph", () => {
       (args) =>
         String(args[0]).includes("/build") && args[1]?.method === "POST",
     );
-    const body = JSON.parse(call![1].body as string);
+    expect(call).toBeDefined();
+    const body = JSON.parse(call?.[1]?.body as string);
     expect(body.resume).toBe(true);
     expect(body.update).toBe(false);
   });
@@ -284,7 +286,8 @@ describe("useContextGraph", () => {
     const call = FETCH_MOCK.mock.calls.find((a) =>
       String(a[0]).includes("/affected"),
     );
-    const body = JSON.parse(call![1].body as string);
+    expect(call).toBeDefined();
+    const body = JSON.parse(call?.[1]?.body as string);
     expect(body.node_query).toBe("AuthService");
     expect(body.depth).toBe(3);
     expect(out).toBe("impacto: X");
@@ -301,7 +304,8 @@ describe("useContextGraph", () => {
     const call = FETCH_MOCK.mock.calls.find((a) =>
       String(a[0]).includes("/affected"),
     );
-    expect(JSON.parse(call![1].body as string).depth).toBe(2);
+    expect(call).toBeDefined();
+    expect(JSON.parse(call?.[1]?.body as string).depth).toBe(2);
   });
 
   it("queryAffected: resposta não-ok retorna string vazia", async () => {
@@ -360,7 +364,8 @@ describe("useContextGraph", () => {
     const call = FETCH_MOCK.mock.calls.find((a) =>
       String(a[0]).includes("/build"),
     );
-    expect(JSON.parse(call![1].body as string).update).toBe(true);
+    expect(call).toBeDefined();
+    expect(JSON.parse(call?.[1]?.body as string).update).toBe(true);
   });
 
   it("update propaga o model para o build", async () => {
@@ -374,7 +379,8 @@ describe("useContextGraph", () => {
     const call = FETCH_MOCK.mock.calls.find((a) =>
       String(a[0]).includes("/build"),
     );
-    expect(JSON.parse(call![1].body as string).model).toBe("claude");
+    expect(call).toBeDefined();
+    expect(JSON.parse(call?.[1]?.body as string).model).toBe("claude");
   });
 
   // ── polling ──────────────────────────────────────────────────────────────────
