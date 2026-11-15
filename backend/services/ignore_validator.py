@@ -1,13 +1,7 @@
 """Validador de padrões de ignore (gitignore, npmignore, dockerignore, etc).
 
-Respeita múltiplos sistemas de ignore:
-- .gitignore (git)
-- .npmignore (npm)
-- .dockerignore (Docker)
-- .prettierignore (Prettier)
-- .eslintignore (ESLint)
-- .flake8ignore / .pylintrc (Python)
-- .gitattributes (git attributes)
+Respeita arquivos de ignore do workspace com sintaxe gitignore, além das regras
+dedicadas do Vectora em ``.vectoraignore`` e dos bloqueios de segurança locais.
 
 Previne que Vectora faça embedding de:
 - node_modules/, venv/, .venv/, __pycache__/
@@ -19,7 +13,12 @@ Previne que Vectora faça embedding de:
 
 import logging
 import re
+from collections.abc import Sequence
 from pathlib import Path
+
+import pathspec
+
+from backend.services.ignore import is_ignored
 
 logger = logging.getLogger(__name__)
 
@@ -34,15 +33,18 @@ class IgnorePatternValidator:
             base_dir: Diretório base para procurar ignore files.
                      Se None, usa diretório atual.
         """
-        self.base_dir = base_dir or Path.cwd()
+        self.base_dir = (base_dir or Path.cwd()).resolve()
         self.patterns: list[str] = []
+        self._configured_patterns: list[str] = []
+        self._spec = pathspec.PathSpec.from_lines("gitignore", [])
         self.ignore_files = [
             ".gitignore",
+            ".vectoraignore",
             ".npmignore",
             ".dockerignore",
             ".prettierignore",
             ".eslintignore",
-            ".gitattributes",
+            ".flake8ignore",
         ]
 
         # Padrões embutidos que sempre devem ser ignorados
@@ -93,18 +95,21 @@ class IgnorePatternValidator:
             extra={"base_dir": str(self.base_dir)},
         )
 
-        # Carregar padrões embutidos (strings simples para substring matching)
         self.patterns = self.builtin_patterns.copy()
-
-        # Carregar padrões de arquivos de ignore
+        self._configured_patterns = []
         for ignore_file in self.ignore_files:
             ignore_path = self.base_dir / ignore_file
             if ignore_path.exists():
                 try:
                     self._load_from_file(ignore_path)
-                    logger.debug(f"Loaded patterns from {ignore_file}")
+                    logger.debug("Loaded patterns from %s", ignore_file)
                 except Exception as e:
-                    logger.warning(f"Failed to load patterns from {ignore_file}: {e}")
+                    logger.warning(
+                        "Failed to load patterns from %s: %s", ignore_file, e
+                    )
+        self._spec = pathspec.PathSpec.from_lines(
+            "gitignore", self._configured_patterns
+        )
 
         logger.info(
             "Ignore patterns loaded",
@@ -124,19 +129,12 @@ class IgnorePatternValidator:
             for raw_line in f:
                 line = raw_line.strip()
 
-                # Ignorar linhas vazias e comentários
-                if not line or line.startswith("#"):
-                    continue
-
-                # Remover ! (negation patterns - simplificamos ignorando por enquanto)
-                if line.startswith("!"):
-                    continue
-
-                # Adicionar padrão simples como string (substring matching)
-                # Remover slashes para padrões mais flexíveis
-                clean_pattern = line.rstrip("/").lstrip("/")
-                if clean_pattern and clean_pattern not in self.patterns:
-                    self.patterns.append(clean_pattern)
+                if line and not line.startswith("#"):
+                    self._configured_patterns.append(line)
+                    line = line.removeprefix("!")
+                    clean_pattern = line.rstrip("/").lstrip("/")
+                    if clean_pattern and clean_pattern not in self.patterns:
+                        self.patterns.append(clean_pattern)
 
     @staticmethod
     def _glob_to_regex(glob_pattern: str) -> str:
@@ -152,27 +150,16 @@ class IgnorePatternValidator:
         Returns:
             Padrão regex equivalente
         """
-        # Remover trailing slashes
         glob_pattern = glob_pattern.rstrip("/")
-
-        # Escaper especiais de regex primeiro
         pattern = re.escape(glob_pattern)
-
-        # Desescaper wildcards (que queremos como regex)
-        pattern = pattern.replace(r"\*\*", ".*")  # ** = qualquer coisa (recursivo)
-        pattern = pattern.replace(r"\*", "[^/]*")  # * = qualquer coisa except /
-
-        # Se o padrão é simples (sem /), permite match em qualquer lugar
+        pattern = pattern.replace(r"\*\*", ".*")
+        pattern = pattern.replace(r"\*", "[^/]*")
         if "/" not in glob_pattern and not glob_pattern.startswith("."):
-            # Pattern como "node_modules" deve match "dir/node_modules/..."
             pattern = f"(^|.*/){pattern}(/.*)?$"
         elif glob_pattern.startswith("."):
-            # Padrões que começam com . (como .env)
             pattern = f"(^|.*/){pattern}$"
         else:
-            # Padrões com / - match normal
             pattern = f"^{pattern}(/.*)?$"
-
         return pattern
 
     def should_ignore(self, file_path: Path | str) -> bool:
@@ -187,25 +174,54 @@ class IgnorePatternValidator:
         if isinstance(file_path, str):
             file_path = Path(file_path)
 
-        # Converter para string normalizada (lowercase for case-insensitive matching)
-        path_str = str(file_path).replace("\\", "/").lower()
+        candidate = Path(file_path)
+        if not candidate.is_absolute():
+            candidate = self.base_dir / candidate
+        candidate = candidate.resolve()
+        try:
+            relative = candidate.relative_to(self.base_dir)
+        except ValueError:
+            logger.debug("Ignore validator rejected path outside root: %s", candidate)
+            return True
 
-        # Verificar contra todos os padrões (agora são strings simples)
-        for pattern in self.patterns:
-            pattern_str = pattern.lower() if isinstance(pattern, str) else pattern
+        parts = {part.lower() for part in relative.parts}
+        if parts.intersection(
+            {
+                "__pycache__",
+                ".venv",
+                "venv",
+                ".egg-info",
+                ".mypy_cache",
+                ".pytest_cache",
+                "node_modules",
+                "build",
+                "dist",
+                ".build",
+                "target",
+                ".git",
+                ".github",
+                ".secrets",
+                ".ssh",
+                ".aws",
+                ".kube",
+            }
+        ):
+            return True
+        name = relative.name.lower()
+        if (
+            name == ".env"
+            or name.startswith(".env.")
+            or name in {"credentials", "id_rsa", "id_ed25519"}
+            or name.endswith((".pem", ".key", ".jks"))
+        ):
+            return True
 
-            # Substring matching - verifica se padrão está em qualquer parte do caminho
-            if isinstance(pattern_str, str):
-                if pattern_str in path_str or f"/{pattern_str}/" in f"/{path_str}/":
-                    logger.debug(
-                        "File should be ignored",
-                        extra={"file": str(file_path), "pattern": pattern_str},
-                    )
-                    return True
+        relative_path = relative.as_posix()
+        return self._spec.match_file(relative_path) or is_ignored(
+            candidate, self.base_dir, None
+        )
 
-        return False
-
-    def filter_files(self, file_paths: list[Path | str]) -> list[Path]:
+    def filter_files(self, file_paths: Sequence[Path | str]) -> list[Path]:
         """Filtra lista de arquivos removendo os que devem ser ignorados.
 
         Args:
@@ -244,7 +260,7 @@ class IgnorePatternValidator:
 
 
 # Singleton global
-_validator: IgnorePatternValidator | None = None
+_validators: dict[Path, IgnorePatternValidator] = {}
 
 
 def get_ignore_validator(base_dir: Path | None = None) -> IgnorePatternValidator:
@@ -256,7 +272,12 @@ def get_ignore_validator(base_dir: Path | None = None) -> IgnorePatternValidator
     Returns:
         IgnorePatternValidator singleton
     """
-    global _validator
-    if _validator is None:
-        _validator = IgnorePatternValidator(base_dir)
-    return _validator
+    root = (base_dir or Path.cwd()).resolve()
+    validator = _validators.get(root)
+    if validator is None:
+        validator = IgnorePatternValidator(root)
+        _validators[root] = validator
+    else:
+        # Recarrega arquivos de ignore para respeitar alterações no workspace.
+        validator._load_ignore_patterns()
+    return validator

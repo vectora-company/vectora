@@ -62,3 +62,38 @@ async def test_internal_provider_does_not_list_keys_when_vault_is_locked(monkeyp
 
     with pytest.raises(RuntimeError, match="não está aberto"):
         await internal.InternalSecretsProvider().list_keys("user-1")
+
+
+async def test_secret_key_listing_isolated_between_real_internal_vaults(
+    monkeypatch, tmp_path
+):
+    from backend.api.handlers import auth
+    from backend.secrets import internal
+
+    monkeypatch.setattr(internal, "_DB_PATH", tmp_path / "secrets.db")
+    monkeypatch.setattr(internal, "_db_conn", None)
+    monkeypatch.setattr(internal, "_open_keys", {})
+    monkeypatch.setattr(
+        internal,
+        "_derive_key",
+        lambda user_id, password: (user_id + password).encode().ljust(32, b"0")[:32],
+    )
+    provider = internal.InternalSecretsProvider()
+    try:
+        await provider.unlock("alice", "alice-password")
+        await provider.unlock("bob", "bob-password")
+        await provider.set("alice", "ALICE_TOKEN", "alice-secret-value")
+        await provider.set("bob", "BOB_TOKEN", "bob-secret-value")
+
+        monkeypatch.setattr("backend.secrets.get_secrets_provider", lambda: provider)
+        result = await auth.list_secret_keys(_request(SimpleNamespace(id="alice")))
+
+        assert result == {"keys": ["ALICE_TOKEN"]}
+        assert "alice-secret-value" not in str(result)
+        assert "bob-secret-value" not in str(result)
+        assert await provider.list_keys("bob") == ["BOB_TOKEN"]
+    finally:
+        connection = internal._db_conn
+        if connection is not None:
+            await connection.close()
+        internal._db_conn = None

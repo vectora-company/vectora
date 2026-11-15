@@ -797,6 +797,7 @@ async def ingest_docs(
         JSON com total_files, total_chunks, indexed (enfileirados), failed
     """
     from backend.services.ignore import load_ignore_spec, walk_files
+    from backend.services.ignore_validator import get_ignore_validator
     from backend.tools.fs import _confine
 
     # `directory_path` vem direto do modelo (tool call) — usa a mesma defesa
@@ -818,6 +819,15 @@ async def ingest_docs(
     # (subárvore inteira) e cada arquivo batido pelo glob mas ignorado pelo
     # spec entram em skipped_ignored.
     files_to_ingest, skipped_ignored = walk_files(path, glob_pattern, spec)
+    validator = get_ignore_validator(path)
+    ignore_summary = validator.get_ignored_patterns_summary()
+    validated_files = validator.filter_files(files_to_ingest)
+    skipped_ignored += len(files_to_ingest) - len(validated_files)
+    files_to_ingest = validated_files
+    logger.debug(
+        "ingest_docs ignore validator applied",
+        extra={"root": str(path), **ignore_summary},
+    )
 
     # Filtro por tipo de arquivo dos settings de RAG (code/document/paper).
     # Vazio = todos. Permite "RAG só de código" enquanto o Context Graph cuida
