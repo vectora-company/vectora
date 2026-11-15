@@ -157,25 +157,37 @@ EOF
   SERVICE=vectora-laya.service
   BASE_URL="http://127.0.0.1:$LAYA_PORT"
 else
-  for tool in git cmake c++ pkg-config; do command -v "$tool" >/dev/null 2>&1 || { printf 'Dependência ausente: %s.\n' "$tool" >&2; exit 1; }; done
+  for tool in curl cmake c++ pkg-config tar; do command -v "$tool" >/dev/null 2>&1 || { printf 'Dependência ausente: %s.\n' "$tool" >&2; exit 1; }; done
   pkg-config --exists libcurl || { printf 'Falta libcurl de desenvolvimento para baixar o modelo Hugging Face.\n' >&2; exit 1; }
   mkdir -p "$LLAMA_SRC_ROOT" "$LLAMA_ROOT/versions"
   if [[ ! -x "$LLAMA_ROOT/active/bin/llama-server" ]]; then
-    BUILD_SOURCE=
-    while IFS= read -r candidate; do
-      if git -C "$candidate/source" rev-parse --verify HEAD >/dev/null 2>&1; then BUILD_SOURCE=$candidate; break; fi
-      rm -rf -- "$candidate"
-    done < <(find "$LLAMA_SRC_ROOT" -maxdepth 1 -type d -name 'llama.cpp.*' -print)
-    if [[ -z "$BUILD_SOURCE" ]]; then
-      BUILD_SOURCE=$(mktemp -d "$LLAMA_SRC_ROOT/llama.cpp.XXXXXX")
-      git -c http.version=HTTP/1.1 clone --depth 1 https://github.com/ggml-org/llama.cpp.git "$BUILD_SOURCE/source"
+    LLAMA_COMMIT=$(curl --fail --silent --show-error --retry 5 --retry-all-errors --max-time 60 \
+      https://api.github.com/repos/ggml-org/llama.cpp/commits/master | python3 -c 'import json,sys; print(json.load(sys.stdin)["sha"])')
+    BUILD_SOURCE="$LLAMA_SRC_ROOT/llama.cpp-$LLAMA_COMMIT"
+    ARCHIVE="$LLAMA_SRC_ROOT/llama.cpp-$LLAMA_COMMIT.tar.gz"
+    if [[ ! -f "$BUILD_SOURCE/source/CMakeLists.txt" ]]; then
+      rm -rf -- "$BUILD_SOURCE"
+      mkdir -p "$BUILD_SOURCE/source"
+      ARCHIVE_URL="https://codeload.github.com/ggml-org/llama.cpp/tar.gz/$LLAMA_COMMIT"
+      CURL_ARGS=(--fail --location --silent --show-error --retry 10 --retry-all-errors --connect-timeout 20 --max-time 1200)
+      if [[ -f "$ARCHIVE" ]]; then
+        curl "${CURL_ARGS[@]}" --continue-at - -o "$ARCHIVE" "$ARCHIVE_URL"
+      else
+        curl "${CURL_ARGS[@]}" -o "$ARCHIVE" "$ARCHIVE_URL"
+      fi
+      if ! tar -tzf "$ARCHIVE" >/dev/null 2>&1; then
+        rm -f -- "$ARCHIVE"
+        curl "${CURL_ARGS[@]}" -o "$ARCHIVE" "$ARCHIVE_URL"
+      fi
+      tar -tzf "$ARCHIVE" >/dev/null
+      tar -xzf "$ARCHIVE" --strip-components=1 -C "$BUILD_SOURCE/source"
     fi
-    LLAMA_COMMIT=$(git -C "$BUILD_SOURCE/source" rev-parse HEAD)
     RUNTIME_ID=${LLAMA_COMMIT:0:16}
     VERSION_DIR="$LLAMA_ROOT/versions/$RUNTIME_ID"
     BUILD_DIR="$BUILD_SOURCE/build"
     cmake -S "$BUILD_SOURCE/source" -B "$BUILD_DIR" \
       -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$VERSION_DIR" \
+      -DLLAMA_BUILD_COMMIT="$LLAMA_COMMIT" \
       -DGGML_NATIVE=ON -DGGML_CUDA=OFF -DGGML_VULKAN=OFF -DGGML_METAL=OFF \
       -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF \
       -DLLAMA_BUILD_TOOLS=ON -DLLAMA_BUILD_SERVER=ON -DLLAMA_BUILD_APP=OFF \
@@ -186,10 +198,10 @@ else
     ln -sfn "versions/$RUNTIME_ID" "$LLAMA_ROOT/.active.tmp"
     mv -Tf "$LLAMA_ROOT/.active.tmp" "$LLAMA_ROOT/active"
     LLAMA_VERSION=$("$VERSION_DIR/bin/llama-server" --version | head -n 1)
-    python3 - "$LLAMA_ROOT" "$RUNTIME_ID" "$LLAMA_VERSION" <<'PY'
+    python3 - "$LLAMA_ROOT" "$RUNTIME_ID" "$LLAMA_VERSION" "$LLAMA_COMMIT" <<'PY'
 import hashlib, json, pathlib, sys
 from datetime import datetime, timezone
-root = pathlib.Path(sys.argv[1]); rid = sys.argv[2]; version = sys.argv[3]
+root = pathlib.Path(sys.argv[1]); rid = sys.argv[2]; version = sys.argv[3]; commit = sys.argv[4]
 directory = root / "versions" / rid
 files = [str(path) for path in directory.rglob("*") if path.is_file()]
 digest = hashlib.sha256((directory / "bin" / "llama-server").read_bytes()).hexdigest()
@@ -198,14 +210,14 @@ try:
     runtimes = json.loads(manifest_path.read_text(encoding="utf-8")).get("runtimes", [])
 except (OSError, json.JSONDecodeError): runtimes = []
 runtimes = [item for item in runtimes if not isinstance(item, dict) or item.get("id") != rid]
-runtimes.append({"id": rid, "asset": "llama.cpp source build", "source": "https://github.com/ggml-org/llama.cpp", "sha256": digest, "files": files, "directory": str(directory), "version": version, "installed_at": datetime.now(timezone.utc).isoformat()})
+runtimes.append({"id": rid, "asset": "llama.cpp source build", "source": "https://github.com/ggml-org/llama.cpp", "commit": commit, "sha256": digest, "files": files, "directory": str(directory), "version": version, "installed_at": datetime.now(timezone.utc).isoformat()})
 temporary = manifest_path.with_suffix(".json.tmp")
 temporary.write_text(json.dumps({"runtimes": runtimes}, indent=2) + "\n", encoding="utf-8")
 temporary.replace(manifest_path)
 active = root / "active-runtime"
 if not active.exists(): active.write_text(rid + "\n", encoding="utf-8")
 PY
-    rm -rf -- "$BUILD_SOURCE"
+    rm -rf -- "$BUILD_SOURCE" "$LLAMA_SRC_ROOT/llama.cpp-$LLAMA_COMMIT.tar.gz"
   fi
   LLAMA_EXE="$LLAMA_ROOT/active/bin/llama-server"
   cat > "$UNIT_DIR/vectora-laya-llama.service" <<EOF
