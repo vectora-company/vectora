@@ -179,7 +179,7 @@ raise SystemExit("releases recentes sem binário CPU oficial com SHA-256")
   [[ "$ASSET_URL" == https://github.com/ggml-org/llama.cpp/releases/download/* ]] || { printf 'URL de release inesperada.\n' >&2; exit 1; }
   RUNTIME_ID="${RELEASE_TAG}-${ASSET_SHA:0:16}"
   VERSION_DIR="$LLAMA_ROOT/versions/$RUNTIME_ID"
-  if [[ ! -x "$VERSION_DIR/bin/llama-server" ]]; then
+  if ! find "$VERSION_DIR" -type f -name llama-server -executable -print -quit 2>/dev/null | grep -q .; then
     TMP_DIR=$(mktemp -d "$LLAMA_ROOT/.install.XXXXXX")
     trap 'rm -rf -- "$TMP_DIR"' EXIT
     curl --fail --location --silent --show-error --retry 10 --retry-all-errors --connect-timeout 20 --max-time 1800 -o "$TMP_DIR/$ASSET_NAME" "$ASSET_URL"
@@ -188,15 +188,18 @@ raise SystemExit("releases recentes sem binário CPU oficial com SHA-256")
     tar -xzf "$TMP_DIR/$ASSET_NAME" -C "$TMP_DIR/unpacked"
     BIN=$(find "$TMP_DIR/unpacked" -type f -name llama-server -print -quit)
     [[ -n "$BIN" ]] || { printf 'O release não contém llama-server.\n' >&2; exit 1; }
-    BINARY_DIR=$(dirname "$BIN")
-    PACKAGE_DIR=$(dirname "$BINARY_DIR")
     mkdir -p "$VERSION_DIR"
-    cp -a "$PACKAGE_DIR/." "$VERSION_DIR/"
-    chmod 755 "$VERSION_DIR/bin/llama-server"
-    "$VERSION_DIR/bin/llama-server" --version >/dev/null
+    cp -a "$TMP_DIR/unpacked/." "$VERSION_DIR/"
+    SERVER_PATH=$(find "$VERSION_DIR" -type f -name llama-server -print -quit)
+    [[ -n "$SERVER_PATH" ]] || { printf 'O executável não foi instalado no runtime.\n' >&2; exit 1; }
+    chmod 755 "$SERVER_PATH"
+    "$SERVER_PATH" --version >/dev/null
     rm -rf -- "$TMP_DIR"; trap - EXIT
     ln -sfn "versions/$RUNTIME_ID" "$LLAMA_ROOT/.active.tmp"; mv -Tf "$LLAMA_ROOT/.active.tmp" "$LLAMA_ROOT/active"
-    python3 - "$LLAMA_ROOT" "$RUNTIME_ID" "$RELEASE_TAG" "$ASSET_NAME" "$ASSET_URL" "$ASSET_SHA" <<'PY'
+  else
+    ln -sfn "versions/$RUNTIME_ID" "$LLAMA_ROOT/.active.tmp"; mv -Tf "$LLAMA_ROOT/.active.tmp" "$LLAMA_ROOT/active"
+  fi
+  python3 - "$LLAMA_ROOT" "$RUNTIME_ID" "$RELEASE_TAG" "$ASSET_NAME" "$ASSET_URL" "$ASSET_SHA" <<'PY'
 import json, pathlib, sys
 from datetime import datetime, timezone
 root=pathlib.Path(sys.argv[1]); rid,tag,name,url,digest=sys.argv[2:]
@@ -208,9 +211,9 @@ runtimes.append({'id':rid,'asset':name,'source':url,'release':tag,'sha256':diges
 tmp=manifest.with_suffix('.json.tmp'); tmp.write_text(json.dumps({'runtimes':runtimes},indent=2)+'\n'); tmp.replace(manifest)
 (root/'active-runtime').write_text(rid+'\n')
 PY
-  else
-    ln -sfn "versions/$RUNTIME_ID" "$LLAMA_ROOT/.active.tmp"; mv -Tf "$LLAMA_ROOT/.active.tmp" "$LLAMA_ROOT/active"
-  fi
+  LLAMA_RELATIVE=$(find -L "$LLAMA_ROOT/active" -type f -name llama-server -print -quit | sed "s#^$LLAMA_ROOT/active/##")
+  [[ -n "$LLAMA_RELATIVE" ]] || { printf 'llama-server ausente no runtime ativado.\n' >&2; exit 1; }
+  LLAMA_EXE="$LLAMA_ROOT/active/$LLAMA_RELATIVE"
   MODEL_META=$(curl --fail --location --silent --show-error --retry 5 --retry-all-errors --max-time 90 'https://huggingface.co/api/models/ggml-org/Laya-GGUF?blobs=true')
   read -r MODEL_REV MODEL_SIZE MODEL_SHA < <(python3 -c '
 import json,sys
@@ -235,7 +238,6 @@ else: raise SystemExit("Laya-Q8_0.gguf ausente no repositório oficial")
 import json,pathlib,sys
 path=pathlib.Path(sys.argv[1]); path.write_text(json.dumps({'repo_id':'ggml-org/Laya-GGUF','filename':'Laya-Q8_0.gguf','revision':sys.argv[2],'sha256':sys.argv[3]},indent=2)+'\n')
 PY
-  LLAMA_EXE="$LLAMA_ROOT/active/bin/llama-server"
   cat > "$UNIT_DIR/vectora-laya-llama.service" <<EOF
 [Unit]
 Description=Laya GGUF local via llama.cpp para Vectora
