@@ -18,7 +18,7 @@ export function getWorkbenchGroupWidth(
     : WORKBENCH_RAIL_WIDTH;
 }
 
-/** Width animation used by the legacy HorizontalSplit workbench. */
+/** Shared width animation for the desktop shell's resizable columns. */
 export const WORKBENCH_WIDTH_TRANSITION = {
   type: "spring" as const,
   stiffness: 260,
