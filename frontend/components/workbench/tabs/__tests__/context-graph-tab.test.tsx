@@ -186,6 +186,38 @@ describe("ContextGraphTab", () => {
       );
       expect(mockPushToFalkordb).not.toHaveBeenCalled();
     });
+
+    it("mostra a falha do envio sem expor credenciais", async () => {
+      setup({
+        status: { status: "done", node_count: 1, edge_count: 0 },
+        falkordbConfig: {
+          configured: true,
+          host: "graph.example.com",
+          port: 6379,
+          graph_name: "project",
+          has_username: true,
+          has_password: true,
+        },
+      });
+      mockPushToFalkordb.mockRejectedValueOnce(
+        new Error(
+          "Falha ao gravar no FalkorDB; verifique a conexão e as credenciais",
+        ),
+      );
+      vi.spyOn(window, "confirm").mockReturnValue(true);
+      render(<ContextGraphTab threadId="t1" />);
+      fireEvent.click(
+        screen.getByRole("button", { name: "graph_falkordb_title" }),
+      );
+      fireEvent.click(
+        screen.getByRole("button", { name: "graph_falkordb_send" }),
+      );
+
+      expect(await screen.findByRole("status")).toHaveTextContent(
+        "Falha ao gravar no FalkorDB; verifique a conexão e as credenciais",
+      );
+      expect(screen.queryByText("remote-secret-value")).toBeNull();
+    });
   });
 
   describe("exportação", () => {
