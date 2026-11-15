@@ -226,6 +226,7 @@ PY
   LLAMA_RELATIVE=$(find -L "$LLAMA_ROOT/active" -type f -name llama-server -print -quit | sed "s#^$LLAMA_ROOT/active/##")
   [[ -n "$LLAMA_RELATIVE" ]] || { printf 'llama-server ausente no runtime ativado.\n' >&2; exit 1; }
   LLAMA_EXE="$LLAMA_ROOT/active/$LLAMA_RELATIVE"
+  "$LLAMA_EXE" --version >/dev/null
   MODEL_META=$(curl --fail --location --silent --show-error --retry 5 --retry-all-errors --max-time 90 'https://huggingface.co/api/models/ggml-org/Laya-GGUF?blobs=true')
   read -r MODEL_REV MODEL_SIZE MODEL_SHA < <(python3 -c '
 import json,sys
