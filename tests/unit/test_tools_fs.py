@@ -110,7 +110,9 @@ class TestFileRead:
         assert "sensível" in result.lower() or "error" in result.lower()
         assert "chave-privada-fake" not in result
 
-    async def test_remote_workspace_reads_through_transport(self, tmp_path, monkeypatch):
+    async def test_remote_workspace_reads_through_transport(
+        self, tmp_path, monkeypatch
+    ):
         from unittest.mock import AsyncMock
 
         from backend.workspace import workspace as ws_mod
@@ -150,7 +152,9 @@ class TestFileRead:
             "/workspaces/project/src/a.py", max_bytes=1_048_576
         )
 
-    async def test_remote_workspace_rejects_parent_traversal(self, tmp_path, monkeypatch):
+    async def test_remote_workspace_rejects_parent_traversal(
+        self, tmp_path, monkeypatch
+    ):
         from unittest.mock import AsyncMock
 
         from backend.tools import fs as fs_mod
@@ -177,7 +181,9 @@ class TestFileRead:
         transport.run.assert_not_awaited()
         transport.read_file.assert_not_awaited()
 
-    async def test_remote_write_requires_trust_and_uses_transport(self, tmp_path, monkeypatch):
+    async def test_remote_write_requires_trust_and_uses_transport(
+        self, tmp_path, monkeypatch
+    ):
         from unittest.mock import AsyncMock
 
         from backend.tools import fs as fs_mod
@@ -206,7 +212,9 @@ class TestFileRead:
         monkeypatch.setattr("backend.transport.get_transport", lambda _ws: transport)
 
         result = await fs_mod.file_write(
-            "new.txt", "conteúdo", ctx_from_config({"configurable": {"workspace_id": ws.id}})
+            "new.txt",
+            "conteúdo",
+            ctx_from_config({"configurable": {"workspace_id": ws.id}}),
         )
 
         assert "Remote file written" in result
