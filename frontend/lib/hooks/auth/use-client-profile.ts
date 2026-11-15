@@ -37,6 +37,7 @@ const STORAGE_KEY = STORAGE_KEYS.CLIENT_PROFILE;
 interface UseClientProfileReturn {
   clientProfile: ClientProfile;
   hasLoaded: boolean;
+  persistenceError: boolean;
   updateClientProfile: (updates: Partial<ClientProfile>) => void;
   resetClientProfile: () => void;
 }
@@ -70,6 +71,7 @@ export function useClientProfile(): UseClientProfileReturn {
     createClientProfile(),
   );
   const [hasLoaded, setHasLoaded] = useState(false);
+  const [persistenceError, setPersistenceError] = useState(false);
 
   // Load profile from localStorage on mount. `clientProfile` aqui é lido do
   // closure do primeiro render (efeito roda uma única vez, deps []) — é o
@@ -88,18 +90,22 @@ export function useClientProfile(): UseClientProfileReturn {
         // possível no client, por isso fica num efeito.
         // oxlint-disable-next-line react/set-state-in-effect
         setClientProfile(resolveClientProfile(parsed));
+        setPersistenceError(false);
         setHasLoaded(true);
         return;
       }
     } catch (error) {
       console.error("Failed to load client identity", error);
+      setPersistenceError(true);
     }
 
     // No stored profile found, persist the initial one
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(clientProfile));
+      setPersistenceError(false);
     } catch (error) {
       console.error("Failed to persist client identity", error);
+      setPersistenceError(true);
     }
 
     setHasLoaded(true);
@@ -117,8 +123,10 @@ export function useClientProfile(): UseClientProfileReturn {
 
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(profile));
+      setPersistenceError(false);
     } catch (error) {
       console.error("Failed to persist client identity", error);
+      setPersistenceError(true);
     }
   }, []);
 
@@ -150,6 +158,7 @@ export function useClientProfile(): UseClientProfileReturn {
   return {
     clientProfile,
     hasLoaded,
+    persistenceError,
     updateClientProfile,
     resetClientProfile,
   };
