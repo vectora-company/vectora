@@ -104,7 +104,9 @@ class IgnorePatternValidator:
                     self._load_from_file(ignore_path)
                     logger.debug("Loaded patterns from %s", ignore_file)
                 except Exception as e:
-                    logger.warning("Failed to load patterns from %s: %s", ignore_file, e)
+                    logger.warning(
+                        "Failed to load patterns from %s: %s", ignore_file, e
+                    )
         self._spec = pathspec.PathSpec.from_lines(
             "gitignore", self._configured_patterns
         )
@@ -185,9 +187,22 @@ class IgnorePatternValidator:
         parts = {part.lower() for part in relative.parts}
         if parts.intersection(
             {
-                "__pycache__", ".venv", "venv", ".egg-info", ".mypy_cache",
-                ".pytest_cache", "node_modules", "build", "dist", ".build",
-                "target", ".git", ".github", ".secrets", ".ssh", ".aws",
+                "__pycache__",
+                ".venv",
+                "venv",
+                ".egg-info",
+                ".mypy_cache",
+                ".pytest_cache",
+                "node_modules",
+                "build",
+                "dist",
+                ".build",
+                "target",
+                ".git",
+                ".github",
+                ".secrets",
+                ".ssh",
+                ".aws",
                 ".kube",
             }
         ):
