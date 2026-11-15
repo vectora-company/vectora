@@ -242,6 +242,7 @@ else: raise SystemExit("Laya-Q8_0.gguf ausente no repositório oficial")
     python3 - "$MODEL_FILE" "$MODEL_REV" "$MODEL_SIZE" "$MODEL_SHA" <<'PY'
 import concurrent.futures
 import hashlib
+import http.client
 import pathlib
 import shutil
 import sys
@@ -281,7 +282,7 @@ def fetch(index: int) -> pathlib.Path:
             temporary.write_bytes(payload)
             temporary.replace(target)
             return target
-        except (OSError, urllib.error.URLError, RuntimeError):
+        except (OSError, urllib.error.URLError, http.client.HTTPException, RuntimeError):
             temporary.unlink(missing_ok=True)
             if attempt == 5:
                 raise
