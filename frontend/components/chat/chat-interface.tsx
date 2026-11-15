@@ -938,13 +938,14 @@ export function ChatInterface({
         const assistantMessageId = generateMessageId();
         lastAssistantIdRef.current = assistantMessageId;
         const streamStart = Date.now();
-        const { assistantContent, requestReachedBackend } = await processStream(
-          content,
-          assistantMessageId,
-          files,
-          undefined,
-          userMessage.id,
-        );
+        const { assistantContent, requestReachedBackend, runId } =
+          await processStream(
+            content,
+            assistantMessageId,
+            files,
+            undefined,
+            userMessage.id,
+          );
         if (!assistantContent && !requestReachedBackend) outcome = "failed";
 
         // processStream nunca relança (absorve queda de transporte/erro de
@@ -964,14 +965,15 @@ export function ChatInterface({
 
         // Notificação OS quando resposta chega com aba oculta e >15s
         const streamDuration = Date.now() - streamStart;
-        // A chave liga o alerta à thread e ao turno: reenvio da fila ou
-        // retomada do stream com o mesmo turno não alertam de novo.
+        // A chave usa o run_id autoritativo do stream; sem ele não é possível
+        // deduplicar retomadas com segurança e o alerta não é entregue.
         if (
           streamDuration > 15_000 &&
           document.visibilityState === "hidden" &&
-          assistantContent
+          assistantContent &&
+          runId
         ) {
-          notifyOnce(notificationKey(threadId, userMessage.id, "done"), () =>
+          notifyOnce(notificationKey(threadId, runId, "done"), () =>
             deliverLocalNotification(
               "Vectora",
               "Resposta pronta — clique para ver.",
