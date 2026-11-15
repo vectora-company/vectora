@@ -454,7 +454,7 @@ class TestOllamaDiscovery:
         """Verifica o comportamento de ollama cleanup kills and waits with own deadline."""
         from backend.api.handlers import provider_routing
 
-        monkeypatch.setattr(provider_routing, "OLLAMA_CLEANUP_TIMEOUT_SECONDS", 0.001)
+        monkeypatch.setattr(provider_routing, "OLLAMA_CLEANUP_TIMEOUT_SECONDS", 0.1)
         process = MagicMock()
         process.kill = MagicMock()
         process.wait = AsyncMock()
