@@ -466,6 +466,8 @@
   "graph_export_failed": "The graph could not be exported.",
   "graph_export_format": "Export format",
   "graph_export_graphml": "GraphML",
+  "graph_export_obsidian": "Obsidian vault (.zip)",
+  "graph_export_svg": "SVG image",
   "graph_exporting": "Exporting…",
   "graph_files_progress": "{done}/{total} files",
   "graph_filetype_code": "Code",
