@@ -139,10 +139,12 @@ EOF
 # Compila o servidor CPU oficial em um diretório versionado e publica-o
 # atomicamente no layout que o runtime gerenciado do Vectora já reconhece.
 if [[ ! -x "$LLAMA_ROOT/active/bin/llama-server" ]]; then
-  BUILD_SOURCE=$(mktemp -d "$LLAMA_SRC_ROOT/llama.cpp.XXXXXX")
-  trap 'rm -rf -- "$BUILD_SOURCE"' EXIT
-  git -c http.version=HTTP/1.1 clone --depth 1 \
-    https://github.com/ggml-org/llama.cpp.git "$BUILD_SOURCE/source"
+  BUILD_SOURCE=$(find "$LLAMA_SRC_ROOT" -maxdepth 1 -type d -name 'llama.cpp.*' -print -quit)
+  if [[ -z "$BUILD_SOURCE" ]]; then
+    BUILD_SOURCE=$(mktemp -d "$LLAMA_SRC_ROOT/llama.cpp.XXXXXX")
+    git -c http.version=HTTP/1.1 clone --depth 1 \
+      https://github.com/ggml-org/llama.cpp.git "$BUILD_SOURCE/source"
+  fi
   LLAMA_COMMIT=$(git -C "$BUILD_SOURCE/source" rev-parse HEAD)
   LLAMA_RUNTIME_ID=${LLAMA_COMMIT:0:16}
   BUILD_DIR="$BUILD_SOURCE/build"
@@ -151,8 +153,8 @@ if [[ ! -x "$LLAMA_ROOT/active/bin/llama-server" ]]; then
     -DCMAKE_INSTALL_PREFIX="$LLAMA_ROOT/versions/$LLAMA_RUNTIME_ID" \
     -DGGML_NATIVE=ON -DGGML_CUDA=OFF -DGGML_VULKAN=OFF -DGGML_METAL=OFF \
     -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF \
-    -DLLAMA_BUILD_TOOLS=OFF -DLLAMA_BUILD_SERVER=ON -DLLAMA_BUILD_APP=OFF \
-    -DLLAMA_CURL=OFF
+    -DLLAMA_BUILD_TOOLS=ON -DLLAMA_BUILD_SERVER=ON -DLLAMA_BUILD_APP=OFF \
+    -DLLAMA_TESTS_INSTALL=OFF -DLLAMA_CURL=OFF
   cmake --build "$BUILD_DIR" --target llama-server --parallel "${VECTORA_BUILD_JOBS:-2}"
   cmake --install "$BUILD_DIR"
   VERSION_DIR="$LLAMA_ROOT/versions/$LLAMA_RUNTIME_ID"
@@ -190,7 +192,6 @@ if not active.exists():
     active.write_text(version + "\n", encoding="utf-8")
 PY
   rm -rf -- "$BUILD_SOURCE"
-  trap - EXIT
 fi
 
 systemctl --user daemon-reload
