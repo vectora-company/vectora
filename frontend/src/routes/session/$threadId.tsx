@@ -1,4 +1,11 @@
-import { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import {
+  cloneElement,
+  useState,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+} from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { PanelRightClose } from "lucide-react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
@@ -932,13 +939,25 @@ function SessionPage() {
         compactNavigation={
           isCompactSession
             ? {
-                onOpenSessions: () => setIsMobileSidebarOpen(true),
+                onOpenSessions: () => {
+                  if (isMobileSidebarOpen) {
+                    setIsMobileSidebarOpen(false);
+                    return;
+                  }
+                  setWorkbenchOpen(threadId, false);
+                  setIsMobileSidebarOpen(true);
+                },
+                sessionsSide: sidebarOnRight ? "right" : "left",
                 workbenchOpen:
                   uiMode === "assistant" && !chatMode && workbenchOpen,
                 onToggleWorkbench:
                   uiMode !== "assistant" || chatMode
                     ? undefined
-                    : () => setWorkbenchOpen(threadId, !workbenchOpen),
+                    : () => {
+                        setIsMobileSidebarOpen(false);
+                        setWorkbenchOpen(threadId, !workbenchOpen);
+                      },
+                workbenchSide: assistantWorkbenchSide,
               }
             : undefined
         }
@@ -948,10 +967,13 @@ function SessionPage() {
       showToolCalls,
       chatMode,
       isCompactSession,
+      isMobileSidebarOpen,
       workbenchOpen,
       setWorkbenchOpen,
       threadId,
       uiMode,
+      assistantWorkbenchSide,
+      sidebarOnRight,
     ],
   );
 
@@ -1072,9 +1094,17 @@ function SessionPage() {
         <Sheet open={isMobileSidebarOpen} onOpenChange={setIsMobileSidebarOpen}>
           <SheetContent
             side={sidebarOnRight ? "right" : "left"}
-            className={`p-0 w-72 ${sidebarOnRight ? "border-l" : "border-r"}`}
+            className={`p-0 w-72 max-w-[calc(100vw-3rem)] ${sidebarOnRight ? "border-l" : "border-r"}`}
           >
-            {sidebar}
+            {cloneElement(sidebar, {
+              inSheet: true,
+              isCollapsed: false,
+              onToggle: () => setIsMobileSidebarOpen(false),
+              onNewChat: () => {
+                setIsMobileSidebarOpen(false);
+                handleNewChat();
+              },
+            })}
           </SheetContent>
         </Sheet>
 
@@ -1085,10 +1115,8 @@ function SessionPage() {
               colunas externas. */}
 
           {uiMode === "kanban" && !chatMode ? (
-            // min-w-[360px]: piso mínimo pro conteúdo continuar legível
-            // quando a janela encolhe. Kanban não tem coluna lateral
-            // direita — header cobre a largura toda por não ter nada ao
-            // lado com quem competir.
+            // Kanban e o header precisam encolher até a largura real do
+            // smartphone; o conteúdo interno controla seu próprio overflow.
             <motion.div
               key="kanban-mode"
               initial={reducedMotion ? false : { opacity: 0, y: 6 }}
@@ -1100,7 +1128,7 @@ function SessionPage() {
                 centerHeader={headerEl}
                 left={showSidebarPanel ? sidebarPanel : null}
                 center={
-                  <div className="flex min-w-[360px] flex-1 min-h-0 overflow-hidden">
+                  <div className="flex w-full min-w-0 flex-1 min-h-0 overflow-hidden">
                     <KanbanBoard threadId={threadId} />
                   </div>
                 }
@@ -1166,7 +1194,7 @@ function SessionPage() {
               <IdeModeLayout
                 workbenchOpen={workbenchOpen}
                 onOpenWorkbench={openWorkbench}
-                layoutState={isCompactSession ? "mobile" : ideLayoutState}
+                layoutState={ideLayoutState}
                 direction={sidebarOnRight ? "rtl" : "ltr"}
                 workbenchSide={ideWorkbenchSide}
                 // The shell column includes the fixed 48px rail. splitSize
@@ -1323,9 +1351,21 @@ function SessionPage() {
                       {renderChatPanel(false)}
                     </div>
                     {isCompactSession && assistantWorkbenchVisible && (
-                      <div className="absolute inset-0 z-10 flex min-w-0 min-h-0 overflow-hidden">
-                        {assistantWorkbenchPanel}
-                      </div>
+                      <>
+                        <button
+                          type="button"
+                          data-testid="compact-workbench-backdrop"
+                          aria-label={m.workbench_close()}
+                          onClick={() => setWorkbenchOpen(threadId, false)}
+                          className="absolute inset-0 z-30 cursor-default bg-background/45"
+                        />
+                        <div
+                          data-testid="compact-workbench-overlay"
+                          className={`absolute inset-y-0 z-40 flex min-w-0 min-h-0 w-full overflow-hidden bg-background shadow-xl sm:w-[min(32rem,85%)] ${assistantWorkbenchSide === "left" ? "left-0 border-r" : "right-0 border-l"}`}
+                        >
+                          {assistantWorkbenchPanel}
+                        </div>
+                      </>
                     )}
                   </div>
                 }

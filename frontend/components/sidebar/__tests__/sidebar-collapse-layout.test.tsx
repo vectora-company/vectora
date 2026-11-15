@@ -143,6 +143,25 @@ describe("Sidebar — wrapper de animação não quebra o preenchimento de altur
     expect(wrapper.className).toContain("contents");
   });
 
+  it("dentro do Sheet ocupa o painel e não cria um segundo backdrop", () => {
+    const { container } = render(
+      <Sidebar
+        isCollapsed={false}
+        inSheet
+        onToggle={noop}
+        threads={threads}
+        currentThreadId=""
+        onSelectThread={noop}
+        onDeleteThread={noop}
+      />,
+    );
+
+    const aside = container.querySelector("aside")!;
+    expect(aside).toHaveClass("relative", "h-full", "w-full");
+    expect(container.querySelector(".backdrop-blur-sm")).toBeNull();
+    expect(screen.getByTestId("thread-list")).toBeInTheDocument();
+  });
+
   it("permite ocultar o título local quando o header do app vive na coluna central", () => {
     render(
       <Sidebar

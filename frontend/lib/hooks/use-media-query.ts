@@ -50,8 +50,8 @@ export function getUnscaledViewportWidth(): number {
 /** Tailwind `sm` breakpoint: below 640px is the smartphone layout. */
 export const IDE_COMPACT_BREAKPOINT = 640;
 
-/** Tablet-sized session windows switch to one panel plus explicit controls. */
-export const SESSION_COMPACT_BREAKPOINT = 900;
+/** Tablets and narrow desktop windows use one overlay sidebar at a time. */
+export const SESSION_COMPACT_BREAKPOINT = 1100;
 export type SessionLayoutState = "compact" | "wide";
 
 export function getSessionLayoutState(width: number): SessionLayoutState {
