@@ -23,7 +23,7 @@ import sys
 from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from backend.api.schemas import (
@@ -541,6 +541,57 @@ async def system_info(request: Request) -> dict:
         "services": services,
         "recent_spans_count": len(recent_spans),
     }
+
+
+@router.get("/traces")
+async def list_traces(
+    request: Request,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    session_id: Annotated[int | None, Query()] = None,
+) -> dict[str, list[dict[str, Any]]]:
+    """Lista metadados operacionais dos spans sem expor metadata livre."""
+    require_admin(_get_user(request))
+    from backend.persistence.tracer import tracer
+
+    spans = (
+        await tracer.get_session(session_id, limit=limit)
+        if session_id is not None
+        else await tracer.get_recent(n=limit)
+    )
+    public_fields = (
+        "span_id",
+        "parent_id",
+        "session_id",
+        "node",
+        "event",
+        "status",
+        "started_at",
+        "ended_at",
+        "duration_ms",
+        "in_tokens",
+        "out_tokens",
+    )
+    return {"traces": [{key: span.get(key) for key in public_fields} for span in spans]}
+
+
+@router.delete("/traces")
+async def clear_traces(
+    request: Request,
+    confirm: Annotated[bool, Query()] = False,
+    session_id: Annotated[int | None, Query()] = None,
+) -> dict[str, int]:
+    """Apaga spans somente após confirmação explícita de um administrador."""
+    require_admin(_get_user(request))
+    if not confirm:
+        raise HTTPException(status_code=400, detail="Confirmação necessária.")
+    from backend.persistence.tracer import tracer
+
+    removed = (
+        await tracer.clear_session(session_id)
+        if session_id is not None
+        else await tracer.clear_all()
+    )
+    return {"deleted": removed}
 
 
 @router.get("/config")

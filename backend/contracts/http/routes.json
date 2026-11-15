@@ -167,6 +167,14 @@
   },
   {
     "methods": [
+      "DELETE",
+      "GET"
+    ],
+    "name": "list_traces_admin_traces_get",
+    "path": "/admin/traces"
+  },
+  {
+    "methods": [
       "GET",
       "PATCH"
     ],

@@ -99,6 +99,15 @@ interface SystemInfo {
   recent_spans_count: number;
 }
 
+interface TraceSpan {
+  span_id: string;
+  node: string;
+  event: string;
+  status: string;
+  started_at: string;
+  duration_ms: number | null;
+}
+
 interface ServerConfig {
   allow_public_signup: boolean;
   db_dsn: string;
@@ -153,6 +162,12 @@ const api = {
       fetch(`/admin/invites/${tokenHash}`, { method: "DELETE" }).then(ensureOk),
   },
   system: () => fetch("/admin/system").then((r) => r.json()),
+  traces: () =>
+    fetch("/admin/traces?limit=20")
+      .then(ensureOk)
+      .then((r) => r.json()) as Promise<{ traces: TraceSpan[] }>,
+  clearTraces: () =>
+    fetch("/admin/traces?confirm=true", { method: "DELETE" }).then(ensureOk),
   config: {
     get: () => fetch("/admin/config").then((r) => r.json()),
     patch: (body: Partial<ServerConfig> & { vectora_token?: string }) =>
@@ -703,6 +718,8 @@ export function ToolsPanel() {
 
 export function SystemPanel() {
   const [info, setInfo] = useState<SystemInfo | null>(null);
+  const [traces, setTraces] = useState<TraceSpan[]>([]);
+  const [clearingTraces, setClearingTraces] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -710,7 +727,25 @@ export function SystemPanel() {
       .system()
       .then(setInfo)
       .finally(() => setLoading(false));
+    api
+      .traces()
+      .then((response) => setTraces(response.traces))
+      .catch(() => setTraces([]));
   }, []);
+
+  const clearTraces = async () => {
+    if (!window.confirm(m.admin_system_confirm_clear_traces())) return;
+    setClearingTraces(true);
+    try {
+      await api.clearTraces();
+      setTraces([]);
+      setInfo((current) =>
+        current ? { ...current, recent_spans_count: 0 } : current,
+      );
+    } finally {
+      setClearingTraces(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -735,6 +770,48 @@ export function SystemPanel() {
             <p className="text-xs font-medium truncate">{value}</p>
           </div>
         ))}
+      </div>
+
+      <div className="space-y-2 rounded-lg border bg-card p-3">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-medium">{m.admin_system_label_spans()}</p>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={clearingTraces || traces.length === 0}
+            onClick={() => void clearTraces()}
+          >
+            {clearingTraces ? (
+              <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Trash2 className="mr-1 h-3.5 w-3.5" />
+            )}
+            {m.admin_system_clear_traces()}
+          </Button>
+        </div>
+        {traces.length === 0 ? (
+          <p className="text-xs text-muted-foreground">
+            {m.admin_system_traces_empty()}
+          </p>
+        ) : (
+          <ul className="max-h-48 space-y-1 overflow-auto">
+            {traces.map((span) => (
+              <li
+                className="flex justify-between gap-2 text-xs text-muted-foreground"
+                key={span.span_id}
+              >
+                <span className="truncate">
+                  {span.node} · {span.event} · {span.status}
+                </span>
+                <span className="shrink-0">
+                  {span.duration_ms == null
+                    ? "—"
+                    : `${Math.round(span.duration_ms)} ms`}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       <div className="pt-3 border-t space-y-3">
