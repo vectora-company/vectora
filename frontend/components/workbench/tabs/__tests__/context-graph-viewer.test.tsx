@@ -80,6 +80,7 @@ import { ContextGraphViewer } from "../context-graph-viewer";
 import type {
   GraphClusterResult,
   GraphQueryResult,
+  GraphSymbolResolution,
 } from "@/lib/hooks/use-context-graph";
 
 const GRAPH_DATA = {
@@ -103,6 +104,7 @@ async function renderViewer(
   overrides: {
     fetchGraphData?: () => Promise<typeof GRAPH_DATA | null>;
     clusterGraph?: () => Promise<GraphClusterResult>;
+    resolveSymbol?: (symbol: string) => Promise<GraphSymbolResolution>;
     pathBetween?: (
       source: string,
       target: string,
@@ -133,10 +135,30 @@ async function renderViewer(
         node_count: 3,
       }),
     );
+  const resolveSymbol =
+    overrides.resolveSymbol ??
+    vi.fn(() =>
+      Promise.resolve({
+        status: "resolved" as const,
+        query: "AuthService",
+        candidates: [
+          {
+            id: "n1",
+            label: "AuthService",
+            source_file: "auth.py",
+            source_location: "L1",
+            community: 0,
+          },
+        ],
+        total: 1,
+        truncated: false,
+      }),
+    );
   render(
     <ContextGraphViewer
       fetchGraphData={fetchGraphData}
       clusterGraph={clusterGraph}
+      resolveSymbol={resolveSymbol}
       pathBetween={pathBetween}
       onExplainNode={onExplainNode}
       onAffectedNode={onAffectedNode}
@@ -149,10 +171,37 @@ async function renderViewer(
     fetchGraphData,
     pathBetween,
     clusterGraph,
+    resolveSymbol,
   };
 }
 
 describe("ContextGraphViewer", () => {
+  it("resolve o identificador e permite navegar ao candidato", async () => {
+    const { resolveSymbol } = await renderViewer();
+    fireEvent.change(screen.getByTestId("graph-search-input"), {
+      target: { value: "AuthService" },
+    });
+    fireEvent.click(screen.getByTestId("graph-symbol-resolve"));
+    const candidate = await screen.findByTestId("graph-symbol-candidate");
+    expect(resolveSymbol).toHaveBeenCalledWith("AuthService");
+    fireEvent.click(candidate);
+    expect(await screen.findByText("AuthService")).toBeTruthy();
+  });
+
+  it("mostra erro quando a resolução falha", async () => {
+    await renderViewer({
+      resolveSymbol: vi.fn(() => Promise.reject(new Error("falha"))),
+    });
+    fireEvent.change(screen.getByTestId("graph-search-input"), {
+      target: { value: "AuthService" },
+    });
+    fireEvent.click(screen.getByTestId("graph-symbol-resolve"));
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(screen.getByTestId("graph-symbol-error")).toHaveTextContent(
+      "graph_symbol_error",
+    );
+  });
+
   it("busca o grafo ao montar e passa nós/arestas de todas as comunidades pro canvas", async () => {
     const { fetchGraphData } = await renderViewer();
     expect(fetchGraphData).toHaveBeenCalledTimes(1);

@@ -69,6 +69,45 @@ def build_label_index(nodes: list[dict[str, Any]]) -> dict[str, list[str]]:
     return index
 
 
+def resolve_graph_symbol(
+    nodes: list[dict[str, Any]], query: str, *, limit: int = 20
+) -> dict[str, Any]:
+    """Resolve an exact code identifier without guessing among duplicates."""
+    normalized = unicodedata.normalize("NFKC", query).strip()
+    normalized = re.sub(r"\s*\([^()]*\)\s*$", "", normalized).strip().lstrip(".")
+    normalized = normalized.lower()
+    if not normalized or len(normalized) > 200:
+        raise ValueError("A busca deve conter de 1 a 200 caracteres")
+    candidates: list[dict[str, Any]] = []
+    for node in nodes:
+        if not node_is_resolvable_symbol(node):
+            continue
+        if normalise_callable_label(str(node.get("label", ""))) != normalized:
+            continue
+        candidates.append(
+            {
+                "id": str(node["id"]),
+                "label": str(node.get("label", node["id"]))[:200],
+                "source_file": str(node.get("source_file", ""))[:500],
+                "source_location": str(
+                    node.get("source_location", node.get("location", ""))
+                )[:100],
+                "community": node.get("community"),
+            }
+        )
+    candidates.sort(key=lambda item: (item["source_file"].casefold(), item["id"]))
+    total = len(candidates)
+    candidates = candidates[: max(1, min(limit, 20))]
+    status = "not_found" if total == 0 else "resolved" if total == 1 else "ambiguous"
+    return {
+        "status": status,
+        "query": normalized,
+        "candidates": candidates,
+        "total": total,
+        "truncated": total > len(candidates),
+    }
+
+
 def existing_edge_pairs(edges: list[dict[str, Any]]) -> set[tuple[str, str, str]]:
     """Return all existing source/target/relation edge triples.
 

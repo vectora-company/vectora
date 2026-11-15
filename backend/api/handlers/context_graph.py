@@ -118,6 +118,26 @@ class ClusterResponse(BaseModel):
     node_count: int
 
 
+class SymbolResolutionRequest(BaseModel):
+    symbol: str
+
+
+class SymbolCandidate(BaseModel):
+    id: str
+    label: str
+    source_file: str
+    source_location: str
+    community: int | None = None
+
+
+class SymbolResolutionResponse(BaseModel):
+    status: Literal["resolved", "ambiguous", "not_found"]
+    query: str
+    candidates: list[SymbolCandidate]
+    total: int
+    truncated: bool
+
+
 class GraphQueryResponse(BaseModel):
     answer: str
     nodes: list[dict[str, Any]] = []
@@ -608,6 +628,22 @@ async def post_cluster(request: Request, workspace_id: str) -> ClusterResponse:
         ],
         node_count=result.node_count,
     )
+
+
+@router.post("/resolve-symbol", response_model=SymbolResolutionResponse)
+async def post_resolve_symbol(
+    request: Request, workspace_id: str, body: SymbolResolutionRequest
+) -> SymbolResolutionResponse:
+    """Resolve an exact code symbol, returning ambiguity instead of guessing."""
+    _user_id(request)
+    data = _require_graph_json(workspace_id)
+    from backend.context_graph.symbol_resolution import resolve_graph_symbol
+
+    try:
+        result = resolve_graph_symbol(data.get("nodes", []), body.symbol)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return SymbolResolutionResponse(**result)
 
 
 @router.get("/export/{export_format}")

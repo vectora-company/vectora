@@ -483,6 +483,74 @@ class TestPostCluster:
         )
         assert all("community" not in node for node in persisted["nodes"])
 
+
+class TestPostResolveSymbol:
+    @pytest.mark.asyncio
+    async def test_returns_exact_candidates_and_rejects_bad_query(self, tmp_path):
+        from fastapi import HTTPException
+
+        from backend.api.handlers.context_graph import (
+            SymbolResolutionRequest,
+            post_resolve_symbol,
+        )
+
+        graph = {
+            "nodes": [
+                {
+                    "id": "one",
+                    "label": "login",
+                    "file_type": "code",
+                    "source_file": "auth.py",
+                },
+                {
+                    "id": "two",
+                    "label": "login",
+                    "file_type": "code",
+                    "source_file": "admin.py",
+                },
+                {"id": "doc", "label": "login", "file_type": "document"},
+            ],
+            "links": [],
+        }
+        _write_graph(tmp_path, graph)
+        registry, _ = _make_registry(tmp_path)
+        with patch("backend.workspace.workspace.workspace_registry", registry):
+            result = await post_resolve_symbol(
+                _fake_request(), "ws1", SymbolResolutionRequest(symbol="login")
+            )
+            assert result.status == "ambiguous"
+            assert [item.id for item in result.candidates] == ["two", "one"]
+            with pytest.raises(HTTPException) as exc:
+                await post_resolve_symbol(
+                    _fake_request(), "ws1", SymbolResolutionRequest(symbol=" ")
+                )
+        assert exc.value.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_requires_authentication_and_graph(self, tmp_path):
+        from fastapi import HTTPException
+
+        from backend.api.handlers.context_graph import (
+            SymbolResolutionRequest,
+            post_resolve_symbol,
+        )
+
+        request = _fake_request()
+        request.state.user = None
+        with pytest.raises(HTTPException) as exc:
+            await post_resolve_symbol(
+                request, "ws1", SymbolResolutionRequest(symbol="login")
+            )
+        assert exc.value.status_code == 401
+
+        registry, _ = _make_registry(tmp_path)
+        with patch("backend.workspace.workspace.workspace_registry", registry):
+            with pytest.raises(HTTPException) as missing:
+                await post_resolve_symbol(
+                    _fake_request(), "ws1", SymbolResolutionRequest(symbol="login")
+                )
+        assert missing.value.status_code == 404
+
     @pytest.mark.asyncio
     async def test_rejects_graph_over_the_processing_limit(self, tmp_path):
         from fastapi import HTTPException

@@ -395,3 +395,35 @@ async def graph_cluster(ctx: ToolContext) -> str:
     except Exception:
         logger.exception("graph: falha ao agrupar comunidades")
         return "Erro ao agrupar o grafo de contexto."
+
+
+@vtool(extras=ToolExtras())
+async def graph_resolve_symbol(symbol: str, ctx: ToolContext) -> str:
+    """Busca identificadores exatos e informa ambiguidades sem adivinhar."""
+    try:
+        if not ctx.workspace_id:
+            return "Erro: nenhum workspace ativo."
+        data, err = _load_graph_data(ctx.workspace_id)
+        if err or data is None:
+            return err or "Erro: grafo de contexto não disponível."
+        from backend.context_graph.symbol_resolution import resolve_graph_symbol
+
+        result = resolve_graph_symbol(data.get("nodes", []), symbol, limit=10)
+        if result["status"] == "not_found":
+            return f"Nenhum símbolo de código corresponde exatamente a '{result['query']}'."
+        lines = [
+            f"{result['status']}: {result['total']} definição(ões) para '{result['query']}'."
+        ]
+        for item in result["candidates"]:
+            location = f":{item['source_location']}" if item["source_location"] else ""
+            lines.append(
+                f"- {item['label']} — {item['source_file']}{location} (id: {item['id']})"
+            )
+        if result["truncated"]:
+            lines.append("Há mais resultados; refine o símbolo antes de escolher.")
+        return "\n".join(lines)
+    except ValueError as exc:
+        return f"Erro: {exc}"
+    except Exception as exc:
+        logger.exception("graph: falha em graph_resolve_symbol")
+        return f"Erro ao resolver símbolo: {exc}"

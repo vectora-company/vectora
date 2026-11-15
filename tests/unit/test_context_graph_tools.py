@@ -549,6 +549,51 @@ async def test_graph_cancel_build_sem_build_em_andamento():
 
 
 @pytest.mark.asyncio
+async def test_graph_resolve_symbol_reports_ambiguity_without_choosing(tmp_path):
+    from backend.tools.context_graph import graph_resolve_symbol
+
+    ws, graph_file = _make_ws(tmp_path)
+    graph_file.write_text(
+        json.dumps(
+            {
+                "nodes": [
+                    {
+                        "id": "a",
+                        "label": "login",
+                        "file_type": "code",
+                        "source_file": "a.py",
+                    },
+                    {
+                        "id": "b",
+                        "label": "login",
+                        "file_type": "code",
+                        "source_file": "b.py",
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    with _patch_registry(ws):
+        result = await graph_resolve_symbol("login", _ctx("ws1"))
+    assert "ambiguous" in result
+    assert "a.py" in result and "b.py" in result
+
+
+@pytest.mark.asyncio
+async def test_graph_resolve_symbol_handles_missing_and_bad_input(tmp_path):
+    from backend.tools.context_graph import graph_resolve_symbol
+
+    ws, graph_file = _make_ws(tmp_path)
+    graph_file.write_text(json.dumps({"nodes": []}), encoding="utf-8")
+    with _patch_registry(ws):
+        missing = await graph_resolve_symbol("missing", _ctx("ws1"))
+        invalid = await graph_resolve_symbol(" ", _ctx("ws1"))
+    assert "Nenhum símbolo" in missing
+    assert "Erro:" in invalid
+
+
+@pytest.mark.asyncio
 async def test_graph_cancel_build_cancela_task_ativa(tmp_path):
     from backend.tools.context_graph import graph_cancel_build
 
