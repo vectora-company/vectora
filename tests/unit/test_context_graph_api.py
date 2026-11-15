@@ -536,18 +536,19 @@ class TestPostCluster:
     async def test_rejects_a_second_concurrent_cluster_request(self, tmp_path):
         from fastapi import HTTPException
 
-        from backend.api.handlers import context_graph
+        from backend.api.handlers.context_graph import post_cluster
+        from backend.context_graph import cluster_service
 
         _write_graph(tmp_path, SAMPLE_DATA)
         registry, _ = _make_registry(tmp_path)
-        await context_graph._cluster_semaphore.acquire()
+        await cluster_service._cluster_semaphore.acquire()
         try:
             with patch("backend.workspace.workspace.workspace_registry", registry):
                 with pytest.raises(HTTPException) as exc:
-                    await context_graph.post_cluster(_fake_request(), "ws1")
+                    await post_cluster(_fake_request(), "ws1")
             assert exc.value.status_code == 429
         finally:
-            context_graph._cluster_semaphore.release()
+            cluster_service._cluster_semaphore.release()
 
     @pytest.mark.asyncio
     async def test_missing_graph_returns_404(self, tmp_path):
