@@ -17,11 +17,6 @@ import {
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ChatInput, isComposerCompactWidth } from "../chat-input";
 import { m } from "@/lib/paraglide/messages";
-import { checkOpenRouterModelSupportsImage } from "@/lib/api/openrouter-vision";
-
-vi.mock("@/lib/api/openrouter-vision", () => ({
-  checkOpenRouterModelSupportsImage: vi.fn(),
-}));
 
 describe("ChatInput — breakpoint do container", () => {
   it("usa o modo compacto abaixo do breakpoint @md de 28rem", () => {
@@ -328,7 +323,7 @@ describe("ChatInput", () => {
   });
 });
 
-describe("ChatInput — aviso de modelo sem suporte a imagem", () => {
+describe("ChatInput — anexos de imagem", () => {
   const imageFile = {
     id: "f1",
     mimeType: "image/png",
@@ -336,7 +331,7 @@ describe("ChatInput — aviso de modelo sem suporte a imagem", () => {
     name: "foto.png",
   };
 
-  it("mostra aviso quando há imagem anexada e o modelo é Cohere (sem visão)", () => {
+  it("não exibe alerta de compatibilidade ao anexar imagem", () => {
     render(
       <ChatInput
         {...baseProps({
@@ -345,53 +340,7 @@ describe("ChatInput — aviso de modelo sem suporte a imagem", () => {
         })}
       />,
     );
-    expect(
-      screen.getByText(m.chat_input_no_vision_warning()),
-    ).toBeInTheDocument();
-  });
-
-  it("não mostra aviso quando o modelo suporta imagem (Gemini)", () => {
-    render(
-      <ChatInput
-        {...baseProps({
-          attachedFiles: [imageFile],
-          agentConfig: { model: "google-genai:gemini-2.5-flash" },
-        })}
-      />,
-    );
-    expect(
-      screen.queryByText(m.chat_input_no_vision_warning()),
-    ).not.toBeInTheDocument();
-  });
-
-  it("não mostra aviso sem imagem anexada, mesmo com modelo Cohere", () => {
-    render(
-      <ChatInput
-        {...baseProps({
-          attachedFiles: [],
-          agentConfig: { model: "cohere:command-a-03-2025" },
-        })}
-      />,
-    );
-    expect(
-      screen.queryByText(m.chat_input_no_vision_warning()),
-    ).not.toBeInTheDocument();
-  });
-
-  it("não mostra aviso quando o anexo não é imagem (ex: código)", () => {
-    render(
-      <ChatInput
-        {...baseProps({
-          attachedFiles: [
-            { id: "f2", mimeType: "text/x-python", name: "script.py" },
-          ],
-          agentConfig: { model: "cohere:command-a-03-2025" },
-        })}
-      />,
-    );
-    expect(
-      screen.queryByText(m.chat_input_no_vision_warning()),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/não processa imagens/i)).not.toBeInTheDocument();
   });
 
   // Responsividade por CONTAINER (não por viewport): no modo IDE o ChatInput
@@ -1090,64 +1039,5 @@ describe("ChatInput — aviso de modelo sem suporte a imagem", () => {
     expect(
       container.querySelector('[data-testid="chat-input-footer"]'),
     ).toHaveClass("min-w-0");
-  });
-});
-
-describe("ChatInput — capability de imagem no OpenRouter varia por modelo", () => {
-  const imageFile = {
-    id: "f1",
-    mimeType: "image/png",
-    base64: "aGVsbG8=",
-    name: "foto.png",
-  };
-
-  it("consulta o catálogo pelo id do modelo sem o prefixo do provedor", async () => {
-    vi.mocked(checkOpenRouterModelSupportsImage).mockResolvedValue(true);
-    render(
-      <ChatInput
-        {...baseProps({
-          attachedFiles: [imageFile],
-          agentConfig: { model: "openrouter:openai/gpt-4o" },
-        })}
-      />,
-    );
-    await waitFor(() => {
-      expect(checkOpenRouterModelSupportsImage).toHaveBeenCalledWith(
-        "openai/gpt-4o",
-      );
-    });
-  });
-
-  it("não mostra aviso quando o modelo OpenRouter suporta imagem", async () => {
-    vi.mocked(checkOpenRouterModelSupportsImage).mockResolvedValue(true);
-    render(
-      <ChatInput
-        {...baseProps({
-          attachedFiles: [imageFile],
-          agentConfig: { model: "openrouter:openai/gpt-4o" },
-        })}
-      />,
-    );
-    await waitFor(() => {
-      expect(checkOpenRouterModelSupportsImage).toHaveBeenCalled();
-    });
-    expect(
-      screen.queryByText(m.chat_input_no_vision_warning()),
-    ).not.toBeInTheDocument();
-  });
-
-  it("mostra aviso quando o modelo OpenRouter não suporta imagem", async () => {
-    vi.mocked(checkOpenRouterModelSupportsImage).mockResolvedValue(false);
-    render(
-      <ChatInput
-        {...baseProps({
-          attachedFiles: [imageFile],
-          agentConfig: { model: "openrouter:some-text-only-model" },
-        })}
-      />,
-    );
-    expect(
-      await screen.findByText(m.chat_input_no_vision_warning()),
-    ).toBeInTheDocument();
   });
 });

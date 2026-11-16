@@ -832,6 +832,7 @@ function createWindow(options: { visible?: boolean } = {}): void {
     frame: false,
     backgroundColor: "#0a0e1a",
     webPreferences: {
+      offscreen: webMode,
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,

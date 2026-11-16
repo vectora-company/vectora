@@ -328,7 +328,6 @@
   "chat_file_size_kb": "{size} KB",
   "chat_image_lightbox_download": "Descargar imagen",
   "chat_image_lightbox_title": "Ver imagen",
-  "chat_input_no_vision_warning": "El modelo seleccionado no procesa imágenes — cambia de modelo o elimina el archivo adjunto antes de enviar.",
   "chat_load_older_messages": "Cargar mensajes anteriores",
   "chat_load_older_messages_retry": "No se pudo cargar. Intentar de nuevo",
   "chat_loading_older_messages": "Cargando mensajes anteriores…",

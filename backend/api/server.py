@@ -46,6 +46,7 @@ from backend.api.handlers.auth import router as auth_router
 from backend.api.handlers.background import router as background_router
 from backend.api.handlers.backup import router as backup_router
 from backend.api.handlers.boards import router as boards_router
+from backend.api.handlers.browser_workbench import router as browser_workbench_router
 from backend.api.handlers.chat import router as chat_router
 from backend.api.handlers.connect import router as connect_router
 from backend.api.handlers.context_graph import router as graph_router
@@ -643,6 +644,12 @@ async def _lifespan(app: FastAPI):  # type: ignore[return]  # noqa: ANN202
             )
 
         try:
+            from backend.api.handlers.browser_workbench import close_all
+
+            await close_all()
+        except Exception:
+            logger.debug("api/server: erro ao encerrar browser do Vectora Web")
+        try:
             from backend.services.electron_sidecar import stop_electron_sidecar
 
             await stop_electron_sidecar()
@@ -847,6 +854,7 @@ def create_app(serve_static: bool = True) -> FastAPI:
     app.include_router(rag_router)
     app.include_router(terminal_router)
     app.include_router(background_router)
+    app.include_router(browser_workbench_router)
     app.include_router(boards_router)
     app.include_router(agent_profiles_router)
     app.include_router(graph_router)

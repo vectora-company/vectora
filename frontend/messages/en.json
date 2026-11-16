@@ -328,7 +328,6 @@
   "chat_file_size_kb": "{size} KB",
   "chat_image_lightbox_download": "Download image",
   "chat_image_lightbox_title": "View image",
-  "chat_input_no_vision_warning": "The selected model can't process images — switch models or remove the attachment before sending.",
   "chat_load_older_messages": "Load earlier messages",
   "chat_load_older_messages_retry": "Could not load. Try again",
   "chat_loading_older_messages": "Loading earlier messages…",

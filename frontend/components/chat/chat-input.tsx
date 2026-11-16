@@ -16,7 +16,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Play, RotateCcw, Send, TriangleAlert, X } from "lucide-react";
+import { Play, RotateCcw, Send, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -45,12 +45,6 @@ import type { ImageAttachment } from "@/lib/types";
 import { useNetworkStatus } from "@/lib/hooks/use-network-status";
 import { useElementWidth } from "@/lib/hooks/use-element-width";
 import { useToastStore } from "@/lib/stores/toast-store";
-import {
-  getModelProvider,
-  isProviderVisionCapable,
-  type ModelOption,
-} from "@/lib/config/deployment-config";
-import { checkOpenRouterModelSupportsImage } from "@/lib/api/openrouter-vision";
 import { m } from "@/lib/paraglide/messages";
 import { classifySmartPaste } from "@/lib/utils/chat/smart-paste";
 import { balanceCompactControlWidths } from "@/lib/layout/compact-control-layout";
@@ -415,15 +409,6 @@ export function ChatInput({
     }
   };
 
-  const hasImage = attachedFiles.some((f) => f.mimeType.startsWith("image/"));
-  const provider = agentConfig?.model
-    ? getModelProvider(agentConfig.model as ModelOption)
-    : undefined;
-
-  // OpenRouter serve modelos de vários fornecedores com capability variável
-  // por modelo — consulta o catálogo (cacheado no backend) em vez de tratar
-  // o provedor inteiro como sem suporte a imagem.
-  const [openRouterSupportsImage, setOpenRouterSupportsImage] = useState(true);
   const [dismissedPreviewUrl, setDismissedPreviewUrl] = useState<string | null>(
     null,
   );
@@ -439,34 +424,6 @@ export function ChatInput({
     // oxlint-disable-next-line react/set-state-in-effect
     setDismissedPreviewUrl(null);
   }, [previewUrl]);
-  useEffect(() => {
-    if (provider !== "openrouter" || !hasImage || !agentConfig?.model) {
-      // Consulta o catálogo de modelos OpenRouter (I/O de rede, cacheado no
-      // backend) — não é estado derivado de prop.
-      // oxlint-disable-next-line react/set-state-in-effect
-      setOpenRouterSupportsImage(true);
-      return;
-    }
-    let cancelled = false;
-    const openRouterModelId = agentConfig.model.slice(
-      agentConfig.model.indexOf(":") + 1,
-    );
-    checkOpenRouterModelSupportsImage(openRouterModelId).then((supported) => {
-      if (!cancelled) setOpenRouterSupportsImage(supported);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [provider, hasImage, agentConfig?.model]);
-
-  // Cohere (e Ollama) não aceitam imagem na mensagem; avisa
-  // cedo em vez de deixar o envio estourar com o erro cru do provedor.
-  const hasImageWithoutVisionSupport = useMemo(() => {
-    if (!hasImage || !provider) return false;
-    if (provider === "openrouter") return !openRouterSupportsImage;
-    return !isProviderVisionCapable(provider);
-  }, [hasImage, provider, openRouterSupportsImage]);
-
   // Auto-grow do textarea: ajusta a altura ao conteúdo até o teto de 240px;
   // depois disso o próprio textarea passa a scrollar verticalmente. Mesmo no
   // modo compacto, o texto quebra linha e faz o composer crescer antes do
@@ -572,14 +529,6 @@ export function ChatInput({
           {voiceError && (
             <div className="mb-2 text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-md">
               {voiceError}
-            </div>
-          )}
-
-          {/* Aviso: modelo atual não processa a imagem anexada */}
-          {hasImageWithoutVisionSupport && (
-            <div className="mb-2 flex items-center gap-2 text-xs text-amber-600 bg-amber-500/10 px-3 py-2 rounded-md">
-              <TriangleAlert className="w-3.5 h-3.5 shrink-0" />
-              {m.chat_input_no_vision_warning()}
             </div>
           )}
 
