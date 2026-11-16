@@ -184,6 +184,7 @@ jobs:
       - name: Verifica o drift dos contratos
         env:
           GITHUB_BASE_REF: ${{ github.event.pull_request.base.ref }}
+          PR_BODY: ${{ github.event.pull_request.body }}
         run: uv run python -m backend.contracts check
 
   pre-commit:
