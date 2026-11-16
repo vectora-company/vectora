@@ -48,22 +48,10 @@ def _has_images(messages: list[VMessage]) -> bool:
 
 
 async def _vision_state(model_id: str) -> CapabilityState:
-    """Executa a operação  vision state."""
-    from backend.settings import provider_capability_state
+    """Resolve image capability for the candidate model, not just provider."""
+    from backend.llm.capabilities import model_vision_state
 
-    provider, _, model_name = model_id.partition(":")
-    provider = provider.replace("-", "_")
-    if provider == "openrouter":
-        from backend.api.handlers.provider_routing import openrouter_model_image_state
-
-        return await openrouter_model_image_state(model_name)
-    if provider == "nine_router":
-        from backend.api.handlers.provider_routing import (
-            nine_router_model_supports_image,
-        )
-
-        return await nine_router_model_supports_image(model_name)
-    return provider_capability_state(provider.replace("_", "-"), "vision")
+    return await model_vision_state(model_id)
 
 
 async def _candidates(primary_model_id: str, *, has_images: bool) -> list[str]:
@@ -259,6 +247,7 @@ def load_chat_client(model_id: str) -> ChatClient:  # noqa: PLR0911
                     require_api_key=False,
                     include_attribution=False,
                 ),
+                media_model_id=f"llamacpp:{model_name}",
                 # Modelos locais pequenos não conseguem seguir o prompt
                 # completo de identidade, ferramentas e contexto. O DMR já
                 # usa a projeção compacta; llama.cpp precisa do mesmo
@@ -280,6 +269,7 @@ def load_chat_client(model_id: str) -> ChatClient:  # noqa: PLR0911
                 return OllamaChatClient(
                     model=model_name,
                     client=OllamaClient(base_url=base_url),
+                    media_model_id=f"dmr:{model_name}",
                 )
             return OpenRouterChatClient(
                 model=model_name,
@@ -289,6 +279,7 @@ def load_chat_client(model_id: str) -> ChatClient:  # noqa: PLR0911
                     require_api_key=False,
                     include_attribution=False,
                 ),
+                media_model_id=f"dmr:{model_name}",
                 compact_system_prompt=True,
             )
         case _:

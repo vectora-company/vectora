@@ -26,7 +26,8 @@ MediaMode = Literal["native", "image", "text"]
 #: Tipos aceitos nativamente e teto do arquivo inline, por MIME ou família.
 AcceptedMedia = Mapping[str, int]
 
-#: Providers com API própria: o tipo aceito não depende do modelo.
+#: Providers cujos adapters aceitam mídia nativa para os modelos publicados
+#: no catálogo do Vectora. Cohere e Ollama são resolvidos por modelo abaixo.
 NATIVE_MEDIA: dict[str, dict[str, int]] = {
     "anthropic": {"application/pdf": 32 * MB, "image/*": 5 * MB},
     "google_genai": {
@@ -47,7 +48,7 @@ GATEWAY_MEDIA_BY_MODALITY: dict[str, dict[str, int]] = {
     "video": {"video/*": 20 * MB},
 }
 
-#: Gateways que consultam o catálogo por modelo.
+#: Providers cujo suporte varia por modelo e é resolvido por metadados.
 CATALOG_GATEWAYS = frozenset({"openrouter", "nine_router"})
 
 MediaCapability = str | AcceptedMedia
@@ -102,14 +103,23 @@ def media_for_modalities(modalities: Iterable[str]) -> dict[str, int]:
 async def resolve_native_media(model_id: str) -> AcceptedMedia:
     """Tipos aceitos nativamente pelo modelo ``provider:modelo``.
 
-    Providers com API própria usam a tabela fixa. OpenRouter e 9router
-    consultam o catálogo do gateway; modelo ausente ou catálogo indisponível
-    resultam em nenhum tipo nativo (os anexos seguem como texto).
+    Providers com API própria usam a tabela fixa. Cohere e Ollama consultam
+    a capacidade do modelo; OpenRouter e 9Router consultam o catálogo do
+    gateway. Modelo ausente ou metadados indisponíveis não inventam suporte.
     """
     provider, _sep, model = model_id.partition(":")
     provider = normalize_provider(provider)
     if provider in NATIVE_MEDIA:
         return NATIVE_MEDIA[provider]
+    if provider in {"cohere", "ollama", "dmr", "llamacpp"}:
+        from backend.llm.capabilities import model_vision_state
+        from backend.settings import CapabilityState
+
+        try:
+            state = await model_vision_state(model_id)
+        except Exception:
+            return {}
+        return {"image/*": 20 * MB} if state is CapabilityState.SUPPORTED else {}
     if provider not in CATALOG_GATEWAYS or not model:
         return {}
     from backend.api.handlers import provider_routing

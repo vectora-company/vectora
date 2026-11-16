@@ -21,7 +21,7 @@ import re
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any
 
-from backend.llm.media_parts import prepare_content
+from backend.llm.media_parts import AcceptedMedia, prepare_content
 from backend.llm.ollama.client import OllamaClient, OllamaResponseError
 from backend.vtypes.message import (
     ContentBlock,
@@ -250,27 +250,32 @@ def _compact_tool_results(messages: list[dict]) -> None:
             )
 
 
-def _split_conteudo(msg: VMessage) -> tuple[str, list[str]]:
+def _split_conteudo(
+    msg: VMessage, accepted: AcceptedMedia | None = None
+) -> tuple[str, list[str]]:
     """Devolve `(texto, imagens_base64_puras)` — o prefixo
     `data:image/...;base64,` é removido, o Ollama espera só o payload."""
     texto_partes: list[str] = []
     imagens: list[str] = []
-    for bloco in prepare_content(msg.content, "ollama"):
+    for bloco in prepare_content(msg.content, accepted or {}):
         if bloco.kind == "text" and bloco.text:
             texto_partes.append(bloco.text)
         elif bloco.kind == "image_url" and bloco.image_url:
             bruto = bloco.image_url
             imagens.append(bruto.split(",", 1)[-1] if "," in bruto else bruto)
+        elif bloco.kind == "media" and bloco.media_data_url:
+            bruto = bloco.media_data_url
+            imagens.append(bruto.split(",", 1)[-1] if "," in bruto else bruto)
     return "".join(texto_partes), imagens
 
 
-def _to_ollama_message(msg: VMessage) -> dict:
+def _to_ollama_message(msg: VMessage, accepted: AcceptedMedia | None = None) -> dict:
     role = _ROLE_POR_TIPO.get(msg.role)
     if role is None:
         erro = f"Mensagem de role {msg.role!r} não tem equivalente no Ollama"
         raise ValueError(erro)
 
-    texto, imagens = _split_conteudo(msg)
+    texto, imagens = _split_conteudo(msg, accepted)
     saida: dict[str, Any] = {"role": role, "content": texto}
     if imagens:
         saida["images"] = imagens
@@ -365,9 +370,16 @@ class OllamaChatClient:
     """Chat client nativo do Ollama — implementa o Protocol ``ChatClient``,
     async-only (CLAUDE.md regra 10)."""
 
-    def __init__(self, model: str, client: OllamaClient) -> None:
+    def __init__(
+        self,
+        model: str,
+        client: OllamaClient,
+        *,
+        media_model_id: str | None = None,
+    ) -> None:
         self.model = model
         self.client = client
+        self.media_model_id = media_model_id or f"ollama:{model}"
 
     def _payload(
         self,
@@ -376,11 +388,12 @@ class OllamaChatClient:
         tools: list[ToolSpec] | None,
         temperature: float | None,
         max_tokens: int | None,
+        accepted: AcceptedMedia | None = None,
     ) -> dict:
         from backend.settings import settings
 
         payload_tool_specs, compacted = _payload_tools(tools or [], messages)
-        ollama_messages = [_to_ollama_message(m) for m in messages]
+        ollama_messages = [_to_ollama_message(m, accepted) for m in messages]
         if compacted and ollama_messages and ollama_messages[0]["role"] == "system":
             ollama_messages[0]["content"] = _compact_system_prompt(
                 str(ollama_messages[0].get("content") or "")
@@ -424,6 +437,17 @@ class OllamaChatClient:
                 )
         return corpo
 
+    async def _accepted_media(self, messages: list[VMessage]) -> AcceptedMedia:
+        if not any(
+            block.kind == "media" and (block.media_data_url or block.media_preview_urls)
+            for message in messages
+            for block in message.content
+        ):
+            return {}
+        from backend.llm.media_parts import resolve_native_media
+
+        return await resolve_native_media(self.media_model_id)
+
     @staticmethod
     def _mensagem_da_resposta(corpo: dict) -> dict:
         mensagem = corpo.get("message")
@@ -443,8 +467,13 @@ class OllamaChatClient:
         temperature: float | None = None,
         max_tokens: int | None = None,
     ) -> VMessage:
+        accepted = await self._accepted_media(messages)
         corpo = self._payload(
-            messages, tools=tools, temperature=temperature, max_tokens=max_tokens
+            messages,
+            tools=tools,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            accepted=accepted,
         )
         corpo["stream"] = False
         try:
@@ -484,8 +513,13 @@ class OllamaChatClient:
         temperature: float | None = None,
         max_tokens: int | None = None,
     ) -> AsyncIterator[VMessageChunk]:
+        accepted = await self._accepted_media(messages)
         corpo = self._payload(
-            messages, tools=tools, temperature=temperature, max_tokens=max_tokens
+            messages,
+            tools=tools,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            accepted=accepted,
         )
         proximo_index = 0
         texto_pendente: list[str] = []
