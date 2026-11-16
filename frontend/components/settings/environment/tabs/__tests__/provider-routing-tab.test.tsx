@@ -999,37 +999,6 @@ describe("ProviderRoutingTab — 9Router", () => {
     });
   });
 
-  it("com poucos modelos, mantém o filtro visível junto da detecção", async () => {
-    mockFetch({
-      nineRouterStatus: {
-        configured: true,
-        base_url: "http://localhost:20128/v1",
-        masked: "9r-•••cdef",
-      },
-      nineRouterDiscover: {
-        reachable: true,
-        models: [{ id: "cc/claude-opus-4-7", name: "Claude Opus 4.7" }],
-      },
-    });
-    render(<ProviderRoutingTab />);
-    const nineRouterHeading = await screen.findByText(/^9router/i);
-    const nineRouterSection = nineRouterHeading.closest(
-      "div.rounded-lg.border",
-    )!;
-    fireEvent.click(
-      within(nineRouterSection as HTMLElement).getByRole("button", {
-        name: /detectar/i,
-      }),
-    );
-    await waitFor(() => screen.getByText("cc/claude-opus-4-7"));
-
-    expect(
-      within(nineRouterSection as HTMLElement).getByPlaceholderText(
-        /filtrar modelos/i,
-      ),
-    ).toBeTruthy();
-  });
-
   it("proxy inacessível na descoberta exibe aviso, sem crashar", async () => {
     mockFetch({
       nineRouterStatus: {
@@ -1171,7 +1140,7 @@ describe("LlamaCppSection", () => {
     render(<ProviderRoutingTab />);
 
     fireEvent.click(
-      await screen.findByRole("button", { name: /verificar servidor/i }),
+      await screen.findByRole("button", { name: /detectar modelos/i }),
     );
     fireEvent.click(await screen.findByRole("button", { name: /registrar/i }));
 
@@ -1206,35 +1175,5 @@ describe("LlamaCppSection", () => {
       "OpenRouter (multi-provider)",
       "9Router (proxy local)",
     ]);
-  });
-
-  it("remove uma versão inativa sem permitir remover a ativa", async () => {
-    const runtimeStatus = {
-      installed: true,
-      path: "/tmp/llama-server",
-      files: ["llama-server"],
-      active_runtime: "active-runtime",
-      runtimes: [
-        { id: "active-runtime", asset: "llama-active" },
-        { id: "old-runtime", asset: "llama-old" },
-      ],
-    };
-    mockFetch({ llamacppRuntimeStatus: runtimeStatus });
-    vi.spyOn(window, "confirm").mockReturnValue(true);
-
-    render(<ProviderRoutingTab />);
-
-    const removeButtons = await screen.findAllByRole("button", {
-      name: /remover esta versão do runtime/i,
-    });
-    expect(removeButtons.length).toBe(1);
-    fireEvent.click(removeButtons[0]);
-
-    await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledWith(
-        "/provider-routing/llamacpp/runtime/old-runtime",
-        { method: "DELETE" },
-      );
-    });
   });
 });

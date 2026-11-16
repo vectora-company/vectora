@@ -127,14 +127,6 @@ interface HuggingFaceMetadata {
   files?: HuggingFaceFileInfo[];
 }
 
-interface LlamaCppReleaseAsset {
-  name: string;
-  url: string;
-  size: number;
-  sha256?: string;
-  recommended?: boolean;
-}
-
 interface LlamaCppRuntimeStatus {
   installed: boolean;
   path: string | null;
@@ -271,29 +263,6 @@ async function testLlamaCppConnection(): Promise<{
   });
   if (!res.ok) throw new Error(`Erro ${res.status}`);
   return res.json();
-}
-
-async function fetchLlamaCppReleases(): Promise<LlamaCppReleaseAsset[]> {
-  const res = await fetch("/provider-routing/llamacpp/releases");
-  if (!res.ok) throw new Error(`Erro ${res.status}`);
-  const data = (await res.json()) as {
-    releases?: Array<{ assets?: LlamaCppReleaseAsset[] }>;
-  };
-  return data.releases?.flatMap((release) => release.assets ?? []) ?? [];
-}
-
-async function installLlamaCppRuntime(
-  assetUrl: string,
-  sha256?: string,
-): Promise<void> {
-  const res = await fetch("/provider-routing/llamacpp/install", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ asset_url: assetUrl, sha256 }),
-  });
-  if (!res.ok) {
-    throw new Error(await responseError(res, `Erro ${res.status}`));
-  }
 }
 
 async function fetchLlamaCppRuntimeStatus(): Promise<LlamaCppRuntimeStatus> {
@@ -919,38 +888,6 @@ function DmrSection() {
       {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
   );
-}
-
-async function removeLlamaCppRuntime(): Promise<void> {
-  const res = await fetch("/provider-routing/llamacpp/runtime", {
-    method: "DELETE",
-  });
-  if (!res.ok) throw new Error(`Erro ${res.status}`);
-}
-
-async function rollbackLlamaCppRuntime(runtimeId: string): Promise<void> {
-  const res = await fetch("/provider-routing/llamacpp/runtime/rollback", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ runtime_id: runtimeId }),
-  });
-  if (!res.ok) throw new Error(`Erro ${res.status}`);
-}
-
-async function removeLlamaCppRuntimeVersion(runtimeId: string): Promise<void> {
-  const res = await fetch(`/provider-routing/llamacpp/runtime/${runtimeId}`, {
-    method: "DELETE",
-  });
-  if (!res.ok) throw new Error(`Erro ${res.status}`);
-}
-
-async function cleanupLlamaCppRuntime(keep: number): Promise<void> {
-  const res = await fetch("/provider-routing/llamacpp/runtime/cleanup", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ keep }),
-  });
-  if (!res.ok) throw new Error(`Erro ${res.status}`);
 }
 
 async function searchHuggingFaceModels(
@@ -1964,78 +1901,6 @@ function OllamaSection() {
         </p>
       )}
 
-      <div className="flex flex-col gap-2 sm:flex-row">
-        <Input
-          aria-label={m.provider_routing_ollama_endpoint()}
-          value={baseUrl}
-          onChange={(event) => setBaseUrl(event.target.value)}
-          placeholder={m.provider_routing_ollama_endpoint_placeholder()}
-        />
-        <Button
-          type="button"
-          variant="outline"
-          disabled={testingConnection || savingConfig}
-          onClick={() => void handleTestConnection()}
-        >
-          {testingConnection ? (
-            <Loader2 className="mr-1.5 size-3.5 animate-spin" />
-          ) : null}
-          {m.provider_routing_dmr_test()}
-        </Button>
-      </div>
-
-      <div className="flex flex-col gap-2 sm:flex-row">
-        <Input
-          aria-label={m.provider_routing_ollama_key()}
-          type="password"
-          autoComplete="new-password"
-          value={apiKey}
-          onChange={(event) => setApiKey(event.target.value)}
-          placeholder={
-            apiKeyConfigured
-              ? apiKeyMasked
-              : m.provider_routing_ollama_key_placeholder()
-          }
-        />
-        <Button
-          type="button"
-          disabled={savingConfig || testingConnection}
-          onClick={() => void handleSaveConfig()}
-        >
-          {savingConfig ? (
-            <Loader2 className="mr-1.5 size-3.5 animate-spin" />
-          ) : null}
-          {m.provider_routing_dmr_save()}
-        </Button>
-        {apiKeyConfigured && (
-          <Button
-            type="button"
-            variant="outline"
-            disabled={savingConfig || testingConnection}
-            onClick={async () => {
-              setSavingConfig(true);
-              setError(null);
-              try {
-                const config = await saveOllamaConfig(baseUrl, "", true);
-                setApiKeyConfigured(config.api_key_configured);
-                setApiKeyMasked(config.api_key_masked);
-                setApiKey("");
-              } catch (clearError) {
-                setError(
-                  clearError instanceof Error
-                    ? clearError.message
-                    : m.provider_routing_ollama_error_config_save(),
-                );
-              } finally {
-                setSavingConfig(false);
-              }
-            }}
-          >
-            {m.provider_routing_ollama_key_clear()}
-          </Button>
-        )}
-      </div>
-
       <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/20 px-3 py-2 text-xs">
         <span>
           {m.provider_routing_ollama_label()}{" "}
@@ -2064,6 +1929,51 @@ function OllamaSection() {
               : "Instalar/iniciar Ollama"}
           </Button>
         )}
+      </div>
+
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <Input
+          aria-label={m.provider_routing_ollama_key()}
+          type="password"
+          autoComplete="new-password"
+          value={apiKey}
+          onChange={(event) => setApiKey(event.target.value)}
+          placeholder={
+            apiKeyConfigured
+              ? apiKeyMasked
+              : m.provider_routing_ollama_key_placeholder()
+          }
+        />
+        <Button
+          type="button"
+          disabled={savingConfig || testingConnection}
+          onClick={() => void handleSaveConfig()}
+        >
+          {savingConfig ? (
+            <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+          ) : null}
+          {m.provider_routing_dmr_save()}
+        </Button>
+      </div>
+
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <Input
+          aria-label={m.provider_routing_ollama_endpoint()}
+          value={baseUrl}
+          onChange={(event) => setBaseUrl(event.target.value)}
+          placeholder={m.provider_routing_ollama_endpoint_placeholder()}
+        />
+        <Button
+          type="button"
+          variant="outline"
+          disabled={testingConnection || savingConfig}
+          onClick={() => void handleTestConnection()}
+        >
+          {testingConnection ? (
+            <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+          ) : null}
+          {m.provider_routing_dmr_test()}
+        </Button>
       </div>
 
       <div className="flex flex-col gap-2 sm:flex-row">
@@ -2867,28 +2777,34 @@ export function MediaModelsSection() {
 function LlamaCppSection() {
   const [baseUrl, setBaseUrl] = useState("http://127.0.0.1:18080/v1");
   const [apiKey, setApiKey] = useState("");
-  const [model, setModel] = useState("");
-  const [mode, setMode] = useState<"managed" | "external">("external");
   const [models, setModels] = useState<LlamaCppModelInfo[]>([]);
   const [registered, setRegistered] = useState<RegisteredModel[]>([]);
   const [loadingRegistered, setLoadingRegistered] = useState(true);
   const [registeringId, setRegisteringId] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
-  const [hfModels, setHfModels] = useState<LlamaCppModelInfo[]>([]);
-  const [query, setQuery] = useState("llama.cpp");
+  const [modelQuery, setModelQuery] = useState("");
   const [reachable, setReachable] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [releases, setReleases] = useState<LlamaCppReleaseAsset[]>([]);
-  const [runtime, setRuntime] = useState<LlamaCppRuntimeStatus | null>(null);
   const [runtimeBusy, setRuntimeBusy] = useState(false);
-  const [runtimeKeep, setRuntimeKeep] = useState(1);
+  const [error, setError] = useState("");
+  const [runtime, setRuntime] = useState<LlamaCppRuntimeStatus | null>(null);
 
-  useEffect(() => {
-    void fetchLlamaCppRuntimeStatus()
-      .then(setRuntime)
-      .catch(() => setRuntime(null));
+  const refreshRuntime = useCallback(async () => {
+    try {
+      const [runtimeStatus, configResponse] = await Promise.all([
+        fetchLlamaCppRuntimeStatus(),
+        fetch("/provider-routing/llamacpp/status"),
+      ]);
+      setRuntime(runtimeStatus);
+      if (configResponse.ok) {
+        const config = (await configResponse.json()) as { base_url?: string };
+        setBaseUrl(config.base_url ?? "http://127.0.0.1:18080/v1");
+      }
+    } catch {
+      setRuntime(null);
+    }
   }, []);
+
   const loadRegistered = useCallback(async () => {
     setLoadingRegistered(true);
     try {
@@ -2901,31 +2817,11 @@ function LlamaCppSection() {
   }, []);
 
   useEffect(() => {
-    // A lista deve refletir os modelos já habilitados no seletor do chat.
+    // Carrega o status e o catálogo já habilitado no seletor.
     // oxlint-disable-next-line react/set-state-in-effect
+    void refreshRuntime();
     void loadRegistered();
-  }, [loadRegistered]);
-  const [installing, setInstalling] = useState(false);
-
-  useEffect(() => {
-    void fetch("/provider-routing/llamacpp/status")
-      .then((response) => {
-        if (!response.ok) throw new Error(String(response.status));
-        return response.json();
-      })
-      .then(
-        (data: {
-          base_url?: string;
-          model?: string;
-          mode?: "managed" | "external";
-        }) => {
-          setBaseUrl(data.base_url ?? "http://127.0.0.1:18080/v1");
-          setModel(data.model ?? "");
-          setMode(data.mode ?? "external");
-        },
-      )
-      .catch(() => undefined);
-  }, []);
+  }, [loadRegistered, refreshRuntime]);
 
   async function saveConfig() {
     setError("");
@@ -2933,16 +2829,23 @@ function LlamaCppSection() {
       const response = await fetch("/provider-routing/llamacpp/config", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ base_url: baseUrl, api_key: apiKey, model }),
+        body: JSON.stringify({ base_url: baseUrl, api_key: apiKey }),
       });
-      if (!response.ok) throw new Error(String(response.status));
+      if (!response.ok)
+        throw new Error(
+          await responseError(response, `Erro ${response.status}`),
+        );
       setApiKey("");
-    } catch {
-      setError("Erro ao salvar a configuração do llama.cpp");
+    } catch (saveError) {
+      setError(
+        saveError instanceof Error
+          ? saveError.message
+          : "Erro ao salvar a configuração do llama.cpp",
+      );
     }
   }
 
-  async function discover() {
+  async function detectModels() {
     setLoading(true);
     setError("");
     try {
@@ -2950,7 +2853,26 @@ function LlamaCppSection() {
       setReachable(result.reachable);
       setModels(result.models);
     } catch {
+      setReachable(false);
+      setModels([]);
       setError("Erro ao consultar o llama.cpp");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function testConnection() {
+    setLoading(true);
+    setError("");
+    try {
+      const result = await testLlamaCppConnection();
+      setReachable(result.status === "ok" || result.status === "empty");
+      if (result.models) setModels(result.models);
+      if (result.status !== "ok" && result.status !== "empty")
+        setError(`Status: ${result.status}`);
+    } catch {
+      setReachable(false);
+      setError("Erro ao testar o llama.cpp");
     } finally {
       setLoading(false);
     }
@@ -2982,110 +2904,49 @@ function LlamaCppSection() {
     }
   }
 
-  async function changeMode(nextMode: "managed" | "external") {
+  async function runtimeAction(action: "stop" | "remove") {
+    setRuntimeBusy(true);
     setError("");
     try {
-      const response = await fetch("/provider-routing/llamacpp/mode", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: nextMode }),
-      });
-      if (!response.ok) {
-        const body = (await response.json().catch(() => ({}))) as {
-          detail?: string;
-        };
-        throw new Error(body.detail ?? String(response.status));
+      if (action === "remove") {
+        const response = await fetch("/provider-routing/llamacpp/runtime", {
+          method: "DELETE",
+        });
+        if (!response.ok)
+          throw new Error(
+            await responseError(response, `Erro ${response.status}`),
+          );
+      } else {
+        const response = await fetch(
+          "/provider-routing/llamacpp/sidecar/stop",
+          { method: "POST" },
+        );
+        if (!response.ok)
+          throw new Error(
+            await responseError(response, `Erro ${response.status}`),
+          );
       }
-      setMode(nextMode);
-    } catch (modeError) {
+      await refreshRuntime();
+    } catch (actionError) {
       setError(
-        modeError instanceof Error
-          ? modeError.message
-          : "Não foi possível alterar o modo do llama.cpp",
-      );
-    }
-  }
-
-  async function testConnection() {
-    setLoading(true);
-    setError("");
-    try {
-      const result = await testLlamaCppConnection();
-      setReachable(result.status === "ok" || result.status === "empty");
-      if (result.models) setModels(result.models);
-      if (result.status !== "ok") setError(`Status: ${result.status}`);
-    } catch {
-      setReachable(false);
-      setError("Erro ao testar o llama.cpp");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function search() {
-    setLoading(true);
-    setError("");
-    try {
-      setHfModels(await searchHuggingFaceModels(query));
-    } catch {
-      setError("Erro ao consultar a Hugging Face");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function installRuntime() {
-    setLoading(true);
-    setError("");
-    try {
-      const assets = await fetchLlamaCppReleases();
-      setReleases(assets);
-      const preferred = assets.find((asset) => asset.recommended);
-      if (!preferred) throw new Error("Nenhum runtime compatível encontrado");
-      setInstalling(true);
-      await installLlamaCppRuntime(preferred.url, preferred.sha256);
-      setRuntime(await fetchLlamaCppRuntimeStatus());
-    } catch (installError) {
-      setError(
-        installError instanceof Error
-          ? installError.message
-          : "Erro ao instalar o runtime oficial do llama.cpp",
-      );
-    } finally {
-      setInstalling(false);
-      setLoading(false);
-    }
-  }
-
-  async function removeRuntime() {
-    if (!window.confirm("Remover o runtime gerenciado do llama.cpp?")) return;
-    setRuntimeBusy(true);
-    setError("");
-    try {
-      await removeLlamaCppRuntime();
-      setRuntime(await fetchLlamaCppRuntimeStatus());
-    } catch {
-      setError("Não foi possível remover o runtime. Pare o sidecar antes.");
-    } finally {
-      setRuntimeBusy(false);
-    }
-  }
-
-  async function cleanupRuntime() {
-    if (!runtime) return;
-    setRuntimeBusy(true);
-    setError("");
-    try {
-      await cleanupLlamaCppRuntime(runtimeKeep);
-      setRuntime(await fetchLlamaCppRuntimeStatus());
-    } catch {
-      setError(
-        "Não foi possível limpar versões antigas. Pare o sidecar antes.",
+        actionError instanceof Error
+          ? actionError.message
+          : "Não foi possível concluir a ação do runtime.",
       );
     } finally {
       setRuntimeBusy(false);
     }
   }
+
+  const registeredByTag = new Map(registered.map((item) => [item.tag, item]));
+  const modelRows = new Map<string, LlamaCppModelInfo>();
+  for (const item of models) modelRows.set(item.id, item);
+  for (const item of registered) {
+    if (!modelRows.has(item.tag)) modelRows.set(item.tag, { id: item.tag });
+  }
+  const filteredModels = [...modelRows.values()].filter((item) =>
+    item.id.toLowerCase().includes(modelQuery.trim().toLowerCase()),
+  );
 
   return (
     <div className="space-y-3 rounded-lg border p-4">
@@ -3098,274 +2959,148 @@ function LlamaCppSection() {
           {m.provider_routing_llamacpp_subtitle()}
         </p>
       </div>
-      <div className="grid gap-2 sm:grid-cols-2">
-        <select
-          aria-label={m.provider_routing_llamacpp_mode()}
-          className="rounded-md border bg-background px-3 text-sm"
-          value={mode}
-          onChange={(event) =>
-            void changeMode(event.target.value as "managed" | "external")
-          }
-          disabled={loading || installing}
-        >
-          <option value="external">
-            {m.provider_routing_llamacpp_mode_external()}
-          </option>
-          <option value="managed">
-            {m.provider_routing_llamacpp_mode_managed()}
-          </option>
-        </select>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-base text-muted-foreground">
+          {m.provider_routing_llamacpp_status({
+            status: runtime?.installed
+              ? m.provider_routing_ollama_runtime_running()
+              : m.provider_routing_ollama_runtime_missing(),
+          })}
+        </span>
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={!runtime?.installed || runtimeBusy}
+            onClick={() => void runtimeAction("remove")}
+          >
+            {m.provider_routing_llamacpp_uninstall()}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={runtimeBusy || !runtime?.installed}
+            onClick={() => void runtimeAction("stop")}
+          >
+            {m.provider_routing_llamacpp_stop()}
+          </Button>
+        </div>
+      </div>
+      <div className="flex gap-2">
+        <Input
+          aria-label={m.provider_routing_llamacpp_key()}
+          type="password"
+          autoComplete="new-password"
+          value={apiKey}
+          onChange={(event) => setApiKey(event.target.value)}
+          placeholder={m.provider_routing_llamacpp_key_placeholder()}
+        />
+        <Button type="button" onClick={() => void saveConfig()}>
+          {m.provider_routing_dmr_save()}
+        </Button>
+      </div>
+      <div className="flex gap-2">
         <Input
           aria-label={m.provider_routing_llamacpp_endpoint()}
           value={baseUrl}
           onChange={(event) => setBaseUrl(event.target.value)}
           placeholder={m.provider_routing_llamacpp_endpoint_placeholder()}
         />
-        <Input
-          aria-label={m.provider_routing_llamacpp_model()}
-          value={model}
-          onChange={(event) => setModel(event.target.value)}
-          placeholder={m.provider_routing_llamacpp_model_placeholder()}
-        />
-        <Input
-          aria-label={m.provider_routing_llamacpp_key()}
-          type="password"
-          value={apiKey}
-          onChange={(event) => setApiKey(event.target.value)}
-          placeholder={m.provider_routing_llamacpp_key_placeholder()}
-        />
         <Button
           type="button"
-          onClick={() => void saveConfig()}
+          variant="outline"
           disabled={loading}
-        >
-          {m.provider_routing_llamacpp_save()}
-        </Button>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => void installRuntime()}
-          disabled={loading || installing}
-        >
-          {m.provider_routing_llamacpp_install()}
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => void discover()}
-          disabled={loading}
-        >
-          <RefreshCw className="mr-2 size-4" />{" "}
-          {m.provider_routing_llamacpp_detect()}
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
           onClick={() => void testConnection()}
-          disabled={loading}
         >
           {m.provider_routing_llamacpp_test()}
         </Button>
+      </div>
+      <div className="flex gap-2">
+        <div className="relative min-w-0 flex-1">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+          <Input
+            value={modelQuery}
+            onChange={(event) => setModelQuery(event.target.value)}
+            placeholder={m.provider_routing_nine_router_search_placeholder()}
+            className="h-8 pl-8 text-xs"
+          />
+        </div>
         <Button
           type="button"
           variant="outline"
-          onClick={() => void search()}
           disabled={loading}
+          onClick={() => void detectModels()}
         >
-          <Search className="mr-2 size-4" /> {m.provider_routing_llamacpp_hf()}
+          {loading ? (
+            <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+          ) : (
+            <RefreshCw className="mr-1.5 size-4" />
+          )}
+          {m.provider_routing_detect_models()}
         </Button>
       </div>
-      {runtime && (
-        <div className="rounded-md border p-3 text-xs text-muted-foreground">
-          <p>
-            {m.provider_routing_llamacpp_title()}:{" "}
-            {runtime.installed
-              ? m.provider_routing_llamacpp_runtime_installed()
-              : m.provider_routing_llamacpp_runtime_remove()}
-            {runtime.runtimes.length > 0 &&
-              ` (${runtime.runtimes.map((item) => item.asset).join(", ")})`}
-          </p>
-          {runtime.free_bytes !== undefined && (
-            <p>
-              {m.provider_routing_llamacpp_runtime_disk_free({
-                bytes: String(runtime.free_bytes),
-              })}
-            </p>
-          )}
-          <div className="mt-2 space-y-1">
-            {runtime.runtimes.map((item) => (
-              <p key={item.id ?? item.asset} className="truncate">
-                {m.provider_routing_llamacpp_runtime_details({
-                  version: item.version || item.asset,
-                  source: item.source || "—",
-                  sha256: item.sha256 || "—",
-                })}
-              </p>
-            ))}
-          </div>
-          {runtime.runtimes
-            .filter((item) => item.id && item.id !== runtime.active_runtime)
-            .map((item) => (
-              <div key={item.id} className="mt-2 mr-2 inline-flex gap-2">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="px-0"
-                  disabled={runtimeBusy || loading || installing}
-                  onClick={() => {
-                    if (!item.id) return;
-                    setRuntimeBusy(true);
-                    void rollbackLlamaCppRuntime(item.id)
-                      .then(async () =>
-                        setRuntime(await fetchLlamaCppRuntimeStatus()),
-                      )
-                      .catch(() =>
-                        setError("Não foi possível reverter o runtime."),
-                      )
-                      .finally(() => setRuntimeBusy(false));
-                  }}
-                >
-                  {m.provider_routing_llamacpp_runtime_rollback()} ({item.asset}
-                  )
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="px-0"
-                  disabled={runtimeBusy || loading || installing}
-                  onClick={() => {
-                    if (
-                      !item.id ||
-                      !window.confirm(
-                        m.provider_routing_llamacpp_runtime_remove_version(),
-                      )
-                    )
-                      return;
-                    setRuntimeBusy(true);
-                    void removeLlamaCppRuntimeVersion(item.id)
-                      .then(async () =>
-                        setRuntime(await fetchLlamaCppRuntimeStatus()),
-                      )
-                      .catch(() =>
-                        setError(
-                          "Não foi possível remover a versão do runtime.",
-                        ),
-                      )
-                      .finally(() => setRuntimeBusy(false));
-                  }}
-                >
-                  {m.provider_routing_llamacpp_runtime_remove_version()}
-                </Button>
-              </div>
-            ))}
-          {runtime.installed && (
-            <div className="mt-3 flex flex-wrap items-end gap-2">
-              <div className="grid gap-1">
-                <Label htmlFor="llamacpp-runtime-keep" className="text-xs">
-                  {m.provider_routing_llamacpp_runtime_keep_label()}
-                </Label>
-                <Input
-                  id="llamacpp-runtime-keep"
-                  type="number"
-                  min={0}
-                  max={50}
-                  className="w-24"
-                  value={runtimeKeep}
-                  onChange={(event) =>
-                    setRuntimeKeep(
-                      Math.max(0, Math.min(50, Number(event.target.value))),
-                    )
-                  }
-                />
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={runtimeBusy || loading || installing}
-                onClick={() => void cleanupRuntime()}
-              >
-                {m.provider_routing_llamacpp_runtime_cleanup()}
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                className="px-0"
-                disabled={runtimeBusy || loading || installing}
-                onClick={() => void removeRuntime()}
-              >
-                {m.provider_routing_llamacpp_runtime_remove_all()}
-              </Button>
-            </div>
-          )}
-        </div>
-      )}
-      {reachable !== null && (
+      {reachable === false && (
         <p className="text-xs text-muted-foreground">
-          {reachable
-            ? m.provider_routing_llamacpp_found({ n: models.length })
-            : m.provider_routing_llamacpp_unreachable()}
+          {m.provider_routing_llamacpp_unreachable()}
         </p>
       )}
-      {models.length > 0 && (
-        <div className="space-y-1.5">
-          {models.map((item) => {
-            const id = item.id;
-            const already = registered.some((entry) => entry.tag === id);
-            return (
-              <div
-                key={id}
-                className="flex min-w-0 items-center justify-between gap-3 rounded-lg border bg-card px-3 py-2"
-              >
-                <span className="truncate font-mono text-sm">{id}</span>
+      {filteredModels.map((item) => {
+        const registeredModel = registeredByTag.get(item.id);
+        return (
+          <div
+            key={item.id}
+            className="flex min-w-0 items-center justify-between gap-3 rounded-lg border bg-card px-3 py-2"
+          >
+            <span className="truncate font-mono text-sm">{item.id}</span>
+            {registeredModel ? (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">
+                  {m.provider_routing_already_registered()}
+                </span>
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="shrink-0"
-                  disabled={already || registeringId === id}
-                  onClick={() => void handleRegister(id)}
+                  aria-label={m.provider_routing_llamacpp_remove_model({
+                    model: item.id,
+                  })}
+                  disabled={removingId === registeredModel.id}
+                  onClick={() => void handleRemove(registeredModel.id)}
                 >
-                  {registeringId === id ? (
+                  {removingId === registeredModel.id ? (
                     <Loader2 className="size-3.5 animate-spin" />
-                  ) : already ? (
-                    m.provider_routing_already_registered()
                   ) : (
-                    <>
-                      <Plus className="mr-1 size-3.5" />
-                      {m.provider_routing_register()}
-                    </>
+                    <Trash2 className="size-3.5" />
                   )}
                 </Button>
               </div>
-            );
-          })}
-        </div>
-      )}
-      <RegisteredModelsList
-        registered={registered}
-        loading={loadingRegistered}
-        removingId={removingId}
-        onRemove={(id) => void handleRemove(id)}
-      />
-      {hfModels.length > 0 && (
-        <div className="space-y-1 text-sm">
-          {hfModels.map((item) => (
-            <div key={item.id}>{item.id}</div>
-          ))}
-        </div>
+            ) : (
+              <Button
+                type="button"
+                size="sm"
+                disabled={registeringId === item.id}
+                onClick={() => void handleRegister(item.id)}
+              >
+                {registeringId === item.id ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <>
+                    <Plus className="mr-1 size-3.5" />
+                    {m.provider_routing_register()}
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
+        );
+      })}
+      {loadingRegistered && (
+        <Loader2 className="size-4 animate-spin text-muted-foreground" />
       )}
       {error && <p className="text-xs text-destructive">{error}</p>}
-      {releases.length > 0 && (
-        <p className="text-xs text-muted-foreground">
-          {m.provider_routing_llamacpp_release_count({ n: releases.length })}
-        </p>
-      )}
     </div>
   );
 }
-
 export function ProviderRoutingTab() {
   return (
     <div className="space-y-6 [&_button]:!h-8 [&_button]:!px-3 [&_button]:!text-sm">
