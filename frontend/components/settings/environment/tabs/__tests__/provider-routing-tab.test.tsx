@@ -29,6 +29,7 @@ afterEach(() => overwriteGetLocale(() => baseLocale));
 function mockFetch(
   handlers: Partial<{
     registered: object[];
+    ollamaInstallError: string;
     discover: { reachable: boolean; models: object[] };
     registerOk: boolean;
     removeOk: boolean;
@@ -79,6 +80,27 @@ function mockFetch(
           ok: true,
           json: async () =>
             handlers.discover ?? { reachable: false, models: [] },
+        } as Response);
+      }
+      if (url === "/provider-routing/ollama/runtime/status") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            installed: false,
+            reachable: false,
+            state: "missing",
+          }),
+        } as Response);
+      }
+      if (
+        url === "/provider-routing/ollama/runtime/install" &&
+        method === "POST"
+      ) {
+        const detail = handlers.ollamaInstallError ?? "instalação falhou";
+        return Promise.resolve({
+          ok: false,
+          status: 501,
+          json: async () => ({ detail }),
         } as Response);
       }
       if (url === "/provider-routing/ollama/registered" && method === "POST") {
@@ -474,6 +496,19 @@ describe("ProviderRoutingTab — Ollama", () => {
     await waitFor(() => {
       expect(screen.getByText(/n[ãa]o consegui alcan[çc]ar/i)).toBeTruthy();
     });
+  });
+
+  it("mostra o detalhe da API quando a instalação gerenciada falha", async () => {
+    mockFetch({
+      registered: [],
+      ollamaInstallError: "pacote Linux incompatível",
+    });
+    render(<ProviderRoutingTab />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: /instalar\/iniciar ollama/i }),
+    );
+    expect(await screen.findByText("pacote Linux incompatível")).toBeTruthy();
   });
 
   it("descoberta com host acessível lista modelos e permite registrar", async () => {
