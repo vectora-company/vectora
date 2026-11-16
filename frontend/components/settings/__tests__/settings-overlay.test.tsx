@@ -116,7 +116,7 @@ describe("SettingsOverlay — navegação sem flicker", () => {
 
     expect(await screen.findByTestId("tab-geral")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByText("IA e Decision Models"));
+    fireEvent.click(screen.getByText("IA Models"));
     await act(async () => {});
 
     // Mesmo elemento de Dialog — nunca desmontou/remontou.

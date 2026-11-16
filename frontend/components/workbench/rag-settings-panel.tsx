@@ -65,14 +65,14 @@ const DEFAULTS: RagSettings = {
 // Embedding aceita os providers suportados —
 // backend resolve em storage/factory.py::_build_lc_embeddings (lê
 // embed_provider/embed_model deste mesmo /rag/settings).
-const RERANK_PROVIDERS = [
+export const RERANK_PROVIDERS = [
   "auto",
   "cohere",
   "voyage",
   "openrouter",
   "llamacpp",
 ] as const;
-const EMBED_PROVIDERS = [
+export const EMBED_PROVIDERS = [
   "auto",
   "cohere",
   "voyage",
@@ -85,7 +85,7 @@ const EMBED_PROVIDERS = [
   "dmr",
 ] as const;
 
-const PROVIDER_LABELS: Record<string, () => string> = {
+export const RAG_PROVIDER_LABELS: Record<string, () => string> = {
   auto: m.rag_provider_auto,
   cohere: m.rag_provider_cohere,
   voyage: m.rag_provider_voyage,
@@ -279,6 +279,9 @@ export function RagSettingsForm({
   collectionsStatus,
   patching,
   includeModelSettings = true,
+  modelSettings = "all",
+  includeProviderSelection = true,
+  includeRerankerToggle = true,
   includeIngestionSettings = true,
   includeCollections = true,
 }: Pick<
@@ -296,6 +299,9 @@ export function RagSettingsForm({
   | "patching"
 > & {
   includeModelSettings?: boolean;
+  modelSettings?: "all" | "embeddings" | "rerankers";
+  includeProviderSelection?: boolean;
+  includeRerankerToggle?: boolean;
   includeIngestionSettings?: boolean;
   includeCollections?: boolean;
 }) {
@@ -317,143 +323,175 @@ export function RagSettingsForm({
     <div className="min-w-0 space-y-3 text-xs" aria-busy={patching}>
       {includeModelSettings && (
         <>
-          {/* Reranker on/off + top_k */}
-          <label className="flex items-center justify-between gap-2 cursor-pointer select-none">
-            <span className="text-foreground">{m.rag_reranker_enabled()}</span>
-            <input
-              type="checkbox"
-              checked={settings.reranker_enabled}
-              onChange={(e) =>
-                void patch({ reranker_enabled: e.target.checked })
-              }
-              className="accent-[var(--color-primary)]"
-            />
-          </label>
-          <p className="-mt-1.5 text-[10px] text-muted-foreground">
-            {m.rag_reranker_help()}
-          </p>
-          <label className="flex items-center justify-between gap-2">
-            <span className="text-foreground">{m.rag_reranker_top_k()}</span>
-            <input
-              type="number"
-              min={1}
-              max={50}
-              value={settings.reranker_top_k}
-              disabled={!settings.reranker_enabled}
-              onChange={(e) =>
-                void patch({
-                  reranker_top_k: Math.max(1, Number(e.target.value) || 1),
-                })
-              }
-              className="w-16 bg-background border border-border/60 rounded px-1.5 py-0.5 text-right disabled:opacity-40"
-            />
-          </label>
-
-          {/* Providers */}
-          <label className="flex items-center justify-between gap-2">
-            <span className="text-foreground">{m.rag_rerank_provider()}</span>
-            <ProviderSelect
-              value={settings.rerank_provider}
-              onChange={(v) =>
-                void patch({ rerank_provider: v, rerank_model: "" })
-              }
-              providers={RERANK_PROVIDERS}
-              unavailable={
-                new Set(
-                  Object.entries(settings.rerank_provider_available ?? {})
-                    .filter(([, available]) => !available)
-                    .map(([provider]) => provider),
-                )
-              }
-            />
-          </label>
-          {(settings.rerank_provider === "auto"
-            ? settings.rerank_provider_effective
-            : settings.rerank_provider) &&
-            settings.rerank_provider_available?.[
-              settings.rerank_provider === "auto"
-                ? (settings.rerank_provider_effective ?? "")
-                : settings.rerank_provider
-            ] === false && (
-              <p className="text-[10px] text-amber-600 dark:text-amber-400">
-                {m.rag_rerank_provider_unavailable_warning()}
+          {modelSettings !== "embeddings" && (
+            <>
+              {/* Reranker on/off + top_k */}
+              {includeRerankerToggle && (
+                <label className="flex items-center justify-between gap-2 cursor-pointer select-none">
+                  <span className="text-foreground">
+                    {m.rag_reranker_enabled()}
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={settings.reranker_enabled}
+                    onChange={(e) =>
+                      void patch({ reranker_enabled: e.target.checked })
+                    }
+                    className="accent-[var(--color-primary)]"
+                  />
+                </label>
+              )}
+              <p className="-mt-1.5 text-[10px] text-muted-foreground">
+                {m.rag_reranker_help()}
               </p>
-            )}
-          {["cohere", "voyage", "openrouter", "llamacpp"].includes(
-            settings.rerank_provider,
-          ) && (
-            <label className="flex items-center justify-between gap-2">
-              <span className="text-foreground">{m.rag_rerank_model()}</span>
-              <input
-                value={settings.rerank_model}
-                onChange={(e) => void patch({ rerank_model: e.target.value })}
-                className="w-56 bg-background border border-border/60 rounded px-1.5 py-0.5 text-foreground"
-              />
-            </label>
+              <label className="flex items-center justify-between gap-2">
+                <span className="text-foreground">
+                  {m.rag_reranker_top_k()}
+                </span>
+                <input
+                  type="number"
+                  min={1}
+                  max={50}
+                  value={settings.reranker_top_k}
+                  disabled={!settings.reranker_enabled}
+                  onChange={(e) =>
+                    void patch({
+                      reranker_top_k: Math.max(1, Number(e.target.value) || 1),
+                    })
+                  }
+                  className="w-16 bg-background border border-border/60 rounded px-1.5 py-0.5 text-right disabled:opacity-40"
+                />
+              </label>
+
+              {/* Providers */}
+              {includeProviderSelection && (
+                <label className="flex items-center justify-between gap-2">
+                  <span className="text-foreground">
+                    {m.rag_rerank_provider()}
+                  </span>
+                  <ProviderSelect
+                    value={settings.rerank_provider}
+                    onChange={(v) =>
+                      void patch({ rerank_provider: v, rerank_model: "" })
+                    }
+                    providers={RERANK_PROVIDERS}
+                    unavailable={
+                      new Set(
+                        Object.entries(settings.rerank_provider_available ?? {})
+                          .filter(([, available]) => !available)
+                          .map(([provider]) => provider),
+                      )
+                    }
+                  />
+                </label>
+              )}
+              {(settings.rerank_provider === "auto"
+                ? settings.rerank_provider_effective
+                : settings.rerank_provider) &&
+                settings.rerank_provider_available?.[
+                  settings.rerank_provider === "auto"
+                    ? (settings.rerank_provider_effective ?? "")
+                    : settings.rerank_provider
+                ] === false && (
+                  <p className="text-[10px] text-amber-600 dark:text-amber-400">
+                    {m.rag_rerank_provider_unavailable_warning()}
+                  </p>
+                )}
+              {["cohere", "voyage", "openrouter", "llamacpp"].includes(
+                settings.rerank_provider,
+              ) && (
+                <label className="flex items-center justify-between gap-2">
+                  <span className="text-foreground">
+                    {m.rag_rerank_model()}
+                  </span>
+                  <input
+                    value={settings.rerank_model}
+                    onChange={(e) =>
+                      void patch({ rerank_model: e.target.value })
+                    }
+                    className="w-56 bg-background border border-border/60 rounded px-1.5 py-0.5 text-foreground"
+                  />
+                </label>
+              )}
+            </>
           )}
-          <label className="flex items-center justify-between gap-2">
-            <span className="text-foreground">{m.rag_embed_provider()}</span>
-            <ProviderSelect
-              value={settings.embed_provider}
-              onChange={(v) =>
-                void patch({ embed_provider: v, embed_model: "" })
-              }
-              providers={EMBED_PROVIDERS}
-              unavailable={
-                new Set(
-                  Object.entries(settings.embed_provider_available ?? {})
-                    .filter(([, available]) => !available)
-                    .map(([provider]) => provider),
-                )
-              }
-            />
-          </label>
-          {settings.embed_provider === "cohere" && (
-            <label className="flex items-center justify-between gap-2">
-              <span className="text-foreground">{m.rag_embed_model()}</span>
-              <input
-                value={settings.embed_model}
-                onChange={(e) => void patch({ embed_model: e.target.value })}
-                className="w-56 bg-background border border-border/60 rounded px-1.5 py-0.5 text-foreground"
-              />
-            </label>
-          )}
-          {settings.embed_provider === "voyage" && (
-            <label className="flex items-center justify-between gap-2">
-              <span className="text-foreground">{m.rag_embed_model()}</span>
-              <input
-                value={settings.embed_model}
-                onChange={(e) => void patch({ embed_model: e.target.value })}
-                className="w-56 bg-background border border-border/60 rounded px-1.5 py-0.5 text-foreground"
-              />
-            </label>
-          )}
-          {[
-            "openai",
-            "google-genai",
-            "llamacpp",
-            "nine_router",
-            "dmr",
-          ].includes(settings.embed_provider) && (
-            <label className="flex items-center justify-between gap-2">
-              <span className="text-foreground">{m.rag_embed_model()}</span>
-              <input
-                value={settings.embed_model}
-                onChange={(e) => void patch({ embed_model: e.target.value })}
-                className="w-56 bg-background border border-border/60 rounded px-1.5 py-0.5 text-foreground"
-              />
-            </label>
-          )}
-          <p className="text-[10px] text-muted-foreground">
-            {m.rag_embed_reindex_warning()}
-          </p>
-          {(settings.embed_provider === "ollama" ||
-            settings.embed_provider === "openrouter") && (
-            <EmbedModelPicker
-              provider={settings.embed_provider}
-              value={settings.embed_model}
-              onChange={(v) => void patch({ embed_model: v })}
-            />
+          {modelSettings !== "rerankers" && (
+            <>
+              {includeProviderSelection && (
+                <label className="flex items-center justify-between gap-2">
+                  <span className="text-foreground">
+                    {m.rag_embed_provider()}
+                  </span>
+                  <ProviderSelect
+                    value={settings.embed_provider}
+                    onChange={(v) =>
+                      void patch({ embed_provider: v, embed_model: "" })
+                    }
+                    providers={EMBED_PROVIDERS}
+                    unavailable={
+                      new Set(
+                        Object.entries(settings.embed_provider_available ?? {})
+                          .filter(([, available]) => !available)
+                          .map(([provider]) => provider),
+                      )
+                    }
+                  />
+                </label>
+              )}
+              {settings.embed_provider === "cohere" && (
+                <label className="flex items-center justify-between gap-2">
+                  <span className="text-foreground">{m.rag_embed_model()}</span>
+                  <input
+                    value={settings.embed_model}
+                    onChange={(e) =>
+                      void patch({ embed_model: e.target.value })
+                    }
+                    className="w-56 bg-background border border-border/60 rounded px-1.5 py-0.5 text-foreground"
+                  />
+                </label>
+              )}
+              {settings.embed_provider === "voyage" && (
+                <label className="flex items-center justify-between gap-2">
+                  <span className="text-foreground">{m.rag_embed_model()}</span>
+                  <input
+                    value={settings.embed_model}
+                    onChange={(e) =>
+                      void patch({ embed_model: e.target.value })
+                    }
+                    className="w-56 bg-background border border-border/60 rounded px-1.5 py-0.5 text-foreground"
+                  />
+                </label>
+              )}
+              {[
+                "openai",
+                "google-genai",
+                "llamacpp",
+                "nine_router",
+                "dmr",
+              ].includes(settings.embed_provider) && (
+                <label className="flex items-center justify-between gap-2">
+                  <span className="text-foreground">{m.rag_embed_model()}</span>
+                  <input
+                    value={settings.embed_model}
+                    onChange={(e) =>
+                      void patch({ embed_model: e.target.value })
+                    }
+                    className="w-56 bg-background border border-border/60 rounded px-1.5 py-0.5 text-foreground"
+                  />
+                </label>
+              )}
+              <p className="text-[10px] text-muted-foreground">
+                {m.rag_embed_reindex_warning()}
+              </p>
+              {(settings.embed_provider === "ollama" ||
+                settings.embed_provider === "openrouter") && (
+                <EmbedModelPicker
+                  provider={settings.embed_provider}
+                  value={settings.embed_model}
+                  onChange={(v) => void patch({ embed_model: v })}
+                />
+              )}
+            </>
           )}
         </>
       )}
@@ -630,7 +668,7 @@ function ProviderSelect({
     >
       {providers.map((p) => (
         <option key={p} value={p} disabled={unavailable?.has(p)}>
-          {PROVIDER_LABELS[p]()}
+          {RAG_PROVIDER_LABELS[p]()}
           {unavailable?.has(p) ? ` ${m.rag_provider_no_key_suffix()}` : ""}
         </option>
       ))}

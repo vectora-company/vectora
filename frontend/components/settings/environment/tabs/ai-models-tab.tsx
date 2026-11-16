@@ -1,6 +1,6 @@
 "use client";
 
-import { ModelSelector } from "@/components/chat/model-selector";
+import { Sparkles } from "lucide-react";
 import { MediaModelsSection } from "./provider-routing-tab";
 import { ImageFallbackModelSection } from "./image-model-section";
 import { useCallback, useEffect, useState } from "react";
@@ -13,18 +13,154 @@ import { useWorkspacesStore } from "@/lib/stores/workspaces-store";
 import { m } from "@/lib/paraglide/messages";
 import { mDyn } from "@/lib/i18n-dyn";
 import {
+  getAllowedModels,
+  getModelDisplayName,
+  getModelProvider,
+} from "@/lib/config/deployment-config";
+import { Button } from "@/components/ui/button";
+import {
   RagSettingsForm,
+  EMBED_PROVIDERS,
+  RERANK_PROVIDERS,
+  RAG_PROVIDER_LABELS,
   useRagSettings,
 } from "@/components/workbench/rag-settings-panel";
 
+function formatRagModelLabel(provider: string, model: string): string {
+  return `${RAG_PROVIDER_LABELS[provider]?.() ?? provider}${model ? ` · ${model}` : ""}`;
+}
+
 function RetrievalModelSettings() {
   const state = useRagSettings({ autoLoad: true });
+  const activeEmbed = state.settings.embed_provider;
+  const activeReranker = state.settings.rerank_provider;
+  const saveProvider = (type: "embed" | "rerank", provider: string) =>
+    void state.patch(
+      type === "embed"
+        ? { embed_provider: provider, embed_model: "" }
+        : { rerank_provider: provider, rerank_model: "" },
+    );
   return (
-    <RagSettingsForm
-      {...state}
-      includeIngestionSettings={false}
-      includeCollections={false}
-    />
+    <div className="space-y-4">
+      <section className="space-y-3 rounded-lg border bg-[#1f1f1f] p-3">
+        <div>
+          <h4 className="text-sm font-medium">
+            {mDyn("ai_models_embeddings_title")}
+          </h4>
+          <p className="text-xs text-muted-foreground">
+            {mDyn("ai_models_embeddings_card_description")}
+          </p>
+        </div>
+        <div className="flex items-center justify-between rounded-lg border bg-[#1a1a1a] px-3 py-2">
+          <span className="flex min-w-0 items-center gap-2 truncate text-sm">
+            <Sparkles className="size-4 shrink-0" />
+            {formatRagModelLabel(activeEmbed, state.settings.embed_model)}
+          </span>
+          <span className="text-sm font-medium">
+            {m.provider_routing_already_registered()}
+          </span>
+        </div>
+        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+          {EMBED_PROVIDERS.filter((provider) => provider !== activeEmbed).map(
+            (provider) => (
+              <div
+                key={provider}
+                className="flex min-w-0 items-center justify-between gap-2 rounded-lg border bg-[#1a1a1a] px-3 py-2"
+              >
+                <span className="flex min-w-0 items-center gap-2 truncate text-sm">
+                  <Sparkles className="size-4 shrink-0" />
+                  {RAG_PROVIDER_LABELS[provider]?.() ?? provider}
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => saveProvider("embed", provider)}
+                >
+                  {m.provider_routing_register()}
+                </Button>
+              </div>
+            ),
+          )}
+        </div>
+        <RagSettingsForm
+          {...state}
+          modelSettings="embeddings"
+          includeProviderSelection={false}
+          includeIngestionSettings={false}
+          includeCollections={false}
+        />
+      </section>
+      <section className="space-y-3 rounded-lg border bg-[#1f1f1f] p-3">
+        <div>
+          <h4 className="text-sm font-medium">
+            {mDyn("ai_models_rerankers_title")}
+          </h4>
+          <p className="text-xs text-muted-foreground">
+            {mDyn("ai_models_rerankers_card_description")}
+          </p>
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-sm text-muted-foreground">
+            {mDyn("ai_models_rerankers_title")}:{" "}
+            {state.settings.reranker_enabled
+              ? mDyn("ai_models_enabled")
+              : mDyn("ai_models_disabled")}
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() =>
+              void state.patch({
+                reranker_enabled: !state.settings.reranker_enabled,
+              })
+            }
+          >
+            {state.settings.reranker_enabled
+              ? mDyn("ai_models_disable_rerankers")
+              : mDyn("ai_models_enable_rerankers")}
+          </Button>
+        </div>
+        <div className="flex items-center justify-between rounded-lg border bg-[#1a1a1a] px-3 py-2">
+          <span className="flex min-w-0 items-center gap-2 truncate text-sm">
+            <Sparkles className="size-4 shrink-0" />
+            {formatRagModelLabel(activeReranker, state.settings.rerank_model)}
+          </span>
+          <span className="text-sm font-medium">
+            {m.provider_routing_already_registered()}
+          </span>
+        </div>
+        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+          {RERANK_PROVIDERS.filter(
+            (provider) => provider !== activeReranker,
+          ).map((provider) => (
+            <div
+              key={provider}
+              className="flex min-w-0 items-center justify-between gap-2 rounded-lg border bg-[#1a1a1a] px-3 py-2"
+            >
+              <span className="flex min-w-0 items-center gap-2 truncate text-sm">
+                <Sparkles className="size-4 shrink-0" />
+                {RAG_PROVIDER_LABELS[provider]?.() ?? provider}
+              </span>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => saveProvider("rerank", provider)}
+              >
+                {m.provider_routing_register()}
+              </Button>
+            </div>
+          ))}
+        </div>
+        <RagSettingsForm
+          {...state}
+          modelSettings="rerankers"
+          includeProviderSelection={false}
+          includeRerankerToggle={false}
+          includeIngestionSettings={false}
+          includeCollections={false}
+        />
+      </section>
+    </div>
   );
 }
 
@@ -371,9 +507,22 @@ function DecisionModelsSection() {
     };
   }, [provider]);
 
+  const activeProvider = DECISION_PROVIDERS.find(
+    (item) => item.id === provider,
+  );
+  const readiness = !enabled
+    ? m.decision_models_readiness_no_guardrail()
+    : statusError
+      ? m.decision_models_readiness_unavailable()
+      : status?.ready
+        ? m.decision_models_readiness_ready()
+        : status?.configured
+          ? m.decision_models_readiness_unhealthy()
+          : m.decision_models_readiness_unconfigured();
+
   return (
     <section
-      className="space-y-3 rounded-lg border p-3"
+      className="space-y-3 rounded-lg border bg-[#1f1f1f] p-3"
       aria-label={mDyn("ai_models_decision_models")}
     >
       <div>
@@ -384,57 +533,61 @@ function DecisionModelsSection() {
           {mDyn("ai_models_decision_models_description")}
         </p>
       </div>
-      <label className="flex items-center gap-2 text-sm">
-        <input
-          type="checkbox"
-          checked={enabled}
-          onChange={(event) => setEnabled(event.target.checked)}
-        />
-        {mDyn("ai_models_enable_for_user")}
-      </label>
-      <label className="grid gap-1 text-xs">
-        {mDyn("ai_models_selected_provider")}
-        <select
-          className="h-8 rounded-md border bg-background px-2 text-sm"
-          value={provider}
-          onChange={(event) =>
-            setProvider(event.target.value as DecisionModelProvider)
-          }
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm text-muted-foreground">
+          {mDyn("ai_models_decision_models")}:{" "}
+          {enabled ? mDyn("ai_models_enabled") : mDyn("ai_models_disabled")}
+        </span>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => setEnabled(!enabled)}
         >
-          {DECISION_PROVIDERS.map((item) => (
-            <option key={item.id} value={item.id}>
-              {mDyn(item.label)}
-            </option>
-          ))}
-        </select>
-      </label>
+          {enabled
+            ? mDyn("ai_models_disable_decision_models")
+            : mDyn("ai_models_enable_decision_models")}
+        </Button>
+      </div>
+      <div className="flex items-center justify-between rounded-lg border bg-[#1a1a1a] px-3 py-2">
+        <span className="flex min-w-0 items-center gap-2 truncate text-sm">
+          <Sparkles className="size-4 shrink-0" />
+          {status?.model ||
+            (activeProvider ? mDyn(activeProvider.label) : provider)}
+        </span>
+        <span className="text-sm font-medium">
+          {m.provider_routing_already_registered()}
+        </span>
+      </div>
+      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+        {DECISION_PROVIDERS.filter((item) => item.id !== provider).map(
+          (item) => (
+            <div
+              key={item.id}
+              className="flex min-w-0 items-center justify-between gap-2 rounded-lg border bg-[#1a1a1a] px-3 py-2"
+            >
+              <span className="flex min-w-0 items-center gap-2 truncate text-sm">
+                <Sparkles className="size-4 shrink-0" />
+                {mDyn(item.label)}
+              </span>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => setProvider(item.id)}
+              >
+                {m.provider_routing_register()}
+              </Button>
+            </div>
+          ),
+        )}
+      </div>
       <p role="status" className="text-xs text-muted-foreground">
-        {!enabled
-          ? m.decision_models_readiness_no_guardrail()
-          : statusError
-            ? m.decision_models_readiness_unavailable()
-            : status
-              ? status.ready
-                ? m.decision_models_readiness_ready()
-                : !status.configured
-                  ? m.decision_models_readiness_unconfigured()
-                  : status.credential_valid === false
-                    ? m.decision_models_readiness_no_credential()
-                    : !status.healthy
-                      ? m.decision_models_readiness_unhealthy()
-                      : m.decision_models_readiness_no_guardrail()
-              : m.decision_models_readiness_checking()}
+        {readiness}
       </p>
-      {status?.model && (
-        <p className="text-xs text-muted-foreground">
-          {mDyn("ai_models_configured_model", { model: status.model })}
-        </p>
-      )}
       <fieldset className="space-y-2">
         <legend className="text-xs font-medium">
           {mDyn("ai_models_allowed_surfaces")}
         </legend>
-        <div className="grid gap-2 sm:grid-cols-2">
+        <div className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
           {DECISION_SURFACES.map(([id, label]) => (
             <label key={id} className="flex items-center gap-2 text-xs">
               <input
@@ -453,11 +606,6 @@ function DecisionModelsSection() {
   );
 }
 
-/**
- * Dedicated AI configuration surface. Provider Routing remains focused on
- * transport/provider endpoints; capability defaults such as vision and audio
- * live here with the decision-model controls that will follow in this area.
- */
 export function TranscriptionSettings() {
   const transcriptionMode = useSettingsStore(
     (state) => state.transcriptionMode,
@@ -522,31 +670,56 @@ export function TranscriptionSettings() {
   };
   return (
     <section
-      className="space-y-2 rounded-lg border p-3"
+      className="space-y-3 rounded-lg border bg-[#1f1f1f] p-3"
       aria-label={mDyn("ai_models_transcription")}
     >
-      <h4 className="text-sm font-medium">
-        {mDyn("ai_models_audio_transcription")}
-      </h4>
-      <label className="grid gap-1 text-xs text-muted-foreground">
-        {mDyn("ai_models_transcription_mode_label")}
-        <select
-          aria-label={mDyn("ai_models_transcription_mode_label")}
-          className="h-9 rounded-md border bg-background px-2 text-sm text-foreground"
-          value={transcriptionMode}
-          onChange={(event) =>
-            setTranscriptionMode(event.target.value as "local" | "remote")
-          }
-        >
-          <option value="remote">
-            {mDyn("ai_models_transcription_remote")}
-          </option>
-          <option value="local">{mDyn("ai_models_transcription_local")}</option>
-        </select>
-      </label>
-      <p className="text-xs text-muted-foreground">
-        {mDyn("ai_models_transcription_description")}
-      </p>
+      <div>
+        <h4 className="text-sm font-medium">
+          {mDyn("ai_models_audio_transcription")}
+        </h4>
+        <p className="text-xs text-muted-foreground">
+          {mDyn("ai_models_transcription_description")}
+        </p>
+      </div>
+      <div className="flex items-center justify-between rounded-lg border bg-[#1a1a1a] px-3 py-2">
+        <span className="flex min-w-0 items-center gap-2 truncate text-sm">
+          <Sparkles className="size-4 shrink-0" />
+          {mDyn(
+            transcriptionMode === "local"
+              ? "ai_models_transcription_local"
+              : "ai_models_transcription_remote",
+          )}
+        </span>
+        <span className="text-sm font-medium">
+          {m.provider_routing_already_registered()}
+        </span>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {(["remote", "local"] as const)
+          .filter((mode) => mode !== transcriptionMode)
+          .map((mode) => (
+            <div
+              key={mode}
+              className="flex items-center justify-between gap-2 rounded-lg border bg-[#1a1a1a] px-3 py-2"
+            >
+              <span className="flex min-w-0 items-center gap-2 truncate text-sm">
+                <Sparkles className="size-4 shrink-0" />
+                {mDyn(
+                  mode === "local"
+                    ? "ai_models_transcription_local"
+                    : "ai_models_transcription_remote",
+                )}
+              </span>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => setTranscriptionMode(mode)}
+              >
+                {m.provider_routing_register()}
+              </Button>
+            </div>
+          ))}
+      </div>
       {transcriptionMode === "local" && (
         <p role="status" className="text-xs text-muted-foreground">
           {!localReadiness
@@ -1011,36 +1184,110 @@ export function MediaLimitsSettings() {
 export function ChatModelSettings() {
   const selected = useSettingsStore((state) => state.selectedModel);
   const setSelected = useSettingsStore((state) => state.setSelectedModel);
+  const [dynamicModels, setDynamicModels] = useState<
+    Array<{ id: string; available?: boolean }>
+  >([]);
+  const [configuredProviders, setConfiguredProviders] = useState<
+    string[] | null
+  >(null);
+  useEffect(() => {
+    let alive = true;
+    void fetch("/models/providers")
+      .then((response) => (response.ok ? response.json() : null))
+      .then(
+        (
+          data: {
+            providers?: string[];
+            dynamic_models?: Array<{ id: string; available?: boolean }>;
+          } | null,
+        ) => {
+          if (alive) {
+            setConfiguredProviders(
+              Array.isArray(data?.providers) ? data.providers : null,
+            );
+            setDynamicModels(data?.dynamic_models ?? []);
+          }
+        },
+      )
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const allowedModels = getAllowedModels().filter(
+    (model) =>
+      model === selected ||
+      !configuredProviders ||
+      configuredProviders.length === 0 ||
+      configuredProviders.includes(getModelProvider(model)),
+  );
+  const models = [
+    ...new Set([
+      ...allowedModels,
+      ...dynamicModels
+        .filter((model) => model.available !== false || model.id === selected)
+        .map((model) => model.id),
+      selected,
+    ]),
+  ];
+  const registerable = models.filter((model) => model !== selected);
   return (
     <section
-      className="space-y-3 rounded-lg border p-3"
+      className="space-y-3 rounded-lg border bg-[#1f1f1f] p-3"
       aria-label={mDyn("ai_models_chat_primary")}
     >
-      <h4 className="text-sm font-medium">{mDyn("ai_models_chat_primary")}</h4>
-      <p className="text-xs text-muted-foreground">
-        {mDyn("ai_models_chat_primary_help")}
-      </p>
-      <ModelSelector value={selected} onChange={setSelected} />
+      <div>
+        <h4 className="text-sm font-medium">
+          {mDyn("ai_models_chat_primary")}
+        </h4>
+        <p className="text-xs text-muted-foreground">
+          {mDyn("ai_models_chat_primary_help")}
+        </p>
+      </div>
+      <div className="flex items-center justify-between rounded-lg border bg-[#1a1a1a] px-3 py-2">
+        <span className="flex min-w-0 items-center gap-2 truncate text-sm">
+          <Sparkles className="size-4 shrink-0" />
+          {getModelDisplayName(selected)}
+        </span>
+        <span className="text-sm font-medium">
+          {m.provider_routing_already_registered()}
+        </span>
+      </div>
+      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+        {registerable.map((model) => (
+          <div
+            key={model}
+            className="flex min-w-0 items-center justify-between gap-2 rounded-lg border bg-[#1a1a1a] px-3 py-2"
+          >
+            <span className="flex min-w-0 items-center gap-2 truncate text-sm">
+              <Sparkles className="size-4 shrink-0" />
+              {getModelDisplayName(model)}
+            </span>
+            <Button type="button" size="sm" onClick={() => setSelected(model)}>
+              {m.provider_routing_register()}
+            </Button>
+          </div>
+        ))}
+      </div>
     </section>
   );
 }
 
 export function AiModelsTab() {
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div>
         <h3 className="text-sm font-medium text-foreground">
           {m.settings_category_ai_models()}
         </h3>
-        <p className="mt-1 text-xs leading-5 text-muted-foreground">
+        <p className="pt-1 text-xs leading-5 text-muted-foreground">
           {m.ai_models_description()}
         </p>
       </div>
       <ChatModelSettings />
       <DecisionModelsSection />
-      <SystemOneConfiguration />
       <section
-        className="space-y-3 rounded-lg border p-3"
+        className="space-y-3 rounded-lg border bg-[#1f1f1f] p-3"
         aria-label={mDyn("ai_models_vision_input")}
       >
         <h4 className="text-sm font-medium">
@@ -1049,22 +1296,12 @@ export function AiModelsTab() {
         <ImageFallbackModelSection />
       </section>
       <MediaModelsSection />
-      <section
-        className="space-y-3 rounded-lg border p-3"
-        aria-label={mDyn("ai_models_embeddings_and_reranker")}
-      >
-        <div>
-          <h4 className="text-sm font-medium">
-            {mDyn("ai_models_embeddings_reranker_retrieval")}
-          </h4>
-          <p className="text-xs text-muted-foreground">
-            {mDyn("ai_models_embeddings_description")}
-          </p>
-        </div>
-        <RetrievalModelSettings />
+      <RetrievalModelSettings />
+      <section className="space-y-3 rounded-lg border bg-[#1f1f1f] p-3">
+        <TranscriptionSettings />
+        <LocalSpeechSettings />
       </section>
-      <TranscriptionSettings />
-      <LocalSpeechSettings />
+      <SystemOneConfiguration />
       <MediaLimitsSettings />
     </div>
   );
