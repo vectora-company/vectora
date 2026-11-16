@@ -104,6 +104,34 @@ def _build_openrouter_reranker(model_override: str | None = None) -> Any:
         return None
 
 
+def _build_llamacpp_reranker(model_override: str | None = None) -> Any:
+    """Consome o endpoint Jina-compatible /v1/rerank do llama-server."""
+    try:
+        from backend.llm.openrouter.client import OpenRouterClient
+        from backend.llm.openrouter.rerank import OpenRouterRerank
+
+        base_url = settings.llamacpp_base_url
+        model = model_override
+        if not base_url or not model:
+            return None
+        # llama.cpp aceita autenticação opcional; sem chave configurada, o
+        # bearer local é ignorado por servidores sem autenticação habilitada.
+        client = OpenRouterClient(
+            api_key=settings.llamacpp_api_key or "local",
+            base_url=base_url.rstrip("/").removesuffix("/v1") + "/v1",
+            require_api_key=False,
+            include_attribution=False,
+        )
+        return OpenRouterRerank(
+            model=model,
+            client=client,
+            top_n=int(_rag_runtime().get("reranker_top_k", settings.reranker_top_k)),
+        )
+    except Exception:
+        logger.warning("rag: falha ao montar reranker llama.cpp", exc_info=True)
+        return None
+
+
 class SystemOneRerank:
     """Reranker opcional baseado em Decision Models via `SystemOneHarness`.
 
@@ -230,13 +258,15 @@ def _build_reranker(workspace_id: str = "default") -> Any:
     model = str(rag.get("rerank_model") or "") or None
     rtype = (
         pref
-        if pref in ("cohere", "voyage", "openrouter", "systemone")
+        if pref in ("cohere", "voyage", "openrouter", "llamacpp", "systemone")
         else settings.reranker_type
     )
     if rtype == "systemone":
         return _build_systemone_reranker(workspace_id=workspace_id)
     if rtype == "openrouter":
         return _build_openrouter_reranker(model)
+    if rtype == "llamacpp":
+        return _build_llamacpp_reranker(model)
     if rtype == "voyage":
         return _build_voyage_reranker(model)
     if rtype == "cohere":

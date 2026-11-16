@@ -121,6 +121,24 @@ class OpenAIClient:
             raise OpenAIResponseError(msg)
         return corpo
 
+    async def create_embedding(self, payload: dict) -> dict:
+        """``POST /embeddings`` para vetorização de texto."""
+        client = await self._ensure_client()
+        resp = await client.post(
+            f"{self._base_url}/embeddings", json=payload, headers=self._headers()
+        )
+        try:
+            corpo = resp.json()
+        except Exception:
+            corpo = None
+        self._raise_for_status(resp.status_code, corpo)
+        if not isinstance(corpo, dict):
+            trecho = (resp.text or "")[:200]
+            raise OpenAIResponseError(
+                f"OpenAI devolveu corpo não-JSON em /embeddings: {trecho!r}"
+            )
+        return corpo
+
     async def stream_response(self, payload: dict) -> AsyncIterator[dict]:
         """Consome o stream SSE de ``/responses``.
 

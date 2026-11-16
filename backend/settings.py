@@ -373,9 +373,20 @@ class Settings(BaseSettings):
     embedding_dims: int = 1024
     """Cohere v3 retorna vetores de 1024 dimensões."""
 
-    embedding_provider: Literal["cohere", "voyage", "ollama", "openrouter"] | None = (
-        None
-    )
+    embedding_provider: (
+        Literal[
+            "cohere",
+            "voyage",
+            "openai",
+            "google-genai",
+            "ollama",
+            "openrouter",
+            "llamacpp",
+            "nine_router",
+            "dmr",
+        ]
+        | None
+    ) = None
     """Provider padrão de embeddings quando o runtime está em modo automático."""
 
     ollama_embedding_model: str | None = None
@@ -386,6 +397,12 @@ class Settings(BaseSettings):
     openrouter_embedding_model: str | None = None
     """Modelo de embedding via OpenRouter (ex.: "qwen/qwen3-embedding-0.6b").
     None desabilita embeddings via OpenRouter, mesmo com key configurada."""
+
+    openai_embedding_model: str = "text-embedding-3-small"
+    """Modelo de embeddings da API OpenAI; pode ser sobrescrito no RAG."""
+
+    google_embedding_model: str = "gemini-embedding-001"
+    """Modelo de embeddings Gemini; pode ser sobrescrito no RAG."""
 
     # Ollama/OpenRouter são gateways pra qualquer modelo: a capacidade não
     # vem do provider, vem do modelo que o usuário escolheu pra ela. Mesma
@@ -506,7 +523,9 @@ class Settings(BaseSettings):
     search_min_score: float = 0.5
     """Minimum similarity score threshold for search results."""
 
-    reranker_type: Literal["cohere", "voyage", "openrouter", "none"] = "cohere"
+    reranker_type: Literal["cohere", "voyage", "openrouter", "llamacpp", "none"] = (
+        "cohere"
+    )
     """Provider padrão de rerank quando o runtime está em modo automático.
 
     Ollama **não** entra: não expõe endpoint de rerank algum. `Literal` em

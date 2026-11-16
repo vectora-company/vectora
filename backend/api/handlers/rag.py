@@ -47,6 +47,7 @@ async def get_rag_settings() -> dict[str, Any]:
         "cohere": bool(settings.get_cohere_api_key()),
         "voyage": bool(settings.voyage_api_key),
         "openrouter": bool(settings.openrouter_api_key),
+        "llamacpp": bool(settings.llamacpp_base_url),
     }
     default_rerank_provider = str(settings.reranker_type)
     out["rerank_provider_effective"] = (
@@ -57,7 +58,15 @@ async def get_rag_settings() -> dict[str, Any]:
     out["embed_provider_available"] = {
         "cohere": bool(settings.get_cohere_api_key()),
         "voyage": bool(settings.voyage_api_key),
+        "openai": bool(settings.openai_api_key),
+        "google-genai": bool(settings.google_api_key),
+        "ollama": bool(settings.ollama_base_url),
         "openrouter": bool(settings.openrouter_api_key),
+        "llamacpp": bool(settings.llamacpp_base_url),
+        "nine_router": bool(
+            settings.nine_router_base_url and settings.nine_router_api_key
+        ),
+        "dmr": bool(settings.dmr_base_url),
     }
     return out
 

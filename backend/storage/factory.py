@@ -214,6 +214,50 @@ def _build_cohere_embeddings(model_override: str | None = None) -> Any:
         return None
 
 
+def _build_openai_embeddings(model_override: str | None = None) -> Any:
+    """Embeddings via a credencial OpenAI já usada pelo provider de chat."""
+    try:
+        from backend.llm.openai.client import OpenAIClient
+        from backend.llm.openai.embeddings import VectoraOpenAIEmbeddings
+        from backend.settings import settings as _s
+
+        model = model_override or _s.openai_embedding_model
+        if not _s.openai_api_key or not model:
+            return None
+        return _ConfiguredEmbeddings(
+            VectoraOpenAIEmbeddings(model, OpenAIClient(_s.openai_api_key)),
+            "openai",
+            model,
+        )
+    except Exception:
+        logger.warning(
+            "storage/factory: falha ao montar embeddings OpenAI", exc_info=True
+        )
+        return None
+
+
+def _build_google_embeddings(model_override: str | None = None) -> Any:
+    """Embeddings via Gemini, diferenciando consultas e documentos."""
+    try:
+        from backend.llm.google.client import GoogleGenAIClient
+        from backend.llm.google.embeddings import VectoraGoogleEmbeddings
+        from backend.settings import settings as _s
+
+        model = model_override or _s.google_embedding_model
+        if not _s.google_api_key or not model:
+            return None
+        return _ConfiguredEmbeddings(
+            VectoraGoogleEmbeddings(model, GoogleGenAIClient(_s.google_api_key)),
+            "google-genai",
+            model,
+        )
+    except Exception:
+        logger.warning(
+            "storage/factory: falha ao montar embeddings Google", exc_info=True
+        )
+        return None
+
+
 def _build_voyage_embeddings(model_override: str | None = None) -> Any:
     """``VectoraVoyageEmbeddings`` (nativo) se a key VoyageAI estiver configurada."""
     try:
@@ -280,6 +324,46 @@ def _build_openrouter_embeddings(model_override: str | None = None) -> Any:
         return None
 
 
+def _build_llamacpp_embeddings(model_override: str | None = None) -> Any:
+    """Usa o endpoint OpenAI-compatible de embeddings do llama.cpp."""
+    try:
+        from backend.llm.openai.client import OpenAIClient
+        from backend.llm.openai.embeddings import VectoraOpenAIEmbeddings
+        from backend.settings import settings as _s
+
+        model = model_override
+        base_url = _s.llamacpp_base_url
+        if not base_url or not model:
+            return None
+        base_url = base_url.rstrip("/")
+        if not base_url.endswith("/v1"):
+            base_url += "/v1"
+        client = OpenAIClient(_s.llamacpp_api_key or "local", base_url=base_url)
+        return _ConfiguredEmbeddings(
+            VectoraOpenAIEmbeddings(model, client), "llamacpp", model
+        )
+    except Exception:
+        logger.warning(
+            "storage/factory: falha ao montar embeddings llama.cpp", exc_info=True
+        )
+        return None
+
+
+def _build_openai_compatible_embeddings(
+    provider: str, base_url: str | None, api_key: str, model: str | None
+) -> Any:
+    """Adapter de embeddings OpenAI-compatible para routers/runtime locais."""
+    if not base_url or not model:
+        return None
+    from backend.llm.openai.client import OpenAIClient
+    from backend.llm.openai.embeddings import VectoraOpenAIEmbeddings
+
+    client = OpenAIClient(api_key or "local", base_url=base_url.rstrip("/"))
+    return _ConfiguredEmbeddings(
+        VectoraOpenAIEmbeddings(model, client), provider, model
+    )
+
+
 def _build_lc_embeddings() -> Any:
     """Constrói o provider/modelo de embedding explicitamente selecionado.
 
@@ -292,8 +376,8 @@ def _build_lc_embeddings() -> Any:
        se "auto"/vazio em runtime — respeita a escolha estática de quem não
        usa a UI (VPS/CLI).
     3. Em modo auto, seleciona o primeiro provider configurado na ordem
-       Cohere, Voyage, Ollama e OpenRouter. Falhas em execução não trocam
-       silenciosamente provider/modelo.
+       Cohere, Voyage, OpenAI, Google, Ollama e OpenRouter. Falhas em execução
+       não trocam silenciosamente provider/modelo.
     4. Nada configurado → None (modo sem embeddings).
     """
     from backend.settings import settings as _s
@@ -306,8 +390,30 @@ def _build_lc_embeddings() -> Any:
     builders: dict[str, Any] = {
         "cohere": lambda: _build_cohere_embeddings(runtime_model),
         "voyage": lambda: _build_voyage_embeddings(runtime_model),
+        "openai": lambda: _build_openai_embeddings(runtime_model),
+        "google-genai": lambda: _build_google_embeddings(runtime_model),
         "ollama": lambda: _build_ollama_embeddings(runtime_model),
         "openrouter": lambda: _build_openrouter_embeddings(runtime_model),
+        "llamacpp": lambda: _build_llamacpp_embeddings(runtime_model),
+        "nine_router": lambda: _build_openai_compatible_embeddings(
+            "nine_router",
+            _s.nine_router_base_url,
+            _s.nine_router_api_key or "",
+            runtime_model,
+        ),
+        "dmr": lambda: _build_openai_compatible_embeddings(
+            "dmr",
+            (
+                _s.dmr_base_url.rstrip("/")
+                if _s.dmr_base_url
+                and _s.dmr_base_url.rstrip("/").endswith("/engines/v1")
+                else f"{_s.dmr_base_url.rstrip('/')}/engines/v1"
+                if _s.dmr_base_url
+                else None
+            ),
+            "local",
+            runtime_model,
+        ),
     }
     preference = (
         runtime_pref if runtime_pref in builders else (_s.embedding_provider or "")

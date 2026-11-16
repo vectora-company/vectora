@@ -111,6 +111,29 @@ class GoogleGenAIClient:
             raise GoogleGenAIResponseError(msg)
         return corpo
 
+    async def embed_content(self, model: str, text: str, *, task_type: str) -> dict:
+        """``POST /{model}:embedContent`` para documentos ou consultas."""
+        client = await self._ensure_client()
+        resp = await client.post(
+            f"{self._base_url}/models/{model}:embedContent",
+            params={"key": self._api_key},
+            json={
+                "content": {"parts": [{"text": text}]},
+                "taskType": task_type,
+            },
+        )
+        try:
+            corpo = resp.json()
+        except Exception:
+            corpo = None
+        self._raise_for_status(resp.status_code, corpo)
+        if not isinstance(corpo, dict):
+            trecho = (resp.text or "")[:200]
+            raise GoogleGenAIResponseError(
+                f"Google Gemini devolveu corpo não-JSON em /embedContent: {trecho!r}"
+            )
+        return corpo
+
     async def stream_generate_content(
         self, model: str, payload: dict
     ) -> AsyncIterator[dict]:

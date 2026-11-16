@@ -65,21 +65,37 @@ const DEFAULTS: RagSettings = {
 // Embedding aceita os providers suportados —
 // backend resolve em storage/factory.py::_build_lc_embeddings (lê
 // embed_provider/embed_model deste mesmo /rag/settings).
-const RERANK_PROVIDERS = ["auto", "cohere", "voyage", "openrouter"] as const;
+const RERANK_PROVIDERS = [
+  "auto",
+  "cohere",
+  "voyage",
+  "openrouter",
+  "llamacpp",
+] as const;
 const EMBED_PROVIDERS = [
   "auto",
   "cohere",
   "voyage",
+  "openai",
+  "google-genai",
   "ollama",
   "openrouter",
+  "llamacpp",
+  "nine_router",
+  "dmr",
 ] as const;
 
 const PROVIDER_LABELS: Record<string, () => string> = {
   auto: m.rag_provider_auto,
   cohere: m.rag_provider_cohere,
   voyage: m.rag_provider_voyage,
+  openai: m.rag_provider_openai,
+  "google-genai": m.rag_provider_google,
   ollama: m.rag_provider_ollama,
   openrouter: m.rag_provider_openrouter,
+  llamacpp: m.rag_provider_llamacpp,
+  nine_router: m.rag_provider_nine_router,
+  dmr: m.rag_provider_dmr,
 };
 
 export function useRagSettings({
@@ -363,7 +379,7 @@ export function RagSettingsForm({
                 {m.rag_rerank_provider_unavailable_warning()}
               </p>
             )}
-          {["cohere", "voyage", "openrouter"].includes(
+          {["cohere", "voyage", "openrouter", "llamacpp"].includes(
             settings.rerank_provider,
           ) && (
             <label className="flex items-center justify-between gap-2">
@@ -403,6 +419,22 @@ export function RagSettingsForm({
             </label>
           )}
           {settings.embed_provider === "voyage" && (
+            <label className="flex items-center justify-between gap-2">
+              <span className="text-foreground">{m.rag_embed_model()}</span>
+              <input
+                value={settings.embed_model}
+                onChange={(e) => void patch({ embed_model: e.target.value })}
+                className="w-56 bg-background border border-border/60 rounded px-1.5 py-0.5 text-foreground"
+              />
+            </label>
+          )}
+          {[
+            "openai",
+            "google-genai",
+            "llamacpp",
+            "nine_router",
+            "dmr",
+          ].includes(settings.embed_provider) && (
             <label className="flex items-center justify-between gap-2">
               <span className="text-foreground">{m.rag_embed_model()}</span>
               <input
