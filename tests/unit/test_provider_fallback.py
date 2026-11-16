@@ -1,10 +1,9 @@
-"""Fallback multi-provider de LLM (Parte A).
+"""Helpers de erro e fallback de capability.
 
 Contrato:
 - is_quota_error: reconhece 429/quota/rate-limit; ignora outros erros.
-- get_fallback_chain: lê llm_fallback_order, remove o provider atual e os sem key.
-- try_with_fallback: tenta o modelo; em quota error percorre a cadeia; em troca
-  registra record_switch + on_switch; esgotou tudo → QuotaExhaustedError.
+- get_fallback_chain: fallback global de chat permanece desabilitado.
+- try_with_fallback: testa o contrato interno usado por adapters de capability.
 - record_switch/drain_switches: fila por ContextVar, drena e limpa.
 """
 
@@ -224,145 +223,24 @@ class TestProviderHasKey:
 
 
 # ---------------------------------------------------------------------------
-# get_fallback_chain
+# get_fallback_chain — fallback global removido
 # ---------------------------------------------------------------------------
-
-
-def _patch_env(order, keyed_providers):
-    """Patcha runtime_settings.get(llm_fallback_order) e _provider_has_key."""
-    rt = patch.object(pf, "_fallback_order", return_value=list(order))
-    keys = patch.object(
-        pf,
-        "_provider_has_key",
-        side_effect=lambda p: p in keyed_providers,
-    )
-    return rt, keys
 
 
 class TestGetFallbackChain:
-    def test_removes_current_provider(self):
-        order = ["openai:gpt-4o", "google-genai:gemini-2.5-flash", "cohere:command-a"]
-        rt, keys = _patch_env(order, {"openai", "google_genai", "cohere"})
-        with rt, keys:
-            chain = pf.get_fallback_chain("openai:gpt-4o")
-        assert chain == ["google-genai:gemini-2.5-flash", "cohere:command-a"]
+    def test_global_chat_fallback_is_disabled_even_with_legacy_setting(self):
+        from backend.workspace.runtime_settings import runtime_settings
 
-    def test_removes_providers_without_key(self):
-        order = ["openai:gpt-4o", "google-genai:gemini-2.5-flash", "cohere:command-a"]
-        rt, keys = _patch_env(order, {"openai", "google_genai"})  # sem cohere
-        with rt, keys:
-            chain = pf.get_fallback_chain("openai:gpt-4o")
-        assert chain == ["google-genai:gemini-2.5-flash"]
-
-    def test_empty_order(self):
-        rt, keys = _patch_env([], {"openai", "google_genai"})
-        with rt, keys:
+        with patch.object(
+            runtime_settings,
+            "get",
+            side_effect=lambda key, default=None: (
+                ["google-genai:gemini-2.5-flash"]
+                if key == "llm_fallback_order"
+                else default
+            ),
+        ):
             assert pf.get_fallback_chain("openai:gpt-4o") == []
-
-    def test_current_provider_appears_multiple_times_all_removed(self):
-        order = ["openai:gpt-4o", "openai:gpt-4o-mini", "cohere:command-a"]
-        rt, keys = _patch_env(order, {"openai", "cohere"})
-        with rt, keys:
-            chain = pf.get_fallback_chain("openai:gpt-4o")
-        assert chain == ["cohere:command-a"]
-
-    def test_preserves_order(self):
-        order = ["cohere:command-a", "google-genai:gemini-2.5-flash"]
-        rt, keys = _patch_env(order, {"cohere", "google_genai"})
-        with rt, keys:
-            chain = pf.get_fallback_chain("openai:gpt-4o")
-        assert chain == ["cohere:command-a", "google-genai:gemini-2.5-flash"]
-
-    def test_no_keyed_providers(self):
-        order = ["cohere:command-a", "google-genai:gemini-2.5-flash"]
-        rt, keys = _patch_env(order, set())
-        with rt, keys:
-            assert pf.get_fallback_chain("openai:gpt-4o") == []
-
-
-# ---------------------------------------------------------------------------
-# get_fallback_chain — fallback somente por configuração explícita
-# ---------------------------------------------------------------------------
-
-
-class TestGetFallbackChainAutoDefault:
-    def test_fallback_nao_configurado_devolve_cadeia_vazia(self):
-        """Fallback não configurado não troca de provider automaticamente."""
-        from backend.settings import settings
-
-        rt = patch.object(pf, "_fallback_order", return_value=[])
-        with (
-            rt,
-            patch.object(settings, "google_api_key", "AIza-fake"),
-            patch.object(settings, "openai_api_key", None),
-            patch.object(settings, "anthropic_api_key", None),
-            patch.object(settings, "cohere_api_key", "co-fake"),
-            patch.object(settings, "openrouter_api_key", None),
-        ):
-            chain = pf.get_fallback_chain("google_genai:gemini-2.5-pro")
-        assert chain == []
-
-    def test_normalizes_catalog_provider_aliases_for_credentials(
-        self: TestGetFallbackChainAutoDefault,
-    ) -> None:
-        order = [
-            "google-genai:gemini-2.5-flash",
-            "nine-router:cx/gpt-5.6-luna",
-        ]
-        rt, keys = _patch_env(order, {"google_genai", "nine_router"})
-        with rt, keys:
-            chain = pf.get_fallback_chain("openai:gpt-4o")
-        assert chain == order
-
-    def test_fallback_nao_configurado_ignora_ollama(self):
-        from backend.settings import settings
-
-        rt = patch.object(pf, "_fallback_order", return_value=[])
-        with (
-            rt,
-            patch.object(settings, "google_api_key", None),
-            patch.object(settings, "openai_api_key", None),
-            patch.object(settings, "anthropic_api_key", None),
-            patch.object(settings, "cohere_api_key", None),
-            patch.object(settings, "openrouter_api_key", None),
-        ):
-            chain = pf.get_fallback_chain("openai:gpt-4o")
-        assert chain == []
-        # o primário nunca aparece na própria cadeia auto-gerada.
-        assert all(not c.startswith("openai:") for c in chain)
-
-    def test_fallback_explicitamente_vazio_devolve_cadeia_vazia(self):
-        from backend.settings import settings
-
-        rt = patch.object(pf, "_fallback_order", return_value=[])
-        with (
-            rt,
-            patch.object(settings, "google_api_key", None),
-            patch.object(settings, "openai_api_key", None),
-            patch.object(settings, "anthropic_api_key", None),
-            patch.object(settings, "cohere_api_key", None),
-            patch.object(settings, "openrouter_api_key", None),
-        ):
-            chain = pf.get_fallback_chain("ollama:gpt-oss:20b")
-        assert chain == []
-
-    def test_modelo_openrouter_nao_cria_fallback_google(self):
-        rt = patch.object(pf, "_fallback_order", return_value=[])
-        with rt:
-            assert (
-                pf.get_fallback_chain("openrouter:deepseek/deepseek-v4-flash-0731")
-                == []
-            )
-
-    def test_configuracao_explicita_com_uma_entrada_nao_e_substituida(self):
-        """Erro/borda: configuração manual do usuário, mesmo incompleta (1
-        entrada só), tem precedência sobre o default automático — não
-        adiciona providers extras que o usuário não escolheu."""
-        order = ["cohere:command-a-custom"]
-        rt, keys = _patch_env(order, {"cohere"})
-        with rt, keys:
-            chain = pf.get_fallback_chain("google_genai:gemini-2.5-pro")
-        assert chain == ["cohere:command-a-custom"]
 
 
 # ---------------------------------------------------------------------------
@@ -417,50 +295,42 @@ class TestTryWithFallback:
         assert calls == ["openai:gpt-4o"]
         assert pf.drain_switches() == []
 
-    async def test_switch_once(self):
+    async def test_quota_error_does_not_switch_model(self):
         pf.drain_switches()
-        switches = []
+        calls = []
 
         async def fn(mid):
-            if mid == "openai:gpt-4o":
-                raise Exception("429 RESOURCE_EXHAUSTED")
-            return f"ok:{mid}"
+            calls.append(mid)
+            raise Exception("429 RESOURCE_EXHAUSTED")
 
         with patch.object(
             pf, "get_fallback_chain", return_value=["google-genai:gemini-2.5-flash"]
         ):
-            out = await pf.try_with_fallback(
-                fn, "openai:gpt-4o", on_switch=lambda a, b: switches.append((a, b))
-            )
-        assert out == "ok:google-genai:gemini-2.5-flash"
-        assert switches == [("openai:gpt-4o", "google-genai:gemini-2.5-flash")]
-        assert pf.drain_switches() == [
-            {"from": "openai:gpt-4o", "to": "google-genai:gemini-2.5-flash"}
-        ]
+            with pytest.raises(pf.QuotaExhaustedError) as error:
+                await pf.try_with_fallback(fn, "openai:gpt-4o")
+        assert calls == ["openai:gpt-4o"]
+        assert error.value.provider == "openai"
+        assert pf.drain_switches() == []
 
-    async def test_switch_twice(self):
+    async def test_quota_error_preserves_selected_model(self):
         async def fn(mid):
-            if mid != "cohere:command-a":
-                raise Exception("quota exceeded")
-            return "ok"
+            raise Exception("quota exceeded")
 
         with patch.object(
             pf,
             "get_fallback_chain",
             return_value=["google-genai:gemini-2.5-flash", "cohere:command-a"],
         ):
-            out = await pf.try_with_fallback(fn, "openai:gpt-4o")
-        assert out == "ok"
+            with pytest.raises(pf.QuotaExhaustedError) as error:
+                await pf.try_with_fallback(fn, "openai:gpt-4o")
+        assert error.value.model_id == "openai:gpt-4o"
 
     async def test_exhausts_raises_quota(self):
         async def fn(mid):
             raise Exception("429 quota")
 
-        with patch.object(
-            pf, "get_fallback_chain", return_value=["google-genai:gemini-2.5-flash"]
-        ):
-            with pytest.raises(pf.QuotaExhaustedError):
-                await pf.try_with_fallback(fn, "openai:gpt-4o")
+        with pytest.raises(pf.QuotaExhaustedError):
+            await pf.try_with_fallback(fn, "openai:gpt-4o")
 
     async def test_empty_chain_raises_quota(self):
         async def fn(mid):

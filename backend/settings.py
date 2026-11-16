@@ -354,7 +354,7 @@ class Settings(BaseSettings):
     """API key for Cohere embeddings and reranking service."""
 
     voyage_api_key: str | None = None
-    """API key da VoyageAI — alternativa/fallback ao Cohere (embeddings + rerank)."""
+    """API key da VoyageAI para embeddings e reranking."""
 
     voyage_embedding_model: str = "voyage-3"
     """Modelo de embedding da VoyageAI (hosted, quality-first)."""
@@ -376,8 +376,7 @@ class Settings(BaseSettings):
     embedding_provider: Literal["cohere", "voyage", "ollama", "openrouter"] | None = (
         None
     )
-    """Preferência explícita de provider de embedding. None = fallback padrão
-    (Cohere↔Voyage se alguma key configurada; senão Ollama/OpenRouter local)."""
+    """Provider padrão de embeddings quando o runtime está em modo automático."""
 
     ollama_embedding_model: str | None = None
     """Modelo de embedding no host Ollama (ex.: "qwen3-embedding:0.6b"). None
@@ -508,7 +507,7 @@ class Settings(BaseSettings):
     """Minimum similarity score threshold for search results."""
 
     reranker_type: Literal["cohere", "voyage", "openrouter", "none"] = "cohere"
-    """Provider de rerank primário; o outro vira secundário no fallback.
+    """Provider padrão de rerank quando o runtime está em modo automático.
 
     Ollama **não** entra: não expõe endpoint de rerank algum. `Literal` em
     vez de `str` para que um valor fora da lista seja rejeitado na

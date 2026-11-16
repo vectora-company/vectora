@@ -20,7 +20,6 @@ import { create } from "zustand";
 
 export type SettingsCategoryId =
   | "geral"
-  | "fallbacks"
   | "memoria"
   | "conta"
   | "integracoes"

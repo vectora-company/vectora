@@ -2,10 +2,7 @@
 
 import { ModelSelector } from "@/components/chat/model-selector";
 import { MediaModelsSection } from "./provider-routing-tab";
-import {
-  FallbacksTab,
-  ImageFallbackModelSection,
-} from "../../preferencias/tabs/fallbacks-tab";
+import { ImageFallbackModelSection } from "./image-model-section";
 import { useCallback, useEffect, useState } from "react";
 import {
   hydrateDecisionModelPreferences,
@@ -15,7 +12,21 @@ import {
 import { useWorkspacesStore } from "@/lib/stores/workspaces-store";
 import { m } from "@/lib/paraglide/messages";
 import { mDyn } from "@/lib/i18n-dyn";
-import { MemorySettings } from "@/components/workbench/settings/memory-settings";
+import {
+  RagSettingsForm,
+  useRagSettings,
+} from "@/components/workbench/rag-settings-panel";
+
+function RetrievalModelSettings() {
+  const state = useRagSettings({ autoLoad: true });
+  return (
+    <RagSettingsForm
+      {...state}
+      includeIngestionSettings={false}
+      includeCollections={false}
+    />
+  );
+}
 
 const DECISION_PROVIDERS: Array<{ id: DecisionModelProvider; label: string }> =
   [
@@ -1030,15 +1041,6 @@ export function AiModelsTab() {
       <SystemOneConfiguration />
       <section
         className="space-y-3 rounded-lg border p-3"
-        aria-label={mDyn("ai_models_model_fallbacks")}
-      >
-        <h4 className="text-sm font-medium">
-          {m.settings_category_fallbacks()}
-        </h4>
-        <FallbacksTab includeImageFallback={false} />
-      </section>
-      <section
-        className="space-y-3 rounded-lg border p-3"
         aria-label={mDyn("ai_models_vision_input")}
       >
         <h4 className="text-sm font-medium">
@@ -1059,7 +1061,7 @@ export function AiModelsTab() {
             {mDyn("ai_models_embeddings_description")}
           </p>
         </div>
-        <MemorySettings />
+        <RetrievalModelSettings />
       </section>
       <TranscriptionSettings />
       <LocalSpeechSettings />

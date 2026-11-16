@@ -70,7 +70,6 @@
   "backend/llm/backends.py::function::_resolve_workspace_root",
   "backend/llm/base.py::method::embed_documents",
   "backend/llm/cohere/embeddings.py::method::embed_documents",
-  "backend/llm/fallback_embeddings.py::method::embed_documents",
   "backend/llm/ollama/capabilities.py::function::clear_capabilities_cache",
   "backend/llm/ollama/capabilities.py::function::fetch_model_capabilities",
   "backend/llm/ollama/embeddings.py::method::embed_documents",

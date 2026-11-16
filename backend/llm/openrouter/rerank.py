@@ -5,8 +5,7 @@ O endpoint existe (``model``, ``query``, ``documents``, ``top_n`` →
 ``reranker_type`` sem ele por uma afirmação minha errada de que o OpenRouter
 seria só proxy de chat.
 
-Mesma interface dos rerankers já usados (``compress_documents``), pra encaixar
-no ``FallbackReranker`` que alterna Cohere↔Voyage sem mudança.
+Implementa a mesma interface ``compress_documents`` dos demais rerankers.
 """
 
 from __future__ import annotations

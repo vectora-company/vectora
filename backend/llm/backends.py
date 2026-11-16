@@ -2,7 +2,7 @@
 pelo motor de conversa nativo.
 
 ``build_store()`` abre um pool aiosqlite dedicado e resolve o índice vetorial
-via ``_build_lc_embeddings()`` (fallback Cohere↔Voyage↔Ollama↔OpenRouter).
+via ``_build_lc_embeddings()`` (provider selecionado entre Cohere, Voyage, Ollama e OpenRouter).
 ``_resolve_workspace_root()`` resolve o diretório raiz de uma workspace pelo
 registry, com fallback para o home do usuário.
 """
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 async def build_store(embedding_model: str | None = None) -> VectoraStore:
     """Constrói o ``VectoraStore`` (nativo, aiosqlite) persistente com
-    embeddings opcionais (Cohere↔Voyage↔Ollama↔OpenRouter, via
+    embeddings opcionais pelo provider configurado (via
     ``_build_lc_embeddings()``).
 
     Abre um ``AsyncConnectionPool`` dedicado (mesmos PRAGMAs de hardening de
@@ -84,7 +84,7 @@ async def build_store(embedding_model: str | None = None) -> VectoraStore:
 
 def _build_index(embedding_model: str | None) -> Any:
     """Constrói IndexConfig do Store via ``_build_lc_embeddings()`` — honra o
-    fallback multi-provider (Cohere↔Voyage↔Ollama↔OpenRouter) em vez de ficar
+    seleção configurável do provider entre Cohere, Voyage, Ollama e OpenRouter em vez de ficar
     hardcoded em Cohere. Retorna None se nenhum provider estiver configurado.
 
     ``dims=1024`` continua fixo: o índice do Store exige a dimensão na
