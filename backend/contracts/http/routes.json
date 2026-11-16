@@ -1167,6 +1167,14 @@
   },
   {
     "methods": [
+      "GET",
+      "POST"
+    ],
+    "name": "get_ollama_config_provider_routing_ollama_config_get",
+    "path": "/provider-routing/ollama/config"
+  },
+  {
+    "methods": [
       "GET"
     ],
     "name": "discover_ollama_models_provider_routing_ollama_models_get",
@@ -1200,6 +1208,13 @@
     ],
     "name": "ollama_runtime_status_provider_routing_ollama_runtime_status_get",
     "path": "/provider-routing/ollama/runtime/status"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "name": "test_ollama_connection_provider_routing_ollama_test_post",
+    "path": "/provider-routing/ollama/test"
   },
   {
     "methods": [

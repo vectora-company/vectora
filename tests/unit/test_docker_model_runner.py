@@ -303,11 +303,35 @@ async def test_provider_http_status_does_not_require_docker_cli(
         AsyncMock(return_value={"version": 1, "models": {}}),
     )
 
-    status = await provider_routing.get_dmr_http_status()
+    status = await provider_routing.get_dmr_http_status(None)
 
     assert status["reachable"] is True
     assert status["contract"] == "openai"
     assert status["models"] == ["hf.co/Qwen/Qwen3-0.6B"]
+
+
+@pytest.mark.asyncio
+async def test_dmr_connection_test_probes_unsaved_endpoint_without_docker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from backend.api.handlers import provider_routing
+
+    seen: list[str] = []
+
+    async def fake_probe(base_url: str) -> dmr.DmrProbe:
+        seen.append(base_url)
+        return dmr.DmrProbe(True, "openai", ("hf.co/Qwen/Qwen3-0.6B",))
+
+    monkeypatch.setattr("backend.services.docker_model_runner.probe_dmr", fake_probe)
+    result = await provider_routing.test_dmr_connection(
+        provider_routing.DmrConfigRequest(
+            base_url="http://127.0.0.1:12434/v1", model="hf.co/Qwen/Qwen3-0.6B"
+        )
+    )
+
+    assert seen == ["http://127.0.0.1:12434/v1"]
+    assert result["reachable"] is True
+    assert result["models"] == ["hf.co/Qwen/Qwen3-0.6B"]
 
 
 @pytest.mark.asyncio

@@ -174,6 +174,38 @@ interface DmrStatus {
   };
 }
 
+interface OllamaConfig {
+  configured: boolean;
+  base_url: string;
+  api_key_configured: boolean;
+  api_key_masked: string;
+}
+
+async function fetchOllamaConfig(): Promise<OllamaConfig> {
+  const response = await fetch("/provider-routing/ollama/config");
+  if (!response.ok) throw new Error(`Erro ${response.status}`);
+  return (await response.json()) as OllamaConfig;
+}
+
+async function saveOllamaConfig(
+  baseUrl: string,
+  apiKey: string,
+  clearApiKey = false,
+): Promise<OllamaConfig> {
+  const response = await fetch("/provider-routing/ollama/config", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      base_url: baseUrl,
+      api_key: apiKey || null,
+      clear_api_key: clearApiKey,
+    }),
+  });
+  if (!response.ok)
+    throw new Error(await responseError(response, `Erro ${response.status}`));
+  return (await response.json()) as OllamaConfig;
+}
+
 interface DmrJob {
   id: string;
   operation: "prepare" | "start";
@@ -313,9 +345,31 @@ async function fetchDmrStatus(): Promise<DmrStatus> {
       },
     };
   }
-  const response = await fetch("/provider-routing/dmr/status");
-  if (!response.ok) throw new Error(`Erro ${response.status}`);
-  return (await response.json()) as DmrStatus;
+  const httpResponse = await fetch("/provider-routing/dmr/http-status");
+  if (!httpResponse.ok) throw new Error(`Erro ${httpResponse.status}`);
+  const httpStatus = (await httpResponse.json()) as Partial<DmrStatus>;
+  return {
+    configured: httpStatus.configured ?? false,
+    base_url: httpStatus.base_url ?? "http://127.0.0.1:12434",
+    model: httpStatus.model ?? "",
+    cli_available: false,
+    reachable: httpStatus.reachable ?? false,
+    contract: httpStatus.contract ?? null,
+    models: httpStatus.models ?? [],
+    managed_models: httpStatus.managed_models ?? [],
+    detail: httpStatus.detail,
+    state: httpStatus.reachable ? "ready" : "stopped",
+    platform: "web",
+    architecture: "unknown",
+    backend: null,
+    capabilities: {
+      cpus: null,
+      memory_bytes: null,
+      runtimes: [],
+      gpu_backends: [],
+      warnings: [],
+    },
+  };
 }
 
 async function configureDmr(
@@ -327,8 +381,31 @@ async function configureDmr(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ base_url: baseUrl, model }),
   });
-  if (!response.ok) throw new Error(`Erro ${response.status}`);
-  return (await response.json()) as DmrStatus;
+  if (!response.ok)
+    throw new Error(await responseError(response, `Erro ${response.status}`));
+  return fetchDmrStatus();
+}
+
+async function detectDmrModels(): Promise<string[]> {
+  const response = await fetch("/provider-routing/dmr/models");
+  if (!response.ok)
+    throw new Error(await responseError(response, `Erro ${response.status}`));
+  const data = (await response.json()) as { models?: string[] };
+  return data.models ?? [];
+}
+
+async function testDmrHttpConnection(
+  baseUrl: string,
+  model: string,
+): Promise<Partial<DmrStatus>> {
+  const response = await fetch("/provider-routing/dmr/test", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ base_url: baseUrl, model }),
+  });
+  if (!response.ok)
+    throw new Error(await responseError(response, `Erro ${response.status}`));
+  return (await response.json()) as Partial<DmrStatus>;
 }
 
 async function prepareDmrModel(reference: string): Promise<DmrStatus> {
@@ -487,6 +564,10 @@ function DmrSection() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [job, setJob] = useState<DmrJob | null>(null);
+  const [modelQuery, setModelQuery] = useState("");
+  const [discoveredModels, setDiscoveredModels] = useState<string[]>([]);
+  const [discovering, setDiscovering] = useState(false);
+  const canManageDocker = Boolean(window.vectora?.dmr);
 
   const refresh = useCallback(async () => {
     try {
@@ -494,6 +575,7 @@ function DmrSection() {
       setStatus(next);
       setBaseUrl(next.base_url);
       setModel(next.model);
+      if (!window.vectora?.dmr) return;
       const jobs = await fetchDmrModelJobs();
       const active = jobs.find(
         (candidate) =>
@@ -522,6 +604,49 @@ function DmrSection() {
       setError("Não foi possível salvar o endpoint do Docker Model Runner.");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function testConnection() {
+    setBusy(true);
+    setError("");
+    try {
+      const next = await testDmrHttpConnection(baseUrl, model);
+      setStatus((current) =>
+        current
+          ? {
+              ...current,
+              ...next,
+              base_url: baseUrl,
+              model,
+              state: next.reachable ? "ready" : "stopped",
+            }
+          : current,
+      );
+    } catch (testError) {
+      setError(
+        testError instanceof Error
+          ? testError.message
+          : "Falha ao verificar o endpoint.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function detectModels() {
+    setDiscovering(true);
+    setError("");
+    try {
+      setDiscoveredModels(await detectDmrModels());
+    } catch (detectError) {
+      setError(
+        detectError instanceof Error
+          ? detectError.message
+          : "Falha ao detectar modelos.",
+      );
+    } finally {
+      setDiscovering(false);
     }
   }
 
@@ -620,7 +745,10 @@ function DmrSection() {
   return (
     <div className="space-y-3 rounded-lg border p-4">
       <div>
-        <h3 className="font-medium">{m.provider_routing_dmr_title()}</h3>
+        <h3 className="flex items-center gap-1.5 font-medium">
+          <Server className="size-3.5 text-muted-foreground" />
+          {m.provider_routing_dmr_title()}
+        </h3>
         <p className="text-xs text-muted-foreground">
           {m.provider_routing_dmr_subtitle()}
         </p>
@@ -656,11 +784,13 @@ function DmrSection() {
           type="button"
           variant="outline"
           disabled={busy}
-          onClick={() => void refresh()}
+          onClick={() => void testConnection()}
         >
           {m.provider_routing_dmr_test()}
         </Button>
-        {job && (job.status === "queued" || job.status === "running") ? (
+        {canManageDocker &&
+        job &&
+        (job.status === "queued" || job.status === "running") ? (
           <Button
             type="button"
             variant="outline"
@@ -668,7 +798,7 @@ function DmrSection() {
           >
             {m.provider_routing_dmr_cancel()}
           </Button>
-        ) : job?.status === "interrupted" ? (
+        ) : canManageDocker && job?.status === "interrupted" ? (
           <Button
             type="button"
             disabled={busy}
@@ -676,7 +806,7 @@ function DmrSection() {
           >
             {m.provider_routing_dmr_prepare()}
           </Button>
-        ) : (
+        ) : canManageDocker ? (
           <Button
             type="button"
             disabled={busy || !model.trim()}
@@ -684,23 +814,70 @@ function DmrSection() {
           >
             {m.provider_routing_dmr_prepare()}
           </Button>
+        ) : null}
+        {canManageDocker && (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={busy || !model.trim() || status?.state !== "ready"}
+            onClick={() => void stop()}
+          >
+            {m.provider_routing_dmr_stop()}
+          </Button>
         )}
-        <Button
-          type="button"
-          variant="outline"
-          disabled={busy || !model.trim() || status?.state !== "ready"}
-          onClick={() => void stop()}
-        >
-          {m.provider_routing_dmr_stop()}
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          disabled={busy || !model.trim()}
-          onClick={() => void remove()}
-        >
-          {m.provider_routing_dmr_remove()}
-        </Button>
+        {canManageDocker && (
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={busy || !model.trim()}
+            onClick={() => void remove()}
+          >
+            {m.provider_routing_dmr_remove()}
+          </Button>
+        )}
+      </div>
+      <div className="space-y-2">
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <div className="relative min-w-0 flex-1">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+            <Input
+              value={modelQuery}
+              onChange={(event) => setModelQuery(event.target.value)}
+              placeholder={m.provider_routing_nine_router_search_placeholder()}
+              className="h-8 pl-8 text-xs"
+            />
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={discovering || busy}
+            onClick={() => void detectModels()}
+          >
+            {discovering ? (
+              <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="mr-1.5 size-3.5" />
+            )}
+            {m.provider_routing_detect_models()}
+          </Button>
+        </div>
+        {discoveredModels
+          .filter((item) =>
+            item.toLowerCase().includes(modelQuery.trim().toLowerCase()),
+          )
+          .map((item) => (
+            <button
+              key={item}
+              type="button"
+              className="flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm hover:bg-muted/50"
+              onClick={() => setModel(item)}
+            >
+              <span className="truncate font-mono">{item}</span>
+              <span className="text-xs text-muted-foreground">
+                {m.provider_routing_dmr_select_model()}
+              </span>
+            </button>
+          ))}
       </div>
       {status && (
         <p className="text-xs text-muted-foreground">
@@ -1128,7 +1305,10 @@ function HuggingFaceCatalogSection() {
   return (
     <div className="space-y-3 rounded-lg border p-4">
       <div>
-        <h3 className="font-medium">{m.provider_routing_hf_title()}</h3>
+        <h3 className="flex items-center gap-1.5 font-medium">
+          <Server className="size-3.5 text-muted-foreground" />
+          {m.provider_routing_hf_title()}
+        </h3>
         <p className="text-xs text-muted-foreground">
           {m.provider_routing_hf_subtitle()}
         </p>
@@ -1590,9 +1770,16 @@ function RegisteredModelsList({
 }
 
 function OllamaSection() {
+  const [baseUrl, setBaseUrl] = useState("http://127.0.0.1:11434");
+  const [apiKey, setApiKey] = useState("");
+  const [apiKeyMasked, setApiKeyMasked] = useState("");
+  const [apiKeyConfigured, setApiKeyConfigured] = useState(false);
+  const [savingConfig, setSavingConfig] = useState(false);
+  const [testingConnection, setTestingConnection] = useState(false);
   const [registered, setRegistered] = useState<RegisteredModel[]>([]);
   const [loadingRegistered, setLoadingRegistered] = useState(true);
   const [discovered, setDiscovered] = useState<OllamaModelInfo[] | null>(null);
+  const [modelQuery, setModelQuery] = useState("");
   const [reachable, setReachable] = useState<boolean | null>(null);
   const [discovering, setDiscovering] = useState(false);
   const [registeringTag, setRegisteringTag] = useState<string | null>(null);
@@ -1626,7 +1813,71 @@ function OllamaSection() {
     // oxlint-disable-next-line react/set-state-in-effect
     void loadRegistered();
     void loadRuntime();
+    void fetchOllamaConfig()
+      .then((config) => {
+        setBaseUrl(config.base_url);
+        setApiKeyMasked(config.api_key_masked);
+        setApiKeyConfigured(config.api_key_configured);
+      })
+      .catch(() => setError(m.provider_routing_error_load()));
   }, [loadRegistered, loadRuntime]);
+
+  const handleSaveConfig = async () => {
+    setSavingConfig(true);
+    setError(null);
+    try {
+      const config = await saveOllamaConfig(baseUrl, apiKey);
+      setBaseUrl(config.base_url);
+      setApiKey("");
+      setApiKeyMasked(config.api_key_masked);
+      setApiKeyConfigured(config.api_key_configured);
+      await handleDiscover();
+    } catch (saveError) {
+      setError(
+        saveError instanceof Error
+          ? saveError.message
+          : m.provider_routing_ollama_error_config_save(),
+      );
+    } finally {
+      setSavingConfig(false);
+    }
+  };
+
+  const handleTestConnection = async () => {
+    setTestingConnection(true);
+    setError(null);
+    try {
+      const response = await fetch("/provider-routing/ollama/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ base_url: baseUrl, api_key: apiKey || null }),
+      });
+      if (!response.ok)
+        throw new Error(
+          await responseError(response, `Erro ${response.status}`),
+        );
+      const result = (await response.json()) as {
+        status: string;
+        models: OllamaModelInfo[];
+      };
+      setReachable(result.status === "ok" || result.status === "empty");
+      setDiscovered(result.models);
+      if (result.status === "auth_error")
+        setError(m.provider_routing_ollama_auth_error());
+      else if (result.status === "incompatible")
+        setError(m.provider_routing_ollama_incompatible());
+      else if (result.status === "unreachable")
+        setError(m.provider_routing_ollama_unreachable());
+    } catch (testError) {
+      setError(
+        testError instanceof Error
+          ? testError.message
+          : m.provider_routing_error_discover(),
+      );
+    } finally {
+      setTestingConnection(false);
+    }
+  };
 
   const handleInstallRuntime = async () => {
     setInstallingRuntime(true);
@@ -1691,14 +1942,17 @@ function OllamaSection() {
   };
 
   const registeredTags = new Set(registered.map((model) => model.tag));
+  const filteredDiscovered = discovered?.filter((model) =>
+    model.name.toLowerCase().includes(modelQuery.trim().toLowerCase()),
+  );
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3 rounded-lg border p-4">
       <div className="space-y-0.5">
-        <p className="text-sm font-medium flex items-center gap-1.5">
+        <h3 className="text-sm font-medium flex items-center gap-1.5">
           <Server className="w-3.5 h-3.5 text-muted-foreground" />
           {m.provider_routing_ollama_title()}
-        </p>
+        </h3>
         <p className="text-xs text-muted-foreground max-w-[360px]">
           {m.provider_routing_ollama_subtitle()}
         </p>
@@ -1709,6 +1963,78 @@ function OllamaSection() {
           {error}
         </p>
       )}
+
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <Input
+          aria-label={m.provider_routing_ollama_endpoint()}
+          value={baseUrl}
+          onChange={(event) => setBaseUrl(event.target.value)}
+          placeholder={m.provider_routing_ollama_endpoint_placeholder()}
+        />
+        <Button
+          type="button"
+          variant="outline"
+          disabled={testingConnection || savingConfig}
+          onClick={() => void handleTestConnection()}
+        >
+          {testingConnection ? (
+            <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+          ) : null}
+          {m.provider_routing_dmr_test()}
+        </Button>
+      </div>
+
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <Input
+          aria-label={m.provider_routing_ollama_key()}
+          type="password"
+          autoComplete="new-password"
+          value={apiKey}
+          onChange={(event) => setApiKey(event.target.value)}
+          placeholder={
+            apiKeyConfigured
+              ? apiKeyMasked
+              : m.provider_routing_ollama_key_placeholder()
+          }
+        />
+        <Button
+          type="button"
+          disabled={savingConfig || testingConnection}
+          onClick={() => void handleSaveConfig()}
+        >
+          {savingConfig ? (
+            <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+          ) : null}
+          {m.provider_routing_dmr_save()}
+        </Button>
+        {apiKeyConfigured && (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={savingConfig || testingConnection}
+            onClick={async () => {
+              setSavingConfig(true);
+              setError(null);
+              try {
+                const config = await saveOllamaConfig(baseUrl, "", true);
+                setApiKeyConfigured(config.api_key_configured);
+                setApiKeyMasked(config.api_key_masked);
+                setApiKey("");
+              } catch (clearError) {
+                setError(
+                  clearError instanceof Error
+                    ? clearError.message
+                    : m.provider_routing_ollama_error_config_save(),
+                );
+              } finally {
+                setSavingConfig(false);
+              }
+            }}
+          >
+            {m.provider_routing_ollama_key_clear()}
+          </Button>
+        )}
+      </div>
 
       <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/20 px-3 py-2 text-xs">
         <span>
@@ -1740,11 +2066,21 @@ function OllamaSection() {
         )}
       </div>
 
-      {/* Descoberta */}
-      <div className="space-y-2">
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <div className="relative min-w-0 flex-1">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+          <Input
+            value={modelQuery}
+            onChange={(event) => setModelQuery(event.target.value)}
+            placeholder={m.provider_routing_nine_router_search_placeholder()}
+            className="h-8 pl-8 text-xs"
+            autoComplete="off"
+          />
+        </div>
         <Button
           variant="outline"
           size="sm"
+          className="shrink-0"
           onClick={() => void handleDiscover()}
           disabled={discovering}
         >
@@ -1755,16 +2091,26 @@ function OllamaSection() {
           )}
           {m.provider_routing_detect_models()}
         </Button>
+      </div>
 
+      <div className="space-y-2">
         {reachable === false && (
           <p className="text-xs text-muted-foreground">
             {m.provider_routing_ollama_unreachable()}
           </p>
         )}
 
-        {discovered && discovered.length > 0 && (
+        {filteredDiscovered &&
+          filteredDiscovered.length === 0 &&
+          discovered &&
+          discovered.length > 0 && (
+            <p className="text-xs text-muted-foreground">
+              {m.provider_routing_nine_router_search_empty()}
+            </p>
+          )}
+        {filteredDiscovered && filteredDiscovered.length > 0 && (
           <div className="space-y-1.5">
-            {discovered.map((model) => {
+            {filteredDiscovered.map((model) => {
               const already = registeredTags.has(model.name);
               return (
                 <div
@@ -1900,6 +2246,18 @@ function OpenRouterSection() {
     }
   };
 
+  const handleDiscover = async () => {
+    setSearching(true);
+    setError(null);
+    try {
+      setCatalog(await searchOpenRouterCatalog(query));
+    } catch {
+      setError(m.provider_routing_openrouter_error_catalog());
+    } finally {
+      setSearching(false);
+    }
+  };
+
   const handleRegister = async (id: string) => {
     setRegisteringId(id);
     setError(null);
@@ -1929,12 +2287,12 @@ function OpenRouterSection() {
   const registeredTags = new Set(registered.map((model) => model.tag));
 
   return (
-    <div className="space-y-4 pt-4 border-t">
+    <div className="space-y-3 rounded-lg border p-4">
       <div className="space-y-0.5">
-        <p className="text-sm font-medium flex items-center gap-1.5">
+        <h3 className="text-sm font-medium flex items-center gap-1.5">
           <Server className="w-3.5 h-3.5 text-muted-foreground" />
           {m.provider_routing_openrouter_title()}
-        </p>
+        </h3>
         <p className="text-xs text-muted-foreground max-w-[360px]">
           {m.provider_routing_openrouter_subtitle()}
         </p>
@@ -2001,18 +2359,35 @@ function OpenRouterSection() {
       {/* Catálogo */}
       {status?.configured && (
         <div className="space-y-2">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={m.provider_routing_openrouter_search_placeholder()}
-              className="h-8 text-xs pl-8"
-              autoComplete="off"
-            />
-            {searching && (
-              <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 animate-spin text-muted-foreground" />
-            )}
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <div className="relative min-w-0 flex-1">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={m.provider_routing_openrouter_search_placeholder()}
+                className="h-8 text-xs pl-8"
+                autoComplete="off"
+              />
+              {searching && (
+                <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 animate-spin text-muted-foreground" />
+              )}
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="shrink-0"
+              onClick={() => void handleDiscover()}
+              disabled={searching}
+            >
+              {searching ? (
+                <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+              ) : (
+                <RefreshCw className="mr-1.5 size-3.5" />
+              )}
+              {m.provider_routing_detect_models()}
+            </Button>
           </div>
 
           {catalog.length > 0 && (
@@ -2220,12 +2595,12 @@ function NineRouterSection() {
     ) ?? null;
 
   return (
-    <div className="space-y-4 pt-4 border-t">
+    <div className="space-y-3 rounded-lg border p-4">
       <div className="space-y-0.5">
-        <p className="text-sm font-medium flex items-center gap-1.5">
+        <h3 className="text-sm font-medium flex items-center gap-1.5">
           <Server className="w-3.5 h-3.5 text-muted-foreground" />
           {m.provider_routing_nine_router_title()}
-        </p>
+        </h3>
         <p className="text-xs text-muted-foreground max-w-[360px]">
           {m.provider_routing_nine_router_subtitle()}
         </p>
@@ -2303,20 +2678,32 @@ function NineRouterSection() {
       {/* Descoberta */}
       {status?.configured && (
         <div className="space-y-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void handleDiscover()}
-            disabled={discovering}
-          >
-            {discovering ? (
-              <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-            ) : (
-              <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
-            )}
-            {m.provider_routing_detect_models()}
-          </Button>
-
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <div className="relative min-w-0 flex-1">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+              <Input
+                value={modelQuery}
+                onChange={(e) => setModelQuery(e.target.value)}
+                placeholder={m.provider_routing_nine_router_search_placeholder()}
+                className="h-8 text-xs pl-8"
+                autoComplete="off"
+              />
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0"
+              onClick={() => void handleDiscover()}
+              disabled={discovering}
+            >
+              {discovering ? (
+                <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+              ) : (
+                <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
+              )}
+              {m.provider_routing_detect_models()}
+            </Button>
+          </div>
           {reachable === false && (
             <p className="text-xs text-muted-foreground">
               {m.provider_routing_nine_router_unreachable()}
@@ -2325,19 +2712,6 @@ function NineRouterSection() {
 
           {discovered && discovered.length > 0 && (
             <div className="space-y-2">
-              {discovered.length > 5 && (
-                <div className="relative">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                  <Input
-                    value={modelQuery}
-                    onChange={(e) => setModelQuery(e.target.value)}
-                    placeholder={m.provider_routing_nine_router_search_placeholder()}
-                    className="h-8 text-xs pl-8"
-                    autoComplete="off"
-                  />
-                </div>
-              )}
-
               {filteredDiscovered && filteredDiscovered.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
                   {m.provider_routing_nine_router_search_empty()}
@@ -2496,6 +2870,10 @@ function LlamaCppSection() {
   const [model, setModel] = useState("");
   const [mode, setMode] = useState<"managed" | "external">("external");
   const [models, setModels] = useState<LlamaCppModelInfo[]>([]);
+  const [registered, setRegistered] = useState<RegisteredModel[]>([]);
+  const [loadingRegistered, setLoadingRegistered] = useState(true);
+  const [registeringId, setRegisteringId] = useState<string | null>(null);
+  const [removingId, setRemovingId] = useState<string | null>(null);
   const [hfModels, setHfModels] = useState<LlamaCppModelInfo[]>([]);
   const [query, setQuery] = useState("llama.cpp");
   const [reachable, setReachable] = useState<boolean | null>(null);
@@ -2511,6 +2889,22 @@ function LlamaCppSection() {
       .then(setRuntime)
       .catch(() => setRuntime(null));
   }, []);
+  const loadRegistered = useCallback(async () => {
+    setLoadingRegistered(true);
+    try {
+      setRegistered(await fetchRegistered("llamacpp"));
+    } catch {
+      setError(m.provider_routing_error_load());
+    } finally {
+      setLoadingRegistered(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    // A lista deve refletir os modelos já habilitados no seletor do chat.
+    // oxlint-disable-next-line react/set-state-in-effect
+    void loadRegistered();
+  }, [loadRegistered]);
   const [installing, setInstalling] = useState(false);
 
   useEffect(() => {
@@ -2559,6 +2953,32 @@ function LlamaCppSection() {
       setError("Erro ao consultar o llama.cpp");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleRegister(id: string) {
+    setRegisteringId(id);
+    setError("");
+    try {
+      await registerModel("llamacpp", id);
+      await loadRegistered();
+    } catch {
+      setError(m.provider_routing_error_register());
+    } finally {
+      setRegisteringId(null);
+    }
+  }
+
+  async function handleRemove(id: string) {
+    setRemovingId(id);
+    setError("");
+    try {
+      await unregisterModel("llamacpp", id);
+      setRegistered((current) => current.filter((item) => item.id !== id));
+    } catch {
+      setError(m.provider_routing_error_remove());
+    } finally {
+      setRemovingId(null);
     }
   }
 
@@ -2670,7 +3090,10 @@ function LlamaCppSection() {
   return (
     <div className="space-y-3 rounded-lg border p-4">
       <div>
-        <h3 className="font-medium">{m.provider_routing_llamacpp_title()}</h3>
+        <h3 className="flex items-center gap-1.5 font-medium">
+          <Server className="size-3.5 text-muted-foreground" />
+          {m.provider_routing_llamacpp_title()}
+        </h3>
         <p className="text-xs text-muted-foreground">
           {m.provider_routing_llamacpp_subtitle()}
         </p>
@@ -2885,6 +3308,47 @@ function LlamaCppSection() {
             : m.provider_routing_llamacpp_unreachable()}
         </p>
       )}
+      {models.length > 0 && (
+        <div className="space-y-1.5">
+          {models.map((item) => {
+            const id = item.id;
+            const already = registered.some((entry) => entry.tag === id);
+            return (
+              <div
+                key={id}
+                className="flex min-w-0 items-center justify-between gap-3 rounded-lg border bg-card px-3 py-2"
+              >
+                <span className="truncate font-mono text-sm">{id}</span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="shrink-0"
+                  disabled={already || registeringId === id}
+                  onClick={() => void handleRegister(id)}
+                >
+                  {registeringId === id ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : already ? (
+                    m.provider_routing_already_registered()
+                  ) : (
+                    <>
+                      <Plus className="mr-1 size-3.5" />
+                      {m.provider_routing_register()}
+                    </>
+                  )}
+                </Button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <RegisteredModelsList
+        registered={registered}
+        loading={loadingRegistered}
+        removingId={removingId}
+        onRemove={(id) => void handleRemove(id)}
+      />
       {hfModels.length > 0 && (
         <div className="space-y-1 text-sm">
           {hfModels.map((item) => (
@@ -2904,13 +3368,13 @@ function LlamaCppSection() {
 
 export function ProviderRoutingTab() {
   return (
-    <div className="space-y-4 [&_button]:!h-8 [&_button]:!px-3 [&_button]:!text-sm">
+    <div className="space-y-6 [&_button]:!h-8 [&_button]:!px-3 [&_button]:!text-sm">
+      <LlamaCppSection />
       <OllamaSection />
       <DmrSection />
       <HuggingFaceCatalogSection />
       <OpenRouterSection />
       <NineRouterSection />
-      <LlamaCppSection />
     </div>
   );
 }

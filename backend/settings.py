@@ -91,10 +91,10 @@ class Settings(BaseSettings):
     ollama_base_url: str | None = None
 
     ollama_api_key: str | None = None
-    """Chave do Ollama Cloud (ollama.com), não do servidor local.
+    """Bearer key do Ollama Cloud ou de um endpoint Ollama protegido.
 
-    Só é necessária pros recursos de nuvem — `web_search`/`web_fetch` e os
-    modelos hospedados. O servidor local ignora o header de auth."""
+    É usada em chamadas ao endpoint configurado e nos recursos de nuvem
+    `web_search`/`web_fetch`. O servidor local padrão ignora o header."""
     ollama_model: str = "llama2"
 
     ollama_num_ctx: int = 32768
@@ -1067,7 +1067,7 @@ class Settings(BaseSettings):
             "google-genai": self.google_api_key,
             "openai": self.openai_api_key,
             "anthropic": self.anthropic_api_key,
-            "ollama": None,  # Ollama doesn't require API key
+            "ollama": self.ollama_api_key,
             "cohere": self.cohere_api_key,
             "openrouter": self.openrouter_api_key,
             "nine_router": self.nine_router_api_key,
@@ -1079,8 +1079,8 @@ class Settings(BaseSettings):
     def configured_llm_providers(self) -> list[str]:
         """Providers de LLM com credencial configurada (para o model selector).
 
-        Ollama não exige key — é incluído só quando ``ollama_base_url`` aponta para
-        um host. Cohere usa a precedência de ``get_cohere_api_key`` (env inclusa).
+        Ollama aceita endpoint sem key e envia Bearer quando ``ollama_api_key``
+        está configurada. Cohere usa a precedência de ``get_cohere_api_key``.
         """
         providers: list[str] = []
         if self.google_api_key:

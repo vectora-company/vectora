@@ -26,9 +26,9 @@ Endpoints (exigem auth via middleware):
     POST   /provider-routing/nine-router/registered               — registra um modelo (id "provider/model")
     DELETE /provider-routing/nine-router/registered/{model_id}    — remove
 
-Ollama não exige API key — a UI popula o dropdown consultando /api/tags do
-host configurado em vez de digitação livre (evita erro de digitação virar
-falha silenciosa no chat). OpenRouter exige key (proxy pago multi-provider) —
+Ollama local não exige API key; endpoints protegidos podem usar Bearer key. A UI
+popula o dropdown consultando /api/tags do host configurado em vez de digitação
+livre (evita erro de digitação virar falha silenciosa no chat). OpenRouter exige key (proxy pago multi-provider) —
 validada contra /api/v1/auth/key antes de persistir. 9Router
 (https://github.com/decolua/9router) é uma instância local do próprio
 usuário — exige endpoint + key juntos (não há serviço/key fixo como o
@@ -233,6 +233,29 @@ def _validate_redirect_host(
 class OllamaDiscoveryResponse(BaseModel):
     reachable: bool
     models: list[OllamaModelInfo]
+
+
+class OllamaConfigRequest(BaseModel):
+    base_url: str
+    api_key: str | None = Field(default=None, max_length=4096)
+    clear_api_key: bool = False
+
+
+class OllamaConnectionTestRequest(BaseModel):
+    base_url: str | None = None
+    api_key: str | None = Field(default=None, max_length=4096)
+
+
+class OllamaConfigStatus(BaseModel):
+    configured: bool
+    base_url: str
+    api_key_configured: bool
+    api_key_masked: str
+
+
+class OllamaConnectionTestResponse(BaseModel):
+    status: Literal["ok", "empty", "unreachable", "auth_error", "incompatible"]
+    models: list[OllamaModelInfo] = Field(default_factory=list)
 
 
 class OllamaRuntimeStatus(BaseModel):
@@ -599,34 +622,128 @@ async def _unregister(table: str, model_id: str) -> None:
     await db.commit()
 
 
-@router.get("/ollama/models")
-async def discover_ollama_models() -> OllamaDiscoveryResponse:
-    """Consulta {OLLAMA_BASE_URL}/api/tags. Host fora do ar → reachable=False,
-    nunca deixa a exceção subir como 500 (é esperado o host estar desligado)."""
-    import httpx
+def _ollama_base_url() -> str:
+    return (settings.ollama_base_url or "http://127.0.0.1:11434").rstrip("/")
 
-    from backend.settings import settings
 
-    base_url = (settings.ollama_base_url or "http://127.0.0.1:11434").rstrip("/")
+def _validate_ollama_base_url(value: str) -> str:
+    base_url = value.strip().rstrip("/")
+    parsed = urlparse(base_url)
+    if (
+        len(base_url) > 500
+        or parsed.scheme not in {"http", "https"}
+        or not parsed.netloc
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+        or any(character.isspace() for character in base_url)
+        or not parsed.hostname
+    ):
+        raise HTTPException(status_code=400, detail="endpoint Ollama inválido")
+    try:
+        _port = parsed.port
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="endpoint Ollama inválido") from exc
+    return base_url
+
+
+@router.get("/ollama/config", response_model=OllamaConfigStatus)
+async def get_ollama_config(_: ProviderAdmin) -> OllamaConfigStatus:
+    api_key = settings.ollama_api_key or ""
+    return OllamaConfigStatus(
+        configured=bool(settings.ollama_base_url),
+        base_url=_ollama_base_url(),
+        api_key_configured=bool(api_key),
+        api_key_masked=_mask_key(api_key),
+    )
+
+
+@router.post("/ollama/config", response_model=OllamaConfigStatus)
+async def set_ollama_config(
+    body: OllamaConfigRequest, _: ProviderAdmin
+) -> OllamaConfigStatus:
+    base_url = _validate_ollama_base_url(body.base_url)
+    api_key = body.api_key.strip() if body.api_key is not None else None
+    if api_key is not None and any(character in api_key for character in "\r\n\x00"):
+        raise HTTPException(status_code=400, detail="chave Ollama inválida")
+    object.__setattr__(settings, "ollama_base_url", base_url)
+    _set_env_key(_env_file(), "OLLAMA_BASE_URL", base_url)
+    os.environ["OLLAMA_BASE_URL"] = base_url
+    if body.clear_api_key:
+        object.__setattr__(settings, "ollama_api_key", None)
+        _remove_env_key(_env_file(), "OLLAMA_API_KEY")
+        os.environ.pop("OLLAMA_API_KEY", None)
+    elif body.api_key is not None:
+        object.__setattr__(settings, "ollama_api_key", api_key or None)
+        _set_env_key(_env_file(), "OLLAMA_API_KEY", api_key or "")
+        if api_key:
+            os.environ["OLLAMA_API_KEY"] = api_key
+        else:
+            os.environ.pop("OLLAMA_API_KEY", None)
+    return await get_ollama_config(None)
+
+
+async def _test_ollama_connection(
+    base_url: str | None = None,
+    api_key: str | None = None,
+) -> OllamaConnectionTestResponse:
+    """Consulta o catálogo e diferencia falha de rede, auth e contrato."""
+    base_url = (base_url or _ollama_base_url()).rstrip("/")
+    effective_api_key = settings.ollama_api_key if api_key is None else api_key
+    headers = (
+        {"Authorization": f"Bearer {effective_api_key}"} if effective_api_key else None
+    )
     try:
         async with httpx.AsyncClient(timeout=_DISCOVERY_TIMEOUT_S) as client:
-            resp = await client.get(f"{base_url}/api/tags")
-            resp.raise_for_status()
-            data = resp.json()
-    except Exception:
+            response = await client.get(f"{base_url}/api/tags", headers=headers)
+    except (httpx.HTTPError, httpx.InvalidURL, ValueError):
         logger.info(
             "provider_routing: Ollama em %s inacessível", base_url, exc_info=True
         )
-        return OllamaDiscoveryResponse(reachable=False, models=[])
+        return OllamaConnectionTestResponse(status="unreachable")
+    if response.status_code in {401, 403}:
+        return OllamaConnectionTestResponse(status="auth_error")
+    if response.status_code >= 400:
+        return OllamaConnectionTestResponse(status="incompatible")
+    try:
+        data = response.json()
+    except (ValueError, json.JSONDecodeError):
+        return OllamaConnectionTestResponse(status="incompatible")
+    if not isinstance(data, dict) or not isinstance(data.get("models"), list):
+        return OllamaConnectionTestResponse(status="incompatible")
 
     models = [
         OllamaModelInfo(
             name=m["name"], size=m.get("size"), modified_at=m.get("modified_at")
         )
-        for m in data.get("models", [])
-        if m.get("name")
+        for m in data["models"]
+        if isinstance(m, dict) and m.get("name")
     ]
-    return OllamaDiscoveryResponse(reachable=True, models=models)
+    return OllamaConnectionTestResponse(
+        status="ok" if models else "empty", models=models
+    )
+
+
+@router.post(
+    "/ollama/test",
+    response_model=OllamaConnectionTestResponse,
+    dependencies=[Depends(_require_provider_admin)],
+)
+async def test_ollama_connection(
+    body: OllamaConnectionTestRequest,
+) -> OllamaConnectionTestResponse:
+    base_url = _validate_ollama_base_url(body.base_url) if body.base_url else None
+    return await _test_ollama_connection(base_url, body.api_key)
+
+
+@router.get("/ollama/models")
+async def discover_ollama_models() -> OllamaDiscoveryResponse:
+    """Consulta o catálogo do Ollama sem propagar indisponibilidade como 500."""
+    result = await _test_ollama_connection()
+    return OllamaDiscoveryResponse(
+        reachable=result.status in {"ok", "empty"}, models=result.models
+    )
 
 
 def _ollama_executable() -> Path | None:
@@ -1982,8 +2099,8 @@ async def get_dmr_status() -> dict[str, object]:
     }
 
 
-@router.get("/dmr/http-status", dependencies=[DesktopBridge])
-async def get_dmr_http_status() -> dict[str, object]:
+@router.get("/dmr/http-status")
+async def get_dmr_http_status(_: ProviderAdmin) -> dict[str, object]:
     """Sonda somente o endpoint HTTP do DMR, sem executar comandos Docker.
 
     A UI Electron usa este contrato junto da detecção feita pela bridge nativa;
@@ -2049,19 +2166,36 @@ async def set_dmr_config(body: DmrConfigRequest, _: ProviderAdmin) -> dict[str, 
         os.environ["DMR_MODEL"] = model
     else:
         os.environ.pop("DMR_MODEL", None)
-    return await get_dmr_status()
+    return await get_dmr_http_status(None)
 
 
-@router.post("/dmr/test", dependencies=[DesktopBridge])
-async def test_dmr_connection() -> dict[str, object]:
-    """Executa a detecção de CLI e o probe HTTP sem alterar estado."""
-    return await get_dmr_status()
+@router.post("/dmr/test", dependencies=[Depends(_require_provider_admin)])
+async def test_dmr_connection(body: DmrConfigRequest) -> dict[str, object]:
+    """Testa um endpoint HTTP sem exigir Docker CLI ou Electron."""
+    from backend.services.docker_model_runner import normalize_base_url, probe_dmr
+
+    try:
+        base_url = normalize_base_url(body.base_url)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    probe = await probe_dmr(base_url)
+    return {
+        "configured": base_url == settings.dmr_base_url,
+        "base_url": base_url,
+        "model": body.model,
+        "reachable": probe.reachable,
+        "contract": probe.contract,
+        "models": list(probe.models),
+        "managed_models": [],
+        "detail": probe.detail,
+        "status_code": probe.status_code,
+    }
 
 
-@router.get("/dmr/models", dependencies=[DesktopBridge])
-async def list_dmr_models() -> dict[str, object]:
-    """Lista modelos descobertos pelo contrato que o DMR anunciou."""
-    status = await get_dmr_status()
+@router.get("/dmr/models")
+async def list_dmr_models(_: ProviderAdmin) -> dict[str, object]:
+    """Lista modelos anunciados pelo endpoint HTTP do DMR."""
+    status = await get_dmr_http_status(None)
     return {
         "reachable": status["reachable"],
         "contract": status["contract"],

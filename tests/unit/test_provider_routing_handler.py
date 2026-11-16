@@ -280,6 +280,63 @@ def client(app):
     return TestClient(app, raise_server_exceptions=False)
 
 
+def test_ollama_config_api_persists_validated_endpoint(client, monkeypatch, tmp_path):
+    from backend.api.handlers import provider_routing
+    from backend.settings import settings
+
+    env_file = tmp_path / ".env"
+    monkeypatch.setattr(provider_routing, "_env_file", lambda: env_file)
+    monkeypatch.setattr(settings, "ollama_base_url", None)
+    monkeypatch.setattr(settings, "ollama_api_key", None)
+    monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
+    monkeypatch.delenv("OLLAMA_API_KEY", raising=False)
+    response = client.post(
+        "/provider-routing/ollama/config",
+        json={"base_url": "https://ollama.example/v1/", "api_key": "secret-test-key"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "configured": True,
+        "base_url": "https://ollama.example/v1",
+        "api_key_configured": True,
+        "api_key_masked": "secret•••-key",
+    }
+    persisted = env_file.read_text()
+    assert "OLLAMA_BASE_URL=https://ollama.example/v1" in persisted
+    assert "OLLAMA_API_KEY=secret-test-key" in persisted
+    assert "secret-test-key" not in response.text
+
+
+@pytest.mark.parametrize(
+    "base_url",
+    ["", "file:///tmp/ollama", "https://user:pass@example.com", "http://host/path?q=x"],
+)
+def test_ollama_config_api_rejects_invalid_endpoint(client, base_url):
+    response = client.post(
+        "/provider-routing/ollama/config", json={"base_url": base_url}
+    )
+    assert response.status_code == 400
+
+
+def test_ollama_test_endpoint_reports_model_catalog(client, monkeypatch):
+    from backend.api.handlers import provider_routing
+
+    async def fake_test(base_url=None, api_key=None):
+        return provider_routing.OllamaConnectionTestResponse(
+            status="ok", models=[provider_routing.OllamaModelInfo(name="llama3")]
+        )
+
+    monkeypatch.setattr(provider_routing, "_test_ollama_connection", fake_test)
+    response = client.post(
+        "/provider-routing/ollama/test",
+        json={"base_url": "http://127.0.0.1:11434"},
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+    assert response.json()["models"][0]["name"] == "llama3"
+
+
 @pytest.fixture
 def clean_openrouter_key():
     """Isola OPENROUTER_API_KEY nos dois sentidos — os testes de
@@ -1062,6 +1119,7 @@ class TestOllamaDiscovery:
     def test_host_reachable_returns_models(self, client):
         """Verifica o comportamento de host reachable returns models."""
         mock_response = MagicMock()
+        mock_response.status_code = 200
         mock_response.raise_for_status = MagicMock()
         mock_response.json.return_value = {
             "models": [

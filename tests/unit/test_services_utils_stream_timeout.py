@@ -82,13 +82,16 @@ def test_nine_router_sem_config_levanta_erro_claro(monkeypatch):
 def test_ollama_usa_cliente_nativo_e_nao_init_chat_model(monkeypatch):
     """Verifica o comportamento de ollama usa cliente nativo e nao init chat model."""
     from backend.llm.ollama.chat_client import OllamaChatClient
+    from backend.settings import settings
 
-    monkeypatch.setenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
+    monkeypatch.setattr(settings, "ollama_base_url", "https://ollama.example/v1")
+    monkeypatch.setattr(settings, "ollama_api_key", "test-bearer")
 
     modelo = load_chat_client("ollama:gpt-oss:20b")
 
     assert isinstance(modelo, OllamaChatClient)
-    assert modelo.client.base_url == "http://127.0.0.1:11434"
+    assert modelo.client.base_url == "https://ollama.example/v1"
+    assert modelo.client._headers() == {"Authorization": "Bearer test-bearer"}
 
 
 def test_llamacpp_usa_projecao_compacta_para_modelos_locais(monkeypatch):

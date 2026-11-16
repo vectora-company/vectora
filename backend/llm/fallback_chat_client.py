@@ -170,12 +170,13 @@ def load_chat_client(model_id: str) -> ChatClient:  # noqa: PLR0911
         case "ollama":
             from backend.llm.ollama.chat_client import OllamaChatClient
             from backend.llm.ollama.client import OllamaClient
+            from backend.settings import settings
 
             return OllamaChatClient(
                 model=model_name,
                 client=OllamaClient(
-                    base_url=os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434"),
-                    api_key=os.getenv("OLLAMA_API_KEY", ""),
+                    base_url=settings.ollama_base_url or "http://127.0.0.1:11434",
+                    api_key=settings.ollama_api_key or "",
                 ),
             )
         case "openrouter":
