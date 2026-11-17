@@ -134,10 +134,12 @@ describe("resolveExternalBackendConnection", () => {
       VECTORA_EXTERNAL_BACKEND: "1",
       VECTORA_PORT: "8080",
       VECTORA_IPC_PIPE: "\\\\.\\pipe\\vectora-1234",
+      VECTORA_WEB_MODE: "1",
     });
     expect(result).toEqual({
       port: 8080,
       pipePath: "\\\\.\\pipe\\vectora-1234",
+      webMode: true,
     });
   });
 
@@ -146,7 +148,7 @@ describe("resolveExternalBackendConnection", () => {
       VECTORA_EXTERNAL_BACKEND: "1",
       VECTORA_PORT: "8080",
     });
-    expect(result).toEqual({ port: 8080, pipePath: null });
+    expect(result).toEqual({ port: 8080, pipePath: null, webMode: false });
   });
 
   it("edge case: VECTORA_PORT ausente ou não-numérico vira null, não NaN", () => {
@@ -163,20 +165,26 @@ describe("resolveExternalBackendConnection", () => {
 });
 
 describe("backendTransportOptions", () => {
-  it("uses loopback TCP for an externally managed backend on Linux and macOS", () => {
-    const external = { port: 8080, pipePath: null };
+  it("uses the runtime Unix socket for an external desktop backend", () => {
+    const external = { port: 8080, pipePath: null, webMode: false };
     expect(
       backendTransportOptions("linux", "/home/user/.vectora", external),
-    ).toEqual({
-      host: "127.0.0.1",
-      port: 8080,
-    });
+    ).toEqual({ socketPath: path.join("/home/user/.vectora", "vectora.sock") });
     expect(
       backendTransportOptions("darwin", "/Users/user/.vectora", external),
     ).toEqual({
-      host: "127.0.0.1",
-      port: 8080,
+      socketPath: path.join("/Users/user/.vectora", "vectora.sock"),
     });
+  });
+
+  it("uses loopback TCP for an external web backend on Linux and macOS", () => {
+    const external = { port: 8080, pipePath: null, webMode: true };
+    expect(
+      backendTransportOptions("linux", "/home/user/.vectora", external),
+    ).toEqual({ host: "127.0.0.1", port: 8080 });
+    expect(
+      backendTransportOptions("darwin", "/Users/user/.vectora", external),
+    ).toEqual({ host: "127.0.0.1", port: 8080 });
   });
 
   it("keeps the Unix socket for an Electron-owned Linux/macOS backend", () => {
@@ -192,12 +200,14 @@ describe("backendTransportOptions", () => {
       backendTransportOptions("win32", "C:\\Vectora", {
         port: 8080,
         pipePath: "\\\\.\\pipe\\vectora-1",
+        webMode: false,
       }),
     ).toEqual({ socketPath: "\\\\.\\pipe\\vectora-1" });
     expect(
       backendTransportOptions("win32", "C:\\Vectora", {
         port: 8080,
         pipePath: null,
+        webMode: true,
       }),
     ).toEqual({ host: "127.0.0.1", port: 8080 });
   });

@@ -449,7 +449,11 @@ function backendTransport(): http.RequestOptions {
     runtimeHome,
     resolveExternalBackendConnection(process.env) ??
       (backendPipePath
-        ? { port: backendPort, pipePath: backendPipePath }
+        ? {
+            port: backendPort,
+            pipePath: backendPipePath,
+            webMode: process.env.VECTORA_WEB_MODE === "1",
+          }
         : null),
   );
 }

@@ -74,9 +74,10 @@ export function backendPath(
 export interface ExternalBackendConnection {
   port: number | null;
   pipePath: string | null;
+  webMode: boolean;
 }
 
-/** Selects IPC for an Electron-owned backend and TCP for a web-owned backend. */
+/** Selects the desktop IPC transport or the externally exposed web transport. */
 export function backendTransportOptions(
   platform: NodeJS.Platform,
   runtimeHome: string,
@@ -87,7 +88,10 @@ export function backendTransportOptions(
     return { host: "127.0.0.1", port: external?.port ?? undefined };
   }
   if (external) {
-    return { host: "127.0.0.1", port: external.port ?? undefined };
+    if (external.webMode) {
+      return { host: "127.0.0.1", port: external.port ?? undefined };
+    }
+    return { socketPath: path.join(runtimeHome, "vectora.sock") };
   }
   return { socketPath: path.join(runtimeHome, "vectora.sock") };
 }
@@ -96,11 +100,13 @@ export function resolveExternalBackendConnection(env: {
   VECTORA_EXTERNAL_BACKEND?: string;
   VECTORA_PORT?: string;
   VECTORA_IPC_PIPE?: string;
+  VECTORA_WEB_MODE?: string;
 }): ExternalBackendConnection | null {
   if (env.VECTORA_EXTERNAL_BACKEND !== "1") return null;
   return {
     port: Number(env.VECTORA_PORT) || null,
     pipePath: env.VECTORA_IPC_PIPE ?? null,
+    webMode: env.VECTORA_WEB_MODE === "1",
   };
 }
 
