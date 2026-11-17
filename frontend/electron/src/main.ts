@@ -854,6 +854,21 @@ function createWindow(options: { visible?: boolean } = {}): void {
 
   attachContextMenu(mainWindow.webContents);
 
+  mainWindow.webContents.on(
+    "did-fail-load",
+    (_event, code, description, url, isMainFrame) => {
+      console.error("Falha ao carregar a interface do Vectora", {
+        code,
+        description,
+        url,
+        isMainFrame,
+      });
+    },
+  );
+  mainWindow.webContents.on("render-process-gone", (_event, details) => {
+    console.error("Renderer do Vectora encerrou", details);
+  });
+
   mainWindow.on("maximize", () => {
     mainWindow?.webContents.send("vectora:window-state", { maximized: true });
   });
@@ -869,6 +884,13 @@ function createWindow(options: { visible?: boolean } = {}): void {
   mainWindow.once("ready-to-show", () => {
     if (visible) {
       mainWindow?.show();
+      mainWindow?.focus();
+      app.focus();
+      console.info("Janela do Vectora ativada", {
+        visible: mainWindow?.isVisible() ?? false,
+        focused: mainWindow?.isFocused() ?? false,
+        bounds: mainWindow?.getBounds(),
+      });
       // Lido por backend/services/electron_sidecar.py (WINDOW_READY_MARKER):
       // sem esta linha no prazo, `vectora start` encerra em vez de seguir
       // como servidor sem janela.
