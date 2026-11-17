@@ -301,7 +301,7 @@ class TestVectoraMCPClientAcloseNuncaPropaga:
                     "unhandled errors in a TaskGroup", [BrokenResourceError()]
                 )
 
-            client._stack.aclose = _stack_aclose_quebrado  # ty: ignore[invalid-assignment]
+            client._stack.aclose = _stack_aclose_quebrado
 
             await client.aclose()  # não deve levantar
 

@@ -135,14 +135,14 @@ class TestMemoryHandlerExists:
         """Verifica o comportamento de list memories route registered."""
         from backend.api.handlers.memory import router
 
-        routes = [r.path for r in router.routes]  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+        routes = [r.path for r in router.routes]  # type: ignore[attr-defined]  # ty: ignore[missing-attribute]
         assert any("/memory" in r for r in routes)
 
     def test_delete_memory_route_registered(self) -> None:
         """Verifica o comportamento de delete memory route registered."""
         from backend.api.handlers.memory import router
 
-        routes = [r.path for r in router.routes]  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+        routes = [r.path for r in router.routes]  # type: ignore[attr-defined]  # ty: ignore[missing-attribute]
         assert any("/memory" in r for r in routes)
 
 

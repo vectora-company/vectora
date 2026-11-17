@@ -329,7 +329,7 @@ class TestWorkerLockSurvivesAcrossEventLoops:
         import asyncio
 
         poisoned = asyncio.Lock()
-        poisoned._locked = True  # ty: ignore[unresolved-attribute]
+        poisoned._locked = True  # ty: ignore[missing-attribute]
 
         async def _acquire(lock: asyncio.Lock) -> None:
             async with asyncio.timeout(0.2), lock:
