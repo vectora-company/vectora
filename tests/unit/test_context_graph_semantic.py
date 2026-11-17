@@ -426,31 +426,18 @@ class TestCallLlmAsyncQuota:
         assert out["nodes"] == []
 
     @pytest.mark.asyncio
-    async def test_quota_then_fallback_succeeds(self):
+    async def test_quota_does_not_retry_another_model(self):
         from backend.context_graph import semantic
-
-        resp = text_message(
-            MessageRole.ASSISTANT,
-            '{"nodes": [{"id": "n1", "label": "X"}], "edges": [], "hyperedges": []}',
-        )
+        from backend.llm.provider_fallback import QuotaExhaustedError
 
         def loader(mid):
+            assert mid == "google-genai:gemini-2.5-flash"
             llm = MagicMock()
-            if mid == "google-genai:gemini-2.5-flash":
-                llm.agenerate = AsyncMock(side_effect=Exception("quota exceeded"))
-            else:
-                llm.agenerate = AsyncMock(return_value=resp)
+            llm.agenerate = AsyncMock(side_effect=Exception("quota exceeded"))
             return llm
 
-        with (
-            patch("backend.services.utils.load_native_llm", side_effect=loader),
-            patch(
-                "backend.llm.provider_fallback.get_fallback_chain",
-                return_value=["openai:gpt-4o"],
-            ),
-        ):
-            out = await semantic._call_llm_async(
-                "msg", model_id="google-genai:gemini-2.5-flash"
-            )
-        assert out["finish_reason"] == "stop"
-        assert len(out["nodes"]) == 1
+        with patch("backend.services.utils.load_native_llm", side_effect=loader):
+            with pytest.raises(QuotaExhaustedError):
+                await semantic._call_llm_async(
+                    "msg", model_id="google-genai:gemini-2.5-flash"
+                )
