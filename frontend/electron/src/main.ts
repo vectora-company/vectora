@@ -139,11 +139,14 @@ if (!installedTestsMode) {
   app.commandLine.appendSwitch("remote-debugging-address", "127.0.0.1");
   app.commandLine.appendSwitch("remote-debugging-port", electronCdpPort);
 }
-// Restringe a renderização acelerada do Chromium a Vulkan ou Direct3D 12.
+// Seleciona o backend ANGLE nativo da plataforma. WebGL continua disponível
+// no renderer e é encaminhado pelo ANGLE para este backend.
 app.commandLine.appendSwitch("use-gl", "angle");
 if (process.platform === "win32") {
-  // ANGLE expõe o caminho D3D11on12: a camada D3D11 é traduzida para D3D12.
+  // Usa DirectX 11 sobre DirectX 12, ambos no caminho gráfico.
   app.commandLine.appendSwitch("use-angle", "d3d11on12");
+} else if (process.platform === "darwin") {
+  app.commandLine.appendSwitch("use-angle", "metal");
 } else {
   app.commandLine.appendSwitch("use-angle", "vulkan");
   if (process.platform === "linux") {
