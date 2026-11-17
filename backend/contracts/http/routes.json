@@ -1081,6 +1081,13 @@
   },
   {
     "methods": [
+      "POST"
+    ],
+    "name": "start_confirmed_llamacpp_runtime_provider_routing_llamacpp_runtime_start_post",
+    "path": "/provider-routing/llamacpp/runtime/start"
+  },
+  {
+    "methods": [
       "GET"
     ],
     "name": "llamacpp_runtime_status_provider_routing_llamacpp_runtime_status_get",
@@ -1225,10 +1232,24 @@
   },
   {
     "methods": [
+      "POST"
+    ],
+    "name": "start_ollama_runtime_provider_routing_ollama_runtime_start_post",
+    "path": "/provider-routing/ollama/runtime/start"
+  },
+  {
+    "methods": [
       "GET"
     ],
     "name": "ollama_runtime_status_provider_routing_ollama_runtime_status_get",
     "path": "/provider-routing/ollama/runtime/status"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "name": "stop_ollama_runtime_provider_routing_ollama_runtime_stop_post",
+    "path": "/provider-routing/ollama/runtime/stop"
   },
   {
     "methods": [

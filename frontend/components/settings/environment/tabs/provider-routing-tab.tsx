@@ -36,10 +36,11 @@ interface OllamaModelInfo {
 
 interface OllamaRuntimeStatus {
   installed: boolean;
+  managed?: boolean;
   executable?: string | null;
   reachable: boolean;
   version?: string | null;
-  state: "missing" | "installed" | "running" | "error";
+  state: "missing" | "installing" | "installed" | "running" | "error";
   phase?:
     | "idle"
     | "detect"
@@ -1881,6 +1882,54 @@ function OllamaSection() {
     }
   };
 
+  const handleStopRuntime = async () => {
+    setError(null);
+    try {
+      const response = await fetch("/provider-routing/ollama/runtime/stop", {
+        method: "POST",
+      });
+      if (!response.ok)
+        throw new Error(
+          await responseError(response, `Erro ${response.status}`),
+        );
+      setRuntime((await response.json()) as OllamaRuntimeStatus);
+    } catch (stopError) {
+      setError(
+        stopError instanceof Error
+          ? stopError.message
+          : "Não foi possível parar o Ollama.",
+      );
+      await loadRuntime();
+    }
+  };
+
+  const handleStartRuntime = async () => {
+    setInstallingRuntime(true);
+    setError(null);
+    try {
+      const response = await fetch("/provider-routing/ollama/runtime/start", {
+        method: "POST",
+      });
+      if (!response.ok)
+        throw new Error(
+          await responseError(response, `Erro ${response.status}`),
+        );
+      setRuntime((await response.json()) as OllamaRuntimeStatus);
+      const data = await discoverModels();
+      setReachable(data.reachable);
+      setDiscovered(data.models);
+    } catch (startError) {
+      setError(
+        startError instanceof Error
+          ? startError.message
+          : "Não foi possível iniciar o Ollama.",
+      );
+      await loadRuntime();
+    } finally {
+      setInstallingRuntime(false);
+    }
+  };
+
   const handleDiscover = async () => {
     setDiscovering(true);
     setError(null);
@@ -1962,7 +2011,7 @@ function OllamaSection() {
             ? ` · ${runtime.phase}`
             : ""}
         </span>
-        {runtime?.state !== "running" && (
+        {!runtime?.installed && runtime?.state !== "running" && (
           <Button
             variant="outline"
             size="sm"
@@ -1977,6 +2026,30 @@ function OllamaSection() {
               : m.provider_routing_ollama_install()}
           </Button>
         )}
+        {runtime?.installed && runtime.state !== "running" && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void handleStartRuntime()}
+            disabled={installingRuntime}
+          >
+            {installingRuntime ? (
+              <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+            ) : null}
+            {installingRuntime
+              ? m.provider_routing_ollama_starting()
+              : m.provider_routing_ollama_start()}
+          </Button>
+        )}
+        {runtime?.state === "running" && runtime.managed && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void handleStopRuntime()}
+          >
+            {m.provider_routing_ollama_stop()}
+          </Button>
+        )}
       </div>
       {installingRuntime && (
         <div className="space-y-1.5" role="status">
@@ -1984,7 +2057,9 @@ function OllamaSection() {
             <span>
               {runtime?.phase === "download" && runtime.download_total
                 ? `Baixando Ollama: ${Math.min(100, Math.floor(((runtime.downloaded ?? 0) / runtime.download_total) * 100))}%`
-                : `Instalando Ollama · ${runtime?.phase ?? "detect"}`}
+                : runtime?.phase === "start"
+                  ? m.provider_routing_ollama_starting()
+                  : `Instalando Ollama · ${runtime?.phase ?? "detect"}`}
             </span>
             <Button
               type="button"
@@ -3053,11 +3128,22 @@ function LlamaCppSection() {
     }
   }
 
-  async function runtimeAction(action: "stop" | "remove") {
+  async function runtimeAction(action: "start" | "stop" | "remove") {
     setRuntimeBusy(true);
     setError("");
     try {
-      if (action === "remove") {
+      if (action === "start") {
+        const response = await fetch(
+          "/provider-routing/llamacpp/runtime/start",
+          {
+            method: "POST",
+          },
+        );
+        if (!response.ok)
+          throw new Error(
+            await responseError(response, `Erro ${response.status}`),
+          );
+      } else if (action === "remove") {
         const response = await fetch("/provider-routing/llamacpp/runtime", {
           method: "DELETE",
         });
@@ -3135,26 +3221,38 @@ function LlamaCppSection() {
               {m.provider_routing_llamacpp_install()}
             </Button>
           )}
-          <Button
-            type="button"
-            variant="outline"
-            disabled={
-              !runtime?.installed || runtime?.external === true || runtimeBusy
-            }
-            onClick={() => void runtimeAction("remove")}
-          >
-            {m.provider_routing_llamacpp_uninstall()}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={
-              runtimeBusy || !runtime?.installed || runtime?.external === true
-            }
-            onClick={() => void runtimeAction("stop")}
-          >
-            {m.provider_routing_llamacpp_stop()}
-          </Button>
+          {runtime?.installed &&
+            !runtime.reachable &&
+            runtime.external !== true && (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={runtimeBusy}
+                onClick={() => void runtimeAction("start")}
+              >
+                {m.provider_routing_llamacpp_start()}
+              </Button>
+            )}
+          {runtime?.installed && runtime.external !== true && (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={runtimeBusy}
+              onClick={() => void runtimeAction("remove")}
+            >
+              {m.provider_routing_llamacpp_uninstall()}
+            </Button>
+          )}
+          {runtime?.reachable && runtime.external !== true && (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={runtimeBusy}
+              onClick={() => void runtimeAction("stop")}
+            >
+              {m.provider_routing_llamacpp_stop()}
+            </Button>
+          )}
         </div>
       </div>
       {installingRuntime && (

@@ -6782,6 +6782,11 @@
             "title": "Installed",
             "type": "boolean"
           },
+          "managed": {
+            "default": false,
+            "title": "Managed",
+            "type": "boolean"
+          },
           "phase": {
             "default": "idle",
             "enum": [
@@ -19780,6 +19785,73 @@
         ]
       }
     },
+    "/provider-routing/llamacpp/runtime/start": {
+      "post": {
+        "description": "Restart the most recently confirmed, locally installed GGUF model.",
+        "operationId": "start_confirmed_llamacpp_runtime_provider_routing_llamacpp_runtime_start_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-vectora-desktop-bridge",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Vectora-Desktop-Bridge"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "title": "Response Start Confirmed Llamacpp Runtime Provider Routing Llamacpp Runtime Start Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Confirmed Llamacpp Runtime",
+        "tags": [
+          "provider-routing"
+        ]
+      }
+    },
     "/provider-routing/llamacpp/runtime/status": {
       "get": {
         "description": "Informa runtimes locais sem inspecionar ou remover pesos.\n\n``state`` torna explícita a diferença entre uma instalação gerenciada,\numa configuração externa e um estado persistido que deixou de representar\num processo vivo. Os campos antigos permanecem para compatibilidade.",
@@ -20712,7 +20784,7 @@
     },
     "/provider-routing/ollama/runtime/install": {
       "post": {
-        "description": "Run the complete Ollama wizard under one cancellable deadline.",
+        "description": "Install the Ollama runtime without starting its server.",
         "operationId": "install_ollama_runtime_provider_routing_ollama_runtime_install_post",
         "parameters": [
           {
@@ -20760,6 +20832,56 @@
         ]
       }
     },
+    "/provider-routing/ollama/runtime/start": {
+      "post": {
+        "description": "Start an installed Ollama runtime without attempting installation.",
+        "operationId": "start_ollama_runtime_provider_routing_ollama_runtime_start_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-vectora-desktop-bridge",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Vectora-Desktop-Bridge"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OllamaRuntimeStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Ollama Runtime",
+        "tags": [
+          "provider-routing"
+        ]
+      }
+    },
     "/provider-routing/ollama/runtime/status": {
       "get": {
         "description": "Executa a operação ollama runtime status.",
@@ -20777,6 +20899,56 @@
           }
         },
         "summary": "Ollama Runtime Status",
+        "tags": [
+          "provider-routing"
+        ]
+      }
+    },
+    "/provider-routing/ollama/runtime/stop": {
+      "post": {
+        "description": "Stop only the Ollama server process owned by this Vectora instance.",
+        "operationId": "stop_ollama_runtime_provider_routing_ollama_runtime_stop_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-vectora-desktop-bridge",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Vectora-Desktop-Bridge"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OllamaRuntimeStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stop Ollama Runtime",
         "tags": [
           "provider-routing"
         ]

@@ -596,7 +596,7 @@ describe("ProviderRoutingTab — Ollama", () => {
     render(<ProviderRoutingTab />);
 
     fireEvent.click(
-      await screen.findByRole("button", { name: /instalar\/iniciar ollama/i }),
+      await screen.findByRole("button", { name: /instalar ollama/i }),
     );
     expect(await screen.findByText("pacote Linux incompatível")).toBeTruthy();
   });

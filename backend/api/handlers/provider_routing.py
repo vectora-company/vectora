@@ -134,6 +134,12 @@ _ollama_cleanup_confirmed: bool | None = None
 _ollama_cleanup_deadline: contextvars.ContextVar[float | None] = contextvars.ContextVar(
     "ollama_cleanup_deadline", default=None
 )
+_ollama_install_if_missing: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    "ollama_install_if_missing", default=True
+)
+_ollama_start_server: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    "ollama_start_server", default=True
+)
 
 
 def _set_ollama_install_phase(phase: OllamaInstallPhase) -> None:
@@ -295,6 +301,7 @@ class OllamaRuntimeStatus(BaseModel):
     """Estado observável do runtime Ollama gerenciado pelo Vectora."""
 
     installed: bool
+    managed: bool = False
     executable: str | None = None
     reachable: bool
     version: str | None = None
@@ -1456,6 +1463,10 @@ async def ollama_runtime_status() -> OllamaRuntimeStatus:
     if reachable:
         return OllamaRuntimeStatus(
             installed=executable is not None,
+            managed=(
+                _managed_ollama_process is not None
+                and _managed_ollama_process.returncode is None
+            ),
             executable=str(executable) if executable else None,
             reachable=True,
             version=version,
@@ -1507,14 +1518,15 @@ async def ollama_runtime_status() -> OllamaRuntimeStatus:
 
 
 async def _install_ollama_runtime_impl(_: ProviderAdmin) -> OllamaRuntimeStatus:
-    """Instala e inicia Ollama sem exigir comandos manuais no terminal.
+    """Instala Ollama e, quando solicitado, inicia seu servidor local.
 
     Linux/macOS usam archives oficiais em diretório privado; Windows mantém
-    winget e o instalador oficial. O endpoint só retorna sucesso quando a API
-    local responde.
+    winget e o instalador oficial. A inicialização é uma ação separada.
     """
     _set_ollama_install_phase("detect")
     executable = await asyncio.to_thread(_ollama_executable)
+    if executable is None and not _ollama_install_if_missing.get():
+        raise HTTPException(status_code=409, detail="Ollama não está instalado")
     if executable is None:
         if platform.system() != "Windows":
             executable = await _install_ollama_native_release()
@@ -1575,6 +1587,17 @@ async def _install_ollama_runtime_impl(_: ProviderAdmin) -> OllamaRuntimeStatus:
     if executable is None:
         raise HTTPException(
             status_code=502, detail="O pacote oficial não forneceu ollama"
+        )
+
+    if not _ollama_start_server.get():
+        _set_ollama_install_phase("idle")
+        return OllamaRuntimeStatus(
+            installed=True,
+            executable=str(executable),
+            reachable=False,
+            state="installed",
+            phase="idle",
+            cleanup_confirmed=_ollama_cleanup_confirmed,
         )
 
     reachable, version = await _ollama_http_status()
@@ -1639,7 +1662,7 @@ async def _install_ollama_runtime_impl(_: ProviderAdmin) -> OllamaRuntimeStatus:
 
 @router.post("/ollama/runtime/install", dependencies=[DesktopBridge])
 async def install_ollama_runtime(_: ProviderAdmin) -> OllamaRuntimeStatus:
-    """Run the complete Ollama wizard under one cancellable deadline."""
+    """Install the Ollama runtime without starting its server."""
     global _ollama_cleanup_confirmed
     loop = asyncio.get_running_loop()
     cleanup_token = _ollama_cleanup_deadline.set(
@@ -1647,6 +1670,7 @@ async def install_ollama_runtime(_: ProviderAdmin) -> OllamaRuntimeStatus:
         + OLLAMA_INSTALL_TOTAL_TIMEOUT_SECONDS
         + OLLAMA_CLEANUP_TIMEOUT_SECONDS
     )
+    start_token = _ollama_start_server.set(False)
     _ollama_cleanup_confirmed = None
     try:
         async with asyncio.timeout(OLLAMA_INSTALL_TOTAL_TIMEOUT_SECONDS):
@@ -1673,6 +1697,35 @@ async def install_ollama_runtime(_: ProviderAdmin) -> OllamaRuntimeStatus:
         raise
     finally:
         _ollama_cleanup_deadline.reset(cleanup_token)
+        _ollama_start_server.reset(start_token)
+
+
+@router.post("/ollama/runtime/start", dependencies=[DesktopBridge])
+async def start_ollama_runtime(_: ProviderAdmin) -> OllamaRuntimeStatus:
+    """Start an installed Ollama runtime without attempting installation."""
+    global _ollama_cleanup_confirmed
+    loop = asyncio.get_running_loop()
+    cleanup_token = _ollama_cleanup_deadline.set(
+        loop.time()
+        + OLLAMA_INSTALL_TOTAL_TIMEOUT_SECONDS
+        + OLLAMA_CLEANUP_TIMEOUT_SECONDS
+    )
+    install_token = _ollama_install_if_missing.set(False)
+    start_token = _ollama_start_server.set(True)
+    _ollama_cleanup_confirmed = None
+    try:
+        async with asyncio.timeout(OLLAMA_INSTALL_TOTAL_TIMEOUT_SECONDS):
+            async with _OLLAMA_INSTALL_LOCK:
+                return await _install_ollama_runtime_impl(_)
+    except TimeoutError as exc:
+        _set_ollama_install_phase("failed")
+        raise HTTPException(
+            status_code=504, detail="inicialização do Ollama excedeu o prazo"
+        ) from exc
+    finally:
+        _ollama_cleanup_deadline.reset(cleanup_token)
+        _ollama_install_if_missing.reset(install_token)
+        _ollama_start_server.reset(start_token)
 
 
 @router.get("/ollama/registered")
@@ -2398,11 +2451,26 @@ async def _prepare_dmr_model(body: DmrModelRequest) -> dict[str, object]:
         output = await prepare_model(reference)
     except (OSError, RuntimeError, ValueError) as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+
     object.__setattr__(settings, "dmr_model", reference)
     env_file = _env_file()
     _set_env_key(env_file, "DMR_MODEL", reference)
     os.environ["DMR_MODEL"] = reference
     return {"status": "prepared", "reference": reference, "output": output[-2000:]}
+
+
+@router.post("/ollama/runtime/stop", dependencies=[DesktopBridge])
+async def stop_ollama_runtime(_: ProviderAdmin) -> OllamaRuntimeStatus:
+    """Stop only the Ollama server process owned by this Vectora instance."""
+    if (
+        _managed_ollama_process is None
+        or _managed_ollama_process.returncode is not None
+    ):
+        raise HTTPException(
+            status_code=409, detail="Ollama não está sob gerenciamento do Vectora"
+        )
+    await stop_managed_ollama()
+    return await ollama_runtime_status()
 
 
 @router.post("/dmr/models/prepare", dependencies=[DesktopBridge])
@@ -2923,6 +2991,19 @@ async def stop_llamacpp_sidecar(
     from backend.services.llamacpp_sidecar import stop_llamacpp
 
     await stop_llamacpp()
+    return await get_llamacpp_sidecar_status()
+
+
+@router.post("/llamacpp/runtime/start", dependencies=[DesktopBridge])
+async def start_confirmed_llamacpp_runtime(
+    _: ProviderAdmin,
+) -> dict[str, int | bool | str | None]:
+    """Restart the most recently confirmed, locally installed GGUF model."""
+    if not await restore_managed_llamacpp():
+        raise HTTPException(
+            status_code=409,
+            detail="Instale e confirme um modelo GGUF antes de iniciar o llama.cpp.",
+        )
     return await get_llamacpp_sidecar_status()
 
 
