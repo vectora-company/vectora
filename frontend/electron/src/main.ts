@@ -63,7 +63,8 @@ import {
   fetchBackendJson,
   postBackendJson,
   waitForBackendReady,
-  killBackendTree,
+  stopBackendProcess,
+  stopBackendTree,
   resolveExternalBackendConnection,
 } from "./backend-lifecycle.js";
 import {
@@ -256,6 +257,9 @@ const runtimeHome = resolveRuntimeHome(
 if (!process.env.VECTORA_HOME) process.env.VECTORA_HOME = runtimeHome;
 
 let backend: ChildProcess | null = null;
+let backendShutdownPromise: Promise<void> | null = null;
+let backendPidFileWrite: Promise<void> | null = null;
+let shutdownResourcesDisposed = false;
 let backendPort: number | null = null;
 let backendPipePath: string | null = null; // Windows named pipe path (\\.\pipe\vectora-<pid>)
 let mainWindow: BrowserWindow | null = null;
@@ -410,17 +414,43 @@ const _MAX_LOG_LINES = 60;
 // Arquivo que persiste o PID do sidecar backend entre sessões. Permite matar
 // processo órfão deixado por crash do Electron sem disparar before-quit.
 const _BACKEND_PID_FILE = path.join(runtimeHome, "backend.pid");
+const signalProcessTree = (
+  pid: number,
+  signal: string,
+  callback?: (error?: Error) => void,
+) => treeKill(pid, signal, callback);
 
 async function killStaleBackend(): Promise<void> {
+  let raw: string;
   try {
-    const raw = await fs.promises.readFile(_BACKEND_PID_FILE, "utf-8");
-    const stalePid = parseInt(raw.trim(), 10);
-    if (isNaN(stalePid)) return;
-    treeKill(stalePid);
-    await new Promise((r) => setTimeout(r, 400));
+    raw = await fs.promises.readFile(_BACKEND_PID_FILE, "utf-8");
   } catch {
-    // Arquivo não existe ou processo já morreu — normal.
+    // O arquivo não existe quando não houve processo anterior.
+    return;
   }
+  const pidText = raw.trim();
+  const stalePid = /^\d+$/.test(pidText) ? Number(pidText) : Number.NaN;
+  if (!Number.isSafeInteger(stalePid) || stalePid <= 0) {
+    await fs.promises.unlink(_BACKEND_PID_FILE).catch(() => {});
+    return;
+  }
+  const stopped = await stopBackendTree(
+    stalePid,
+    process.platform,
+    signalProcessTree,
+    (pid) => {
+      try {
+        process.kill(pid, 0);
+        return true;
+      } catch (error) {
+        return (error as NodeJS.ErrnoException).code === "EPERM";
+      }
+    },
+  );
+  if (!stopped) {
+    throw new Error(`Backend anterior (pid=${stalePid}) não encerrou`);
+  }
+  await fs.promises.unlink(_BACKEND_PID_FILE).catch(() => {});
 }
 
 // O scheme da SPA precisa ser registrado ANTES de app.whenReady(). Habilita
@@ -683,12 +713,18 @@ async function startBackend(): Promise<void> {
   backend = spawnBackendProcess(exePath, ["start"], env);
   if (backend.pid) {
     const backendPid = backend.pid;
-    fs.promises
+    const pidFileWrite = fs.promises
       .mkdir(path.dirname(_BACKEND_PID_FILE), { recursive: true })
       .then(() =>
         fs.promises.writeFile(_BACKEND_PID_FILE, String(backendPid), "utf-8"),
       )
-      .catch(() => {});
+      .catch((error: unknown) => {
+        console.warn("[backend] não foi possível persistir o PID", error);
+      });
+    backendPidFileWrite = pidFileWrite;
+    void pidFileWrite.finally(() => {
+      if (backendPidFileWrite === pidFileWrite) backendPidFileWrite = null;
+    });
   }
   const pipeParser = new IpcPipeParser();
   backend.stdout?.on("data", (b: Buffer) => {
@@ -736,12 +772,23 @@ function handleBackendExit(code: number | null, signal: NodeJS.Signals | null) {
 }
 
 async function restartBackend(): Promise<void> {
-  if (backend?.pid) {
-    treeKill(backend.pid);
-    backend = null;
-  }
-  backendPipePath = null;
   try {
+    if (backend?.pid) {
+      const previousBackend = backend;
+      backend = null;
+      const stopped = await stopBackendProcess(
+        previousBackend,
+        process.platform,
+        signalProcessTree,
+      );
+      if (!stopped) {
+        throw new Error("O backend anterior não encerrou após SIGKILL");
+      }
+      try {
+        fs.unlinkSync(_BACKEND_PID_FILE);
+      } catch {}
+    }
+    backendPipePath = null;
     await startBackend();
     await waitForBackend();
     if (mainWindow) {
@@ -1682,20 +1729,51 @@ app.on("window-all-closed", () => {
   }
 });
 
-app.on("before-quit", () => {
+app.on("before-quit", (event) => {
   (app as unknown as { isQuitting: boolean }).isQuitting = true;
-  dmrOperations?.dispose();
-  electronCdpProxy?.close();
-  electronCdpProxy = null;
-  if (backend?.pid) {
-    const pid = backend.pid;
-    backend = null;
-    // No Windows, killBackendTree usa spawnSync (bloqueia até o taskkill
-    // terminar) — garante que o backend está morto antes do processo
-    // Electron sair (treeKill é async e o Electron saía antes, deixando o
-    // backend órfão).
-    killBackendTree(pid, process.platform, treeKill);
+  if (!shutdownResourcesDisposed) {
+    shutdownResourcesDisposed = true;
+    dmrOperations?.dispose();
+    electronCdpProxy?.close();
+    electronCdpProxy = null;
   }
+
+  if (backendShutdownPromise) {
+    event.preventDefault();
+    return;
+  }
+
+  if (backend?.pid) {
+    event.preventDefault();
+    const backendToStop = backend;
+    backend = null;
+    backendShutdownPromise = Promise.resolve(backendPidFileWrite)
+      .then(() =>
+        stopBackendProcess(backendToStop, process.platform, signalProcessTree),
+      )
+      .then((stopped) => {
+        if (!stopped) {
+          console.error(
+            `[backend] processo pid=${backendToStop.pid} ainda vive após SIGKILL`,
+          );
+        }
+      })
+      .catch((error: unknown) => {
+        console.error(
+          "[backend] falha ao encerrar a árvore do processo",
+          error,
+        );
+      })
+      .finally(() => {
+        backendShutdownPromise = null;
+        try {
+          fs.unlinkSync(_BACKEND_PID_FILE);
+        } catch {}
+        app.quit();
+      });
+    return;
+  }
+
   try {
     fs.unlinkSync(_BACKEND_PID_FILE);
   } catch {}

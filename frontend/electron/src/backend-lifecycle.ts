@@ -359,21 +359,110 @@ export async function waitForBackendReady(
 // ---------------------------------------------------------------------------
 
 /**
- * Mata a árvore de processos do PID informado — `taskkill /T /F` no Windows
- * (síncrono, garante que o processo está morto antes de retornar — o
- * chamador em `before-quit` do Electron depende disso pra não sair antes
- * do backend), `treeKill` (assíncrono) nas demais plataformas.
+ * Sinaliza a árvore de processos do PID informado. No Windows, `taskkill`
+ * encerra a árvore; `/F` só é usado na escalada para SIGKILL. Nas demais
+ * plataformas, `tree-kill` propaga o sinal aos descendentes.
  */
+type TreeKillFunction = (
+  pid: number,
+  signal: string,
+  callback?: (error?: Error) => void,
+) => void;
+
 export function killBackendTree(
   pid: number,
   platform: NodeJS.Platform,
-  treeKillFn: (pid: number, callback?: (err?: Error) => void) => void,
-): void {
+  treeKillFn: TreeKillFunction,
+  signal: NodeJS.Signals = "SIGTERM",
+): Promise<void> {
   if (platform === "win32") {
-    spawnSync("taskkill", ["/T", "/F", "/PID", String(pid)], {
-      stdio: "ignore",
-    });
-  } else {
-    treeKillFn(pid);
+    spawnSync(
+      "taskkill",
+      ["/T", ...(signal === "SIGKILL" ? ["/F"] : []), "/PID", String(pid)],
+      {
+        stdio: "ignore",
+      },
+    );
+    return Promise.resolve();
   }
+
+  return new Promise((resolve) => {
+    try {
+      treeKillFn(pid, signal, () => resolve());
+    } catch {
+      // Processo já encerrado ou inacessível: o chamador confirma a saída.
+      resolve();
+    }
+  });
+}
+
+function waitForChildExit(
+  child: ChildProcess,
+  timeoutMs: number,
+): Promise<boolean> {
+  if (child.exitCode !== null || child.signalCode !== null) {
+    return Promise.resolve(true);
+  }
+
+  return new Promise((resolve) => {
+    const finish = (exited: boolean) => {
+      clearTimeout(timeout);
+      child.off("exit", onExit);
+      resolve(exited);
+    };
+    const onExit = () => finish(true);
+    const timeout = setTimeout(() => finish(false), timeoutMs);
+    child.once("exit", onExit);
+    if (child.exitCode !== null || child.signalCode !== null) finish(true);
+  });
+}
+
+/** Sends TERM, waits for the backend to exit, then escalates to KILL. */
+export async function stopBackendProcess(
+  child: ChildProcess,
+  platform: NodeJS.Platform,
+  treeKillFn: TreeKillFunction,
+  gracefulTimeoutMs = 8_000,
+  forcedTimeoutMs = 3_000,
+): Promise<boolean> {
+  const pid = child.pid;
+  if (!pid || child.exitCode !== null || child.signalCode !== null) return true;
+
+  await killBackendTree(pid, platform, treeKillFn, "SIGTERM");
+  if (await waitForChildExit(child, gracefulTimeoutMs)) return true;
+
+  await killBackendTree(pid, platform, treeKillFn, "SIGKILL");
+  return waitForChildExit(child, forcedTimeoutMs);
+}
+
+function waitForPidExit(
+  pid: number,
+  isAlive: (pid: number) => boolean,
+  timeoutMs: number,
+): Promise<boolean> {
+  return new Promise((resolve) => {
+    const deadline = Date.now() + timeoutMs;
+    const poll = () => {
+      if (!isAlive(pid)) return resolve(true);
+      if (Date.now() >= deadline) return resolve(false);
+      setTimeout(poll, 100);
+    };
+    poll();
+  });
+}
+
+/** Waits for a stale backend PID to exit and escalates if it ignores TERM. */
+export async function stopBackendTree(
+  pid: number,
+  platform: NodeJS.Platform,
+  treeKillFn: TreeKillFunction,
+  isAlive: (pid: number) => boolean,
+  gracefulTimeoutMs = 8_000,
+  forcedTimeoutMs = 3_000,
+): Promise<boolean> {
+  if (!isAlive(pid)) return true;
+  await killBackendTree(pid, platform, treeKillFn, "SIGTERM");
+  if (await waitForPidExit(pid, isAlive, gracefulTimeoutMs)) return true;
+  await killBackendTree(pid, platform, treeKillFn, "SIGKILL");
+  return waitForPidExit(pid, isAlive, forcedTimeoutMs);
 }
