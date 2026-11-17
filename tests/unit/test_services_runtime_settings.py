@@ -364,8 +364,8 @@ class TestRagSettings:
         s = rs.rag_settings
         assert s["reranker_enabled"] is True
         assert s["reranker_top_k"] == 5
-        assert s["rerank_provider"] == "auto"
-        assert s["embed_provider"] == "auto"
+        assert s["rerank_model"] == ""
+        assert s["embed_model"] == ""
         assert s["ingest_file_types"] == []
 
     def test_set_merges_partial(self, rs) -> None:
@@ -373,15 +373,15 @@ class TestRagSettings:
         s = rs.rag_settings
         assert s["reranker_enabled"] is False
         assert s["reranker_top_k"] == 12
-        # Campos não informados mantêm o default.
-        assert s["rerank_provider"] == "auto"
+        # O modelo selecionado permanece vazio até ser escolhido em IA Models.
+        assert s["rerank_model"] == ""
 
     def test_set_ignores_none(self, rs) -> None:
         rs.set_rag_settings(reranker_top_k=8)
-        rs.set_rag_settings(reranker_top_k=None, rerank_provider="voyage")
+        rs.set_rag_settings(reranker_top_k=None, rerank_model="cohere:rerank-v4")
         s = rs.rag_settings
         assert s["reranker_top_k"] == 8  # não sobrescrito por None
-        assert s["rerank_provider"] == "voyage"
+        assert s["rerank_model"] == "cohere:rerank-v4"
 
     def test_persists_across_reload(self, tmp_settings_path) -> None:
         from backend.workspace.runtime_settings import RuntimeSettings
