@@ -1044,85 +1044,6 @@ describe("ProviderRoutingTab — 9Router", () => {
   });
 });
 
-describe("MediaModelsSection", () => {
-  // Config por gateway (Ollama/OpenRouter), não preferência genérica de
-  // usuário — ver provider-routing-tab.tsx para o racional completo.
-  it("repinta com o valor efetivo devolvido pelo backend ao limpar o campo", async () => {
-    // Cenário do invariante: o usuário limpa o campo, mas existe env var —
-    // o que passa a valer é a env. Mostrar o campo vazio faria parecer que a
-    // capacidade ficou desligada.
-    mockFetch({
-      mediaModelsGet: { models: { ollama_image_model: "escolha-da-ui" } },
-      mediaModelsPatch: { models: { ollama_image_model: "modelo-da-env" } },
-    });
-
-    render(<AiModelsTab />);
-
-    const campo = (await screen.findByLabelText(
-      "Ollama — image",
-    )) as HTMLInputElement;
-    expect(campo.value).toBe("escolha-da-ui");
-
-    fireEvent.change(campo, { target: { value: "" } });
-    fireEvent.blur(campo);
-
-    // Erro/borda: o campo NÃO fica vazio — mostra o que de fato vale agora.
-    await waitFor(() => expect(campo.value).toBe("modelo-da-env"));
-  });
-
-  it("edita os modelos de vídeo retornados pelo backend", async () => {
-    mockFetch({
-      mediaModelsGet: {
-        models: {
-          ollama_video_model: "ollama-video-original",
-          openrouter_video_model: "openrouter-video-original",
-        },
-      },
-      mediaModelsPatch: {
-        models: {
-          ollama_video_model: "ollama-video-updated",
-          openrouter_video_model: "openrouter-video-original",
-        },
-      },
-    });
-
-    render(<AiModelsTab />);
-
-    const ollamaVideo = (await screen.findByLabelText(
-      /prefs_media_models_ollama_video|Ollama — video|Ollama — vídeo/,
-    )) as HTMLInputElement;
-    const openrouterVideo = (await screen.findByLabelText(
-      /prefs_media_models_openrouter_video|OpenRouter — video|OpenRouter — vídeo/,
-    )) as HTMLInputElement;
-    expect(ollamaVideo.value).toBe("ollama-video-original");
-    expect(openrouterVideo.value).toBe("openrouter-video-original");
-
-    fireEvent.change(ollamaVideo, {
-      target: { value: "ollama-video-updated" },
-    });
-    fireEvent.blur(ollamaVideo);
-    await waitFor(() => expect(ollamaVideo.value).toBe("ollama-video-updated"));
-    expect(global.fetch).toHaveBeenCalledWith(
-      "/admin/media-models",
-      expect.objectContaining({
-        method: "PATCH",
-        body: JSON.stringify({ ollama_video_model: "ollama-video-updated" }),
-      }),
-    );
-  });
-
-  it("backend fora do ar deixa os campos vazios sem quebrar a aba (edge)", async () => {
-    mockFetch({ mediaModelsGet: null });
-
-    render(<AiModelsTab />);
-
-    const campo = (await screen.findByLabelText(
-      "Ollama — voice",
-    )) as HTMLInputElement;
-    expect(campo.value).toBe("");
-  });
-});
-
 describe("LlamaCppSection", () => {
   beforeEach(() => {
     overwriteGetLocale(() => "pt");
@@ -1174,7 +1095,6 @@ describe("LlamaCppSection", () => {
     const headings = screen.getAllByRole("heading", { level: 3 });
     const titles = headings.map((heading) => heading.textContent);
     expect(titles).toEqual([
-      "Detecção de capacidades dos modelos",
       "llama.cpp",
       "Ollama (modelos locais)",
       "Docker Model Runner",

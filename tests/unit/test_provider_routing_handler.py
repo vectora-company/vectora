@@ -2965,6 +2965,28 @@ class TestLlamaCppConfiguration:
         assert status["state"] == "unknown-process"
 
     @pytest.mark.asyncio
+    async def test_runtime_status_detects_system_llama_server(
+        self, tmp_path, monkeypatch
+    ):
+        from backend.api.handlers.provider_routing import llamacpp_runtime_status
+        from backend.settings import settings
+
+        monkeypatch.setattr(settings, "vectora_home", tmp_path)
+        monkeypatch.setattr(settings, "llamacpp_base_url", None)
+        monkeypatch.setenv("LLAMACPP_MODE", "external")
+        monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/llama-server")
+        monkeypatch.setattr(
+            "backend.services.llamacpp_sidecar.llamacpp_status",
+            lambda: {"running": False, "persisted_pid": None, "stale_state": False},
+        )
+
+        status = await llamacpp_runtime_status()
+
+        assert status["installed"] is True
+        assert status["path"] == "/usr/bin/llama-server"
+        assert status["external"] is True
+
+    @pytest.mark.asyncio
     async def test_runtime_removal_rejects_active_sidecar(self, monkeypatch):
         """Verifica o comportamento de runtime removal rejects active sidecar."""
         monkeypatch.setattr(

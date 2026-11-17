@@ -1,8 +1,7 @@
 "use client";
 
-import { Sparkles } from "lucide-react";
-import { MediaModelsSection } from "./provider-routing-tab";
 import { ImageFallbackModelSection } from "./image-model-section";
+import { ProviderIcon } from "@/components/icons/provider-icons";
 import { useCallback, useEffect, useState } from "react";
 import {
   hydrateDecisionModelPreferences,
@@ -71,6 +70,12 @@ type CatalogModel = {
   capabilities: string[];
 };
 
+function providerFromModelId(modelId: string): string {
+  return modelId.includes(":")
+    ? modelId.slice(0, modelId.indexOf(":"))
+    : "auto";
+}
+
 function CapabilityModelList({
   capability,
   title,
@@ -134,7 +139,10 @@ function CapabilityModelList({
       {selected && (
         <div className="flex items-center justify-between rounded-lg border bg-[#1a1a1a] px-3 py-2">
           <span className="flex min-w-0 items-center gap-2 truncate text-sm">
-            <Sparkles className="size-4 shrink-0" />
+            <ProviderIcon
+              provider={current?.provider ?? providerFromModelId(selected)}
+              className="size-4 shrink-0"
+            />
             {current?.name ?? selected}
           </span>
           <span className="text-sm font-medium">
@@ -147,14 +155,19 @@ function CapabilityModelList({
           {m.workbench_settings_loading()}
         </p>
       ) : options.length ? (
-        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+        <div
+          className={`grid gap-2 md:grid-cols-2 xl:grid-cols-3 ${options.length > 6 ? "max-h-80 overflow-y-auto pr-1" : ""}`}
+        >
           {options.map((model) => (
             <div
               key={model.id}
               className="flex min-w-0 items-center justify-between gap-2 rounded-lg border bg-[#1a1a1a] px-3 py-2"
             >
               <span className="flex min-w-0 items-center gap-2 truncate text-sm">
-                <Sparkles className="size-4 shrink-0" />
+                <ProviderIcon
+                  provider={model.provider}
+                  className="size-4 shrink-0"
+                />
                 <span className="truncate">{model.name}</span>
                 <span className="shrink-0 text-[10px] text-muted-foreground">
                   {model.provider}
@@ -245,14 +258,20 @@ function ProviderModelCatalog() {
                 <h5 className="text-xs font-medium">
                   {mDyn(`ai_capability_${capability}`)}
                 </h5>
-                <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                <div
+                  className={`grid gap-2 md:grid-cols-2 xl:grid-cols-3 ${matches.length > 6 ? "max-h-80 overflow-y-auto pr-1" : ""}`}
+                >
                   {matches.map((model) => (
                     <div
                       key={`${capability}:${model.id}`}
                       className="flex min-w-0 items-center justify-between gap-2 rounded-lg border bg-[#1a1a1a] px-3 py-2"
                     >
-                      <span className="min-w-0 truncate text-xs">
-                        {model.name}
+                      <span className="flex min-w-0 items-center gap-2 truncate text-xs">
+                        <ProviderIcon
+                          provider={model.provider}
+                          className="size-4 shrink-0"
+                        />
+                        <span className="truncate">{model.name}</span>
                       </span>
                       <span className="shrink-0 text-[10px] text-muted-foreground">
                         {model.provider}
@@ -440,17 +459,23 @@ export function SystemOneConfiguration() {
       </label>
       <label className="grid gap-1 text-xs">
         {mDyn("ai_models_systemone_default_provider")}
-        <select
-          className="h-8 rounded-md border bg-background px-2 text-sm"
-          value={config.provider}
-          onChange={(event) => void save({ provider: event.target.value })}
-        >
-          {DECISION_PROVIDERS.map((item) => (
-            <option key={item.id} value={item.id}>
-              {mDyn(item.label)}
-            </option>
-          ))}
-        </select>
+        <div className="flex items-center gap-2">
+          <ProviderIcon
+            provider={config.provider}
+            className="size-4 shrink-0 text-muted-foreground"
+          />
+          <select
+            className="h-8 min-w-0 flex-1 rounded-md border bg-background px-2 text-sm"
+            value={config.provider}
+            onChange={(event) => void save({ provider: event.target.value })}
+          >
+            {DECISION_PROVIDERS.map((item) => (
+              <option key={item.id} value={item.id}>
+                {mDyn(item.label)}
+              </option>
+            ))}
+          </select>
+        </div>
       </label>
       <label className="grid gap-1 text-xs">
         {mDyn("ai_models_base_url")}
@@ -660,7 +685,7 @@ function DecisionModelsSection() {
       </div>
       <div className="flex items-center justify-between rounded-lg border bg-[#1a1a1a] px-3 py-2">
         <span className="flex min-w-0 items-center gap-2 truncate text-sm">
-          <Sparkles className="size-4 shrink-0" />
+          <ProviderIcon provider={provider} className="size-4 shrink-0" />
           {status?.model ||
             (activeProvider ? mDyn(activeProvider.label) : provider)}
         </span>
@@ -676,7 +701,7 @@ function DecisionModelsSection() {
               className="flex min-w-0 items-center justify-between gap-2 rounded-lg border bg-[#1a1a1a] px-3 py-2"
             >
               <span className="flex min-w-0 items-center gap-2 truncate text-sm">
-                <Sparkles className="size-4 shrink-0" />
+                <ProviderIcon provider={item.id} className="size-4 shrink-0" />
                 {mDyn(item.label)}
               </span>
               <Button
@@ -712,11 +737,13 @@ function DecisionModelsSection() {
           ))}
         </div>
       </fieldset>
+      <SystemOneConfiguration />
     </section>
   );
 }
 
 export function TranscriptionSettings() {
+  const selectedModel = useSettingsStore((state) => state.selectedModel);
   const transcriptionMode = useSettingsStore(
     (state) => state.transcriptionMode,
   );
@@ -793,7 +820,14 @@ export function TranscriptionSettings() {
       </div>
       <div className="flex items-center justify-between rounded-lg border bg-[#1a1a1a] px-3 py-2">
         <span className="flex min-w-0 items-center gap-2 truncate text-sm">
-          <Sparkles className="size-4 shrink-0" />
+          <ProviderIcon
+            provider={
+              transcriptionMode === "local"
+                ? "whisper-local"
+                : providerFromModelId(selectedModel)
+            }
+            className="size-4 shrink-0"
+          />
           {mDyn(
             transcriptionMode === "local"
               ? "ai_models_transcription_local"
@@ -813,7 +847,14 @@ export function TranscriptionSettings() {
               className="flex items-center justify-between gap-2 rounded-lg border bg-[#1a1a1a] px-3 py-2"
             >
               <span className="flex min-w-0 items-center gap-2 truncate text-sm">
-                <Sparkles className="size-4 shrink-0" />
+                <ProviderIcon
+                  provider={
+                    mode === "local"
+                      ? "whisper-local"
+                      : providerFromModelId(selectedModel)
+                  }
+                  className="size-4 shrink-0"
+                />
                 {mDyn(
                   mode === "local"
                     ? "ai_models_transcription_local"
@@ -1295,7 +1336,7 @@ export function ChatModelSettings() {
   const selected = useSettingsStore((state) => state.selectedModel);
   const setSelected = useSettingsStore((state) => state.setSelectedModel);
   const [dynamicModels, setDynamicModels] = useState<
-    Array<{ id: string; available?: boolean }>
+    Array<{ id: string; available?: boolean; provider?: string }>
   >([]);
   const [configuredProviders, setConfiguredProviders] = useState<
     string[] | null
@@ -1308,7 +1349,11 @@ export function ChatModelSettings() {
         (
           data: {
             providers?: string[];
-            dynamic_models?: Array<{ id: string; available?: boolean }>;
+            dynamic_models?: Array<{
+              id: string;
+              available?: boolean;
+              provider?: string;
+            }>;
           } | null,
         ) => {
           if (alive) {
@@ -1341,6 +1386,9 @@ export function ChatModelSettings() {
     ]),
   ];
   const registerable = models.filter((model) => model !== selected);
+  const providerFor = (modelId: string) =>
+    dynamicModels.find((model) => model.id === modelId)?.provider ??
+    providerFromModelId(modelId);
   return (
     <section
       className="space-y-3 rounded-lg border bg-[#1f1f1f] p-3"
@@ -1356,21 +1404,29 @@ export function ChatModelSettings() {
       </div>
       <div className="flex items-center justify-between rounded-lg border bg-[#1a1a1a] px-3 py-2">
         <span className="flex min-w-0 items-center gap-2 truncate text-sm">
-          <Sparkles className="size-4 shrink-0" />
+          <ProviderIcon
+            provider={providerFor(selected)}
+            className="size-4 shrink-0"
+          />
           {getModelDisplayName(selected)}
         </span>
         <span className="text-sm font-medium">
           {m.provider_routing_already_registered()}
         </span>
       </div>
-      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+      <div
+        className={`grid gap-2 md:grid-cols-2 xl:grid-cols-3 ${registerable.length > 6 ? "max-h-80 overflow-y-auto pr-1" : ""}`}
+      >
         {registerable.map((model) => (
           <div
             key={model}
             className="flex min-w-0 items-center justify-between gap-2 rounded-lg border bg-[#1a1a1a] px-3 py-2"
           >
             <span className="flex min-w-0 items-center gap-2 truncate text-sm">
-              <Sparkles className="size-4 shrink-0" />
+              <ProviderIcon
+                provider={providerFor(model)}
+                className="size-4 shrink-0"
+              />
               {getModelDisplayName(model)}
             </span>
             <Button type="button" size="sm" onClick={() => setSelected(model)}>
@@ -1405,14 +1461,12 @@ export function AiModelsTab() {
         </h4>
         <ImageFallbackModelSection />
       </section>
-      <MediaModelsSection />
       <RetrievalModelSettings />
       <ProviderModelCatalog />
       <section className="space-y-3 rounded-lg border bg-[#1f1f1f] p-3">
         <TranscriptionSettings />
         <LocalSpeechSettings />
       </section>
-      <SystemOneConfiguration />
       <MediaLimitsSettings />
     </div>
   );

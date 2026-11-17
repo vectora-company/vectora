@@ -6751,6 +6751,22 @@
             ],
             "title": "Detail"
           },
+          "download_total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Download Total"
+          },
+          "downloaded": {
+            "default": 0,
+            "title": "Downloaded",
+            "type": "integer"
+          },
           "executable": {
             "anyOf": [
               {
@@ -19581,6 +19597,60 @@
           }
         },
         "summary": "Remove Llamacpp Runtime",
+        "tags": [
+          "provider-routing"
+        ]
+      }
+    },
+    "/provider-routing/llamacpp/runtime/cancel": {
+      "post": {
+        "description": "Solicita cancelamento cooperativo do download do runtime.",
+        "operationId": "cancel_llamacpp_install_provider_routing_llamacpp_runtime_cancel_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-vectora-desktop-bridge",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Vectora-Desktop-Bridge"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response Cancel Llamacpp Install Provider Routing Llamacpp Runtime Cancel Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Llamacpp Install",
         "tags": [
           "provider-routing"
         ]

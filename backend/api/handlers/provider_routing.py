@@ -126,6 +126,8 @@ OllamaInstallPhase = Literal[
     "cancelled",
 ]
 _ollama_install_phase: OllamaInstallPhase = "idle"
+_ollama_install_downloaded = 0
+_ollama_install_total: int | None = None
 _managed_ollama_process: asyncio.subprocess.Process | None = None
 _ollama_log_task: asyncio.Task[None] | None = None
 _ollama_cleanup_confirmed: bool | None = None
@@ -221,6 +223,13 @@ _download_locks_guard = asyncio.Lock()
 _download_cancel_events: dict[str, asyncio.Event] = {}
 _download_progress: dict[str, dict[str, int | str | None]] = {}
 _runtime_transition_lock = asyncio.Lock()
+_llamacpp_install_progress: dict[str, int | str | None] = {
+    "status": "idle",
+    "downloaded": 0,
+    "total": None,
+    "phase": "idle",
+}
+_llamacpp_install_cancel = asyncio.Event()
 _MAX_DOWNLOAD_BYTES = 100 * 1024**3
 _GITHUB_RELEASE_HOSTS = frozenset(
     {
@@ -293,6 +302,8 @@ class OllamaRuntimeStatus(BaseModel):
     phase: OllamaInstallPhase = "idle"
     detail: str | None = None
     cleanup_confirmed: bool | None = None
+    downloaded: int = 0
+    download_total: int | None = None
 
 
 class OpenAICompatibleDiscoveryResponse(BaseModel):
@@ -869,6 +880,7 @@ def _extract_ollama_archive(archive: Path, destination_root: Path) -> list[str]:
 
 async def _install_ollama_native_release() -> Path:
     """Instala pacote Linux/macOS oficial no diretório privado do Vectora."""
+    global _ollama_install_downloaded, _ollama_install_total
     system, machine = platform.system(), platform.machine()
     asset_name = _ollama_asset_name(system, machine)
     if asset_name is None or asset_name == "OllamaSetup.exe":
@@ -877,6 +889,8 @@ async def _install_ollama_native_release() -> Path:
             detail=f"instalação gerenciada do Ollama não é suportada em {system}/{machine}",
         )
     _set_ollama_install_phase("download")
+    _ollama_install_downloaded = 0
+    _ollama_install_total = None
     tools_dir = settings.vectora_home / "tools" / "ollama"
     staging_root = tools_dir / ".staging"
     staging_root.mkdir(parents=True, exist_ok=True)
@@ -938,6 +952,7 @@ async def _install_ollama_native_release() -> Path:
                     or expected_size > _MAX_DOWNLOAD_BYTES
                 ):
                     raise ValueError("tamanho do pacote Ollama inválido")
+                _ollama_install_total = expected_size
                 hasher = hashlib.sha256()
                 downloaded = 0
                 partial.unlink(missing_ok=True)
@@ -947,6 +962,7 @@ async def _install_ollama_native_release() -> Path:
                     with partial.open("wb") as output:
                         async for chunk in response.aiter_bytes(1024 * 1024):
                             downloaded += len(chunk)
+                            _ollama_install_downloaded = downloaded
                             if downloaded > expected_size:
                                 raise ValueError(
                                     "pacote Ollama excedeu o tamanho publicado"
@@ -1065,7 +1081,10 @@ def _ollama_release_tag(tools_dir: Path) -> str | None:
 
 async def _install_ollama_from_official_release() -> Path | None:
     """Download and run the official Ollama installer when winget stalls."""
+    global _ollama_install_downloaded, _ollama_install_total
     _set_ollama_install_phase("download")
+    _ollama_install_downloaded = 0
+    _ollama_install_total = None
     tools_dir = settings.vectora_home / "tools" / "ollama"
     tools_dir.mkdir(parents=True, exist_ok=True)
     installer = tools_dir / "OllamaSetup.exe"
@@ -1114,6 +1133,7 @@ async def _install_ollama_from_official_release() -> Path | None:
                         raise ValueError("tamanho do instalador inválido") from exc
                     if expected_size <= 0:
                         raise ValueError("tamanho do instalador inválido")
+                    _ollama_install_total = expected_size
                 expected_digest = asset.get("digest")
                 if isinstance(expected_digest, str) and expected_digest.startswith(
                     "sha256:"
@@ -1253,6 +1273,7 @@ async def _install_ollama_from_official_release() -> Path | None:
                             ):
                                 raise ValueError("resposta excede o tamanho anunciado")
                             handle.write(chunk)
+                            _ollama_install_downloaded = handle.tell()
                             digest.update(chunk)
             if expected_size is not None and partial.stat().st_size != int(
                 expected_size
@@ -1429,6 +1450,8 @@ async def ollama_runtime_status() -> OllamaRuntimeStatus:
                 else "A instalação do Ollama falhou."
             ),
             cleanup_confirmed=_ollama_cleanup_confirmed,
+            downloaded=_ollama_install_downloaded,
+            download_total=_ollama_install_total,
         )
     if reachable:
         return OllamaRuntimeStatus(
@@ -1439,6 +1462,8 @@ async def ollama_runtime_status() -> OllamaRuntimeStatus:
             state="running",
             phase=_ollama_install_phase,
             cleanup_confirmed=_ollama_cleanup_confirmed,
+            downloaded=_ollama_install_downloaded,
+            download_total=_ollama_install_total,
         )
     if executable is not None:
         return OllamaRuntimeStatus(
@@ -1449,6 +1474,8 @@ async def ollama_runtime_status() -> OllamaRuntimeStatus:
             phase=_ollama_install_phase,
             detail="Ollama está instalado, mas o servidor ainda não está respondendo.",
             cleanup_confirmed=_ollama_cleanup_confirmed,
+            downloaded=_ollama_install_downloaded,
+            download_total=_ollama_install_total,
         )
     if _ollama_install_phase in {
         "detect",
@@ -1464,6 +1491,8 @@ async def ollama_runtime_status() -> OllamaRuntimeStatus:
             phase=_ollama_install_phase,
             detail="A instalação do Ollama está em andamento.",
             cleanup_confirmed=_ollama_cleanup_confirmed,
+            downloaded=_ollama_install_downloaded,
+            download_total=_ollama_install_total,
         )
     return OllamaRuntimeStatus(
         installed=False,
@@ -1472,6 +1501,8 @@ async def ollama_runtime_status() -> OllamaRuntimeStatus:
         phase=_ollama_install_phase,
         detail="Ollama ainda não foi instalado neste dispositivo.",
         cleanup_confirmed=_ollama_cleanup_confirmed,
+        downloaded=_ollama_install_downloaded,
+        download_total=_ollama_install_total,
     )
 
 
@@ -3735,19 +3766,28 @@ async def install_llamacpp_runtime(
     destination = (staging_root / filename).resolve()
     digest = hashlib.sha256()
     downloaded = 0
+    _llamacpp_install_cancel.clear()
+    _llamacpp_install_progress.update(
+        status="downloading", downloaded=0, total=None, phase="download"
+    )
     try:
         async with httpx.AsyncClient(timeout=1800, follow_redirects=True) as client:
             async with client.stream("GET", body.asset_url) as response:
                 _validate_redirect_host(response, allowed=_GITHUB_RELEASE_HOSTS)
                 response.raise_for_status()
                 length = response.headers.get("content-length")
+                total = int(length) if length and length.isdigit() else None
+                _llamacpp_install_progress["total"] = total
                 await _ensure_download_capacity(
                     destination_root,
                     int(length) if length and length.isdigit() else None,
                 )
                 with destination.open("wb") as output:
                     async for chunk in response.aiter_bytes(1024 * 1024):
+                        if _llamacpp_install_cancel.is_set():
+                            raise asyncio.CancelledError
                         downloaded += len(chunk)
+                        _llamacpp_install_progress["downloaded"] = downloaded
                         if downloaded > _MAX_DOWNLOAD_BYTES:
                             raise HTTPException(
                                 status_code=413,
@@ -3755,20 +3795,30 @@ async def install_llamacpp_runtime(
                             )
                         digest.update(chunk)
                         await asyncio.to_thread(output.write, chunk)
+    except asyncio.CancelledError:
+        await asyncio.to_thread(destination.unlink, missing_ok=True)
+        _llamacpp_install_progress.update(status="cancelled", phase="cancelled")
+        raise HTTPException(
+            status_code=409, detail="download do llama.cpp cancelado"
+        ) from None
     except HTTPException:
         await asyncio.to_thread(destination.unlink, missing_ok=True)
+        _llamacpp_install_progress.update(status="failed", phase="failed")
         raise
     except Exception as exc:
         await asyncio.to_thread(destination.unlink, missing_ok=True)
+        _llamacpp_install_progress.update(status="failed", phase="failed")
         raise HTTPException(
             status_code=502, detail="falha no download do runtime"
         ) from exc
     actual = digest.hexdigest()
     if body.sha256 and actual.lower() != body.sha256.lower():
         await asyncio.to_thread(destination.unlink, missing_ok=True)
+        _llamacpp_install_progress.update(status="failed", phase="failed")
         raise HTTPException(status_code=422, detail="checksum sha256 incompatível")
     version_root: Path | None = None
     staging_version: Path | None = None
+    _llamacpp_install_progress.update(status="extracting", phase="extract")
     try:
         runtime_id = actual[:16]
         version_root = (destination_root / "versions" / runtime_id).resolve()
@@ -3807,6 +3857,7 @@ async def install_llamacpp_runtime(
             for file in files
         ]
     except (OSError, ValueError, zipfile.BadZipFile, tarfile.TarError) as exc:
+        _llamacpp_install_progress.update(status="failed", phase="failed")
         await asyncio.to_thread(destination.unlink, missing_ok=True)
         if staging_version is not None:
             await asyncio.to_thread(shutil.rmtree, staging_version, ignore_errors=True)
@@ -3845,6 +3896,7 @@ async def install_llamacpp_runtime(
     activated = not active_runtime
     if activated:
         await _write_text_atomic(active_path, runtime_id)
+    _llamacpp_install_progress.update(status="completed", phase="ready")
     return {
         "status": "installed" if files else "downloaded",
         "path": str(version_root),
@@ -3869,8 +3921,19 @@ async def llamacpp_runtime_status() -> dict[str, object]:
     root = _llamacpp_runtime_root()
     sidecar = llamacpp_status()
     if not await asyncio.to_thread(root.is_dir):
+        executable = await asyncio.to_thread(shutil.which, "llama-server")
+        external_reachable = False
+        if settings.llamacpp_base_url:
+            try:
+                async with httpx.AsyncClient(timeout=1.5) as client:
+                    response = await client.get(
+                        f"{settings.llamacpp_base_url.rstrip('/')}/models"
+                    )
+                    external_reachable = response.is_success
+            except Exception:
+                external_reachable = False
         external = (
-            bool(settings.llamacpp_base_url)
+            bool(executable or external_reachable or settings.llamacpp_base_url)
             and os.getenv("LLAMACPP_MODE", "external") != "managed"
         )
         persisted_pid = sidecar.get("persisted_pid")
@@ -3884,8 +3947,8 @@ async def llamacpp_runtime_status() -> dict[str, object]:
             else "absent"
         )
         return {
-            "installed": False,
-            "path": None,
+            "installed": bool(executable or external_reachable),
+            "path": executable,
             "files": [],
             "runtimes": [],
             "active_runtime": None,
@@ -3894,6 +3957,8 @@ async def llamacpp_runtime_status() -> dict[str, object]:
             "managed": not external,
             "external": external,
             "stale_state": bool(sidecar.get("stale_state")),
+            "reachable": external_reachable,
+            "install_progress": dict(_llamacpp_install_progress),
         }
 
     def _list_files() -> list[str]:
@@ -3901,6 +3966,7 @@ async def llamacpp_runtime_status() -> dict[str, object]:
         return [str(path) for path in root.rglob("*") if path.is_file()]
 
     files = await asyncio.to_thread(_list_files)
+    external_executable = await asyncio.to_thread(shutil.which, "llama-server")
     manifest_path = _llamacpp_manifest_path()
     try:
         payload = await _read_json_file_async(manifest_path)
@@ -3916,7 +3982,7 @@ async def llamacpp_runtime_status() -> dict[str, object]:
         active = None
     disk_usage = await asyncio.to_thread(shutil.disk_usage, root)
     external = (
-        bool(settings.llamacpp_base_url)
+        bool(settings.llamacpp_base_url or external_executable)
         and os.getenv("LLAMACPP_MODE", "external") != "managed"
     )
     if sidecar.get("stale_state"):
@@ -3934,8 +4000,8 @@ async def llamacpp_runtime_status() -> dict[str, object]:
     else:
         state = "unavailable"
     return {
-        "installed": bool(files),
-        "path": str(root),
+        "installed": bool(files or external_executable),
+        "path": str(root) if files else external_executable,
         "files": files,
         "runtimes": runtimes,
         "active_runtime": active,
@@ -3944,7 +4010,18 @@ async def llamacpp_runtime_status() -> dict[str, object]:
         "managed": not external,
         "external": external,
         "stale_state": bool(sidecar.get("stale_state")),
+        "install_progress": dict(_llamacpp_install_progress),
+        "reachable": bool(sidecar.get("running")),
     }
+
+
+@router.post("/llamacpp/runtime/cancel", dependencies=[DesktopBridge])
+async def cancel_llamacpp_install(_: ProviderAdmin) -> dict[str, bool]:
+    """Solicita cancelamento cooperativo do download do runtime."""
+    if _llamacpp_install_progress.get("status") == "downloading":
+        _llamacpp_install_cancel.set()
+        return {"ok": True}
+    return {"ok": False}
 
 
 @router.post("/llamacpp/runtime/update", dependencies=[DesktopBridge])

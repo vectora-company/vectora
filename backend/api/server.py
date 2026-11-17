@@ -227,6 +227,17 @@ async def _lifespan(app: FastAPI):  # type: ignore[return]  # noqa: ANN202
     """
     logger.info("api/server: startup")
 
+    # Preenche o catálogo de capabilities sem atrasar o início da API.
+    async def _refresh_model_catalog() -> None:
+        try:
+            from backend.services.model_catalog import list_model_catalog
+
+            await list_model_catalog()
+        except Exception as exc:
+            logger.info("model catalog: atualização em segundo plano falhou: %s", exc)
+
+    catalog_task = asyncio.create_task(_refresh_model_catalog())
+
     try:
         await _autostart_storage_stack()
     except Exception as exc:
@@ -547,6 +558,10 @@ async def _lifespan(app: FastAPI):  # type: ignore[return]  # noqa: ANN202
     try:
         yield
     finally:
+        if not catalog_task.done():
+            catalog_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await catalog_task
         logger.info("api/server: shutdown — fechando recursos")
         if consolidation_task is not None:
             consolidation_task.cancel()

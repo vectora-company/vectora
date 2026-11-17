@@ -17,9 +17,10 @@
  * estático com os registrados de cada gateway).
  */
 
-import { Loader2, Plus, RefreshCw, Search, Server, Trash2 } from "lucide-react";
+import { Loader2, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { ProviderIcon } from "@/components/icons/provider-icons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -50,6 +51,8 @@ interface OllamaRuntimeStatus {
     | "failed"
     | "cancelled";
   detail?: string | null;
+  downloaded?: number;
+  download_total?: number | null;
 }
 
 async function responseError(
@@ -129,6 +132,9 @@ interface HuggingFaceMetadata {
 
 interface LlamaCppRuntimeStatus {
   installed: boolean;
+  managed?: boolean;
+  external?: boolean;
+  reachable?: boolean;
   path: string | null;
   files: string[];
   free_bytes?: number;
@@ -141,6 +147,12 @@ interface LlamaCppRuntimeStatus {
     source?: string;
     version?: string;
   }>;
+  install_progress?: {
+    status?: string;
+    downloaded?: number;
+    total?: number | null;
+    phase?: string;
+  };
 }
 
 interface DmrStatus {
@@ -235,9 +247,12 @@ async function fetchOllamaRuntimeStatus(): Promise<OllamaRuntimeStatus> {
   return (await response.json()) as OllamaRuntimeStatus;
 }
 
-async function installOllamaRuntime(): Promise<OllamaRuntimeStatus> {
+async function installOllamaRuntime(
+  signal?: AbortSignal,
+): Promise<OllamaRuntimeStatus> {
   const response = await fetch("/provider-routing/ollama/runtime/install", {
     method: "POST",
+    signal,
   });
   if (!response.ok) {
     throw new Error(await responseError(response, `Erro ${response.status}`));
@@ -269,6 +284,10 @@ async function fetchLlamaCppRuntimeStatus(): Promise<LlamaCppRuntimeStatus> {
   const res = await fetch("/provider-routing/llamacpp/runtime/status");
   if (!res.ok) throw new Error(`Erro ${res.status}`);
   return res.json() as Promise<LlamaCppRuntimeStatus>;
+}
+
+async function cancelLlamaCppRuntimeInstall(): Promise<void> {
+  await fetch("/provider-routing/llamacpp/runtime/cancel", { method: "POST" });
 }
 
 async function fetchDmrStatus(): Promise<DmrStatus> {
@@ -715,7 +734,10 @@ function DmrSection() {
     <div className="space-y-3 rounded-lg border p-4">
       <div>
         <h3 className="flex items-center gap-1.5 font-medium">
-          <Server className="size-3.5 text-muted-foreground" />
+          <ProviderIcon
+            provider="dmr"
+            className="size-3.5 text-muted-foreground"
+          />
           {m.provider_routing_dmr_title()}
         </h3>
         <p className="text-xs text-muted-foreground">
@@ -1243,7 +1265,10 @@ function HuggingFaceCatalogSection() {
     <div className="space-y-3 rounded-lg border p-4">
       <div>
         <h3 className="flex items-center gap-1.5 font-medium">
-          <Server className="size-3.5 text-muted-foreground" />
+          <ProviderIcon
+            provider="huggingface"
+            className="size-3.5 text-muted-foreground"
+          />
           {m.provider_routing_hf_title()}
         </h3>
         <p className="text-xs text-muted-foreground">
@@ -1678,7 +1703,9 @@ function RegisteredModelsList({
           {m.provider_routing_registered_empty()}
         </p>
       ) : (
-        <div className="space-y-1.5">
+        <div
+          className={`space-y-1.5 ${registered.length > 6 ? "max-h-80 overflow-y-auto pr-1" : ""}`}
+        >
           {registered.map((model) => (
             <div
               key={model.id}
@@ -1724,6 +1751,7 @@ function OllamaSection() {
   const [error, setError] = useState<string | null>(null);
   const [runtime, setRuntime] = useState<OllamaRuntimeStatus | null>(null);
   const [installingRuntime, setInstallingRuntime] = useState(false);
+  const installController = useRef<AbortController | null>(null);
 
   const loadRuntime = useCallback(async () => {
     try {
@@ -1758,6 +1786,16 @@ function OllamaSection() {
       })
       .catch(() => setError(m.provider_routing_error_load()));
   }, [loadRegistered, loadRuntime]);
+
+  useEffect(() => {
+    if (!installingRuntime) return;
+    const timer = window.setInterval(() => {
+      void fetchOllamaRuntimeStatus()
+        .then(setRuntime)
+        .catch(() => undefined);
+    }, 700);
+    return () => window.clearInterval(timer);
+  }, [installingRuntime]);
 
   const handleSaveConfig = async () => {
     setSavingConfig(true);
@@ -1818,13 +1856,19 @@ function OllamaSection() {
 
   const handleInstallRuntime = async () => {
     setInstallingRuntime(true);
+    const controller = new AbortController();
+    installController.current = controller;
     setError(null);
     try {
-      setRuntime(await installOllamaRuntime());
+      setRuntime(await installOllamaRuntime(controller.signal));
       const data = await discoverModels();
       setReachable(data.reachable);
       setDiscovered(data.models);
     } catch (installError) {
+      if (controller.signal.aborted) {
+        await loadRuntime();
+        return;
+      }
       setError(
         installError instanceof Error
           ? installError.message
@@ -1832,6 +1876,7 @@ function OllamaSection() {
       );
       await loadRuntime();
     } finally {
+      installController.current = null;
       setInstallingRuntime(false);
     }
   };
@@ -1887,7 +1932,10 @@ function OllamaSection() {
     <div className="space-y-3 rounded-lg border p-4">
       <div className="space-y-0.5">
         <h3 className="text-sm font-medium flex items-center gap-1.5">
-          <Server className="w-3.5 h-3.5 text-muted-foreground" />
+          <ProviderIcon
+            provider="ollama"
+            className="w-3.5 h-3.5 text-muted-foreground"
+          />
           {m.provider_routing_ollama_title()}
         </h3>
         <p className="text-xs text-muted-foreground max-w-[360px]">
@@ -1925,11 +1973,42 @@ function OllamaSection() {
               <Loader2 className="mr-1.5 size-3.5 animate-spin" />
             ) : null}
             {installingRuntime
-              ? "Instalando Ollama…"
-              : "Instalar/iniciar Ollama"}
+              ? m.provider_routing_ollama_installing()
+              : m.provider_routing_ollama_install()}
           </Button>
         )}
       </div>
+      {installingRuntime && (
+        <div className="space-y-1.5" role="status">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>
+              {runtime?.phase === "download" && runtime.download_total
+                ? `Baixando Ollama: ${Math.min(100, Math.floor(((runtime.downloaded ?? 0) / runtime.download_total) * 100))}%`
+                : `Instalando Ollama · ${runtime?.phase ?? "detect"}`}
+            </span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => installController.current?.abort()}
+            >
+              {m.provider_routing_runtime_cancel()}
+            </Button>
+          </div>
+          <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+            {runtime?.phase === "download" && runtime.download_total ? (
+              <div
+                className="h-full bg-primary transition-[width]"
+                style={{
+                  width: `${Math.min(100, ((runtime.downloaded ?? 0) / runtime.download_total) * 100)}%`,
+                }}
+              />
+            ) : (
+              <div className="h-full w-1/3 animate-pulse rounded-full bg-primary" />
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-col gap-2 sm:flex-row">
         <Input
@@ -2200,7 +2279,10 @@ function OpenRouterSection() {
     <div className="space-y-3 rounded-lg border p-4">
       <div className="space-y-0.5">
         <h3 className="text-sm font-medium flex items-center gap-1.5">
-          <Server className="w-3.5 h-3.5 text-muted-foreground" />
+          <ProviderIcon
+            provider="openrouter"
+            className="w-3.5 h-3.5 text-muted-foreground"
+          />
           {m.provider_routing_openrouter_title()}
         </h3>
         <p className="text-xs text-muted-foreground max-w-[360px]">
@@ -2508,7 +2590,10 @@ function NineRouterSection() {
     <div className="space-y-3 rounded-lg border p-4">
       <div className="space-y-0.5">
         <h3 className="text-sm font-medium flex items-center gap-1.5">
-          <Server className="w-3.5 h-3.5 text-muted-foreground" />
+          <ProviderIcon
+            provider="nine_router"
+            className="w-3.5 h-3.5 text-muted-foreground"
+          />
           {m.provider_routing_nine_router_title()}
         </h3>
         <p className="text-xs text-muted-foreground max-w-[360px]">
@@ -2786,6 +2871,8 @@ function LlamaCppSection() {
   const [reachable, setReachable] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(false);
   const [runtimeBusy, setRuntimeBusy] = useState(false);
+  const [installingRuntime, setInstallingRuntime] = useState(false);
+  const [runtimeProgress, setRuntimeProgress] = useState(0);
   const [error, setError] = useState("");
   const [runtime, setRuntime] = useState<LlamaCppRuntimeStatus | null>(null);
 
@@ -2822,6 +2909,68 @@ function LlamaCppSection() {
     void refreshRuntime();
     void loadRegistered();
   }, [loadRegistered, refreshRuntime]);
+
+  useEffect(() => {
+    if (!installingRuntime) return;
+    const timer = window.setInterval(() => {
+      void fetchLlamaCppRuntimeStatus().then((status) => {
+        setRuntime(status);
+        const progress = status.install_progress;
+        if (progress?.total && progress.total > 0) {
+          setRuntimeProgress(
+            Math.min(
+              100,
+              Math.floor(((progress.downloaded ?? 0) / progress.total) * 100),
+            ),
+          );
+        }
+      });
+    }, 700);
+    return () => window.clearInterval(timer);
+  }, [installingRuntime]);
+
+  async function installRuntime() {
+    setInstallingRuntime(true);
+    setRuntimeProgress(0);
+    setError("");
+    try {
+      const releasesResponse = await fetch(
+        "/provider-routing/llamacpp/releases",
+      );
+      if (!releasesResponse.ok)
+        throw new Error(`Erro ${releasesResponse.status}`);
+      const releases = (await releasesResponse.json()) as {
+        releases?: Array<{
+          assets?: Array<{ url: string; sha256: string; recommended: boolean }>;
+        }>;
+      };
+      const asset = releases.releases
+        ?.flatMap((release) => release.assets ?? [])
+        .find((candidate) => candidate.recommended && candidate.sha256);
+      if (!asset)
+        throw new Error(
+          "Não há um runtime oficial compatível com este dispositivo.",
+        );
+      const response = await fetch("/provider-routing/llamacpp/install", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ asset_url: asset.url, sha256: asset.sha256 }),
+      });
+      if (!response.ok)
+        throw new Error(
+          await responseError(response, `Erro ${response.status}`),
+        );
+      await refreshRuntime();
+    } catch (installError) {
+      setError(
+        installError instanceof Error
+          ? installError.message
+          : "Falha ao instalar llama.cpp.",
+      );
+    } finally {
+      setInstallingRuntime(false);
+    }
+  }
 
   async function saveConfig() {
     setError("");
@@ -2952,7 +3101,10 @@ function LlamaCppSection() {
     <div className="space-y-3 rounded-lg border p-4">
       <div>
         <h3 className="flex items-center gap-1.5 font-medium">
-          <Server className="size-3.5 text-muted-foreground" />
+          <ProviderIcon
+            provider="llamacpp"
+            className="size-3.5 text-muted-foreground"
+          />
           {m.provider_routing_llamacpp_title()}
         </h3>
         <p className="text-xs text-muted-foreground">
@@ -2962,16 +3114,33 @@ function LlamaCppSection() {
       <div className="flex items-center justify-between gap-2">
         <span className="text-base text-muted-foreground">
           {m.provider_routing_llamacpp_status({
-            status: runtime?.installed
+            status: runtime?.reachable
               ? m.provider_routing_ollama_runtime_running()
-              : m.provider_routing_ollama_runtime_missing(),
+              : runtime?.installed
+                ? m.provider_routing_llamacpp_runtime_installed()
+                : m.provider_routing_ollama_runtime_missing(),
           })}
         </span>
         <div className="flex gap-2">
+          {!runtime?.installed && (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={installingRuntime}
+              onClick={() => void installRuntime()}
+            >
+              {installingRuntime ? (
+                <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+              ) : null}
+              {m.provider_routing_llamacpp_install()}
+            </Button>
+          )}
           <Button
             type="button"
             variant="outline"
-            disabled={!runtime?.installed || runtimeBusy}
+            disabled={
+              !runtime?.installed || runtime?.external === true || runtimeBusy
+            }
             onClick={() => void runtimeAction("remove")}
           >
             {m.provider_routing_llamacpp_uninstall()}
@@ -2979,13 +3148,41 @@ function LlamaCppSection() {
           <Button
             type="button"
             variant="outline"
-            disabled={runtimeBusy || !runtime?.installed}
+            disabled={
+              runtimeBusy || !runtime?.installed || runtime?.external === true
+            }
             onClick={() => void runtimeAction("stop")}
           >
             {m.provider_routing_llamacpp_stop()}
           </Button>
         </div>
       </div>
+      {installingRuntime && (
+        <div className="space-y-1.5" role="status">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>
+              {runtime?.install_progress?.phase === "extract"
+                ? "Preparando runtime…"
+                : `Baixando runtime: ${runtimeProgress}%`}
+            </span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={runtime?.install_progress?.phase === "extract"}
+              onClick={() => void cancelLlamaCppRuntimeInstall()}
+            >
+              {m.provider_routing_runtime_cancel()}
+            </Button>
+          </div>
+          <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full bg-primary transition-[width]"
+              style={{ width: `${runtimeProgress}%` }}
+            />
+          </div>
+        </div>
+      )}
       <div className="flex gap-2">
         <Input
           aria-label={m.provider_routing_llamacpp_key()}
@@ -3044,56 +3241,64 @@ function LlamaCppSection() {
           {m.provider_routing_llamacpp_unreachable()}
         </p>
       )}
-      {filteredModels.map((item) => {
-        const registeredModel = registeredByTag.get(item.id);
-        return (
-          <div
-            key={item.id}
-            className="flex min-w-0 items-center justify-between gap-3 rounded-lg border bg-card px-3 py-2"
-          >
-            <span className="truncate font-mono text-sm">{item.id}</span>
-            {registeredModel ? (
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">
-                  {m.provider_routing_already_registered()}
-                </span>
+      <div
+        className={
+          filteredModels.length > 6
+            ? "max-h-80 space-y-2 overflow-y-auto pr-1"
+            : "space-y-2"
+        }
+      >
+        {filteredModels.map((item) => {
+          const registeredModel = registeredByTag.get(item.id);
+          return (
+            <div
+              key={item.id}
+              className="flex min-w-0 items-center justify-between gap-3 rounded-lg border bg-card px-3 py-2"
+            >
+              <span className="truncate font-mono text-sm">{item.id}</span>
+              {registeredModel ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">
+                    {m.provider_routing_already_registered()}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    aria-label={m.provider_routing_llamacpp_remove_model({
+                      model: item.id,
+                    })}
+                    disabled={removingId === registeredModel.id}
+                    onClick={() => void handleRemove(registeredModel.id)}
+                  >
+                    {removingId === registeredModel.id ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : (
+                      <Trash2 className="size-3.5" />
+                    )}
+                  </Button>
+                </div>
+              ) : (
                 <Button
                   type="button"
-                  variant="ghost"
                   size="sm"
-                  aria-label={m.provider_routing_llamacpp_remove_model({
-                    model: item.id,
-                  })}
-                  disabled={removingId === registeredModel.id}
-                  onClick={() => void handleRemove(registeredModel.id)}
+                  disabled={registeringId === item.id}
+                  onClick={() => void handleRegister(item.id)}
                 >
-                  {removingId === registeredModel.id ? (
+                  {registeringId === item.id ? (
                     <Loader2 className="size-3.5 animate-spin" />
                   ) : (
-                    <Trash2 className="size-3.5" />
+                    <>
+                      <Plus className="mr-1 size-3.5" />
+                      {m.provider_routing_register()}
+                    </>
                   )}
                 </Button>
-              </div>
-            ) : (
-              <Button
-                type="button"
-                size="sm"
-                disabled={registeringId === item.id}
-                onClick={() => void handleRegister(item.id)}
-              >
-                {registeringId === item.id ? (
-                  <Loader2 className="size-3.5 animate-spin" />
-                ) : (
-                  <>
-                    <Plus className="mr-1 size-3.5" />
-                    {m.provider_routing_register()}
-                  </>
-                )}
-              </Button>
-            )}
-          </div>
-        );
-      })}
+              )}
+            </div>
+          );
+        })}
+      </div>
       {loadingRegistered && (
         <Loader2 className="size-4 animate-spin text-muted-foreground" />
       )}
@@ -3101,127 +3306,10 @@ function LlamaCppSection() {
     </div>
   );
 }
-function ModelCapabilityDiscovery() {
-  const [models, setModels] = useState<
-    Array<{
-      id: string;
-      name: string;
-      provider: string;
-      capabilities: string[];
-    }>
-  >([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(false);
-
-  const discover = useCallback(async () => {
-    setLoading(true);
-    setError(false);
-    try {
-      const response = await fetch(
-        "/provider-routing/model-capabilities?refresh=true",
-      );
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const data = (await response.json()) as { models?: typeof models };
-      setModels(data.models ?? []);
-    } catch {
-      setError(true);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const capabilityCounts = models.reduce<Record<string, number>>(
-    (counts, model) => {
-      for (const capability of model.capabilities)
-        counts[capability] = (counts[capability] ?? 0) + 1;
-      return counts;
-    },
-    {},
-  );
-
-  return (
-    <section className="space-y-3 rounded-lg border p-3">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h3 className="text-sm font-medium">
-            {mDyn("provider_routing_capability_detection_title")}
-          </h3>
-          <p className="text-xs text-muted-foreground">
-            {mDyn("provider_routing_capability_detection_description")}
-          </p>
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={loading}
-          onClick={() => void discover()}
-        >
-          <RefreshCw
-            className={`mr-2 size-3.5 ${loading ? "animate-spin" : ""}`}
-          />
-          {mDyn("provider_routing_detect_capabilities")}
-        </Button>
-      </div>
-      {error ? (
-        <p className="text-xs text-destructive">
-          {mDyn("provider_routing_capability_detection_failed")}
-        </p>
-      ) : models.length ? (
-        <div className="space-y-3">
-          <div className="flex flex-wrap gap-2">
-            {Object.entries(capabilityCounts)
-              .toSorted(([a], [b]) => a.localeCompare(b))
-              .map(([capability, count]) => (
-                <span
-                  key={capability}
-                  className="rounded-md border px-2 py-1 text-xs"
-                >
-                  {capability.replaceAll("_", " ")} · {count}
-                </span>
-              ))}
-          </div>
-          <div className="max-h-72 space-y-1 overflow-y-auto rounded-md border p-2">
-            {models.map((model) => (
-              <div
-                key={model.id}
-                className="flex flex-wrap items-center justify-between gap-2 border-b py-1.5 last:border-0"
-              >
-                <span className="min-w-0 truncate font-mono text-xs">
-                  {model.id}
-                </span>
-                <div className="flex flex-wrap gap-1">
-                  {model.capabilities.length ? (
-                    model.capabilities.map((capability) => (
-                      <span
-                        key={capability}
-                        className="rounded bg-muted px-1.5 py-0.5 text-[10px]"
-                      >
-                        {capability.replaceAll("_", " ")}
-                      </span>
-                    ))
-                  ) : (
-                    <span className="text-[10px] text-muted-foreground">
-                      {mDyn("provider_routing_capability_unknown")}
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : (
-        <p className="text-xs text-muted-foreground">
-          {mDyn("provider_routing_capability_detection_empty")}
-        </p>
-      )}
-    </section>
-  );
-}
 
 export function ProviderRoutingTab() {
   return (
     <div className="space-y-6 [&_button]:!h-8 [&_button]:!px-3 [&_button]:!text-sm">
-      <ModelCapabilityDiscovery />
       <LlamaCppSection />
       <OllamaSection />
       <DmrSection />

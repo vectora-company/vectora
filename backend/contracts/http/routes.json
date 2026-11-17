@@ -1062,6 +1062,13 @@
     "methods": [
       "POST"
     ],
+    "name": "cancel_llamacpp_install_provider_routing_llamacpp_runtime_cancel_post",
+    "path": "/provider-routing/llamacpp/runtime/cancel"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
     "name": "cleanup_llamacpp_runtime_versions_provider_routing_llamacpp_runtime_cleanup_post",
     "path": "/provider-routing/llamacpp/runtime/cleanup"
   },
