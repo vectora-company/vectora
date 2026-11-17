@@ -86,6 +86,10 @@ export function resolveDockerExecutable(
 export type DockerOperation =
   | "version"
   | "info"
+  | "status"
+  | "installRunner"
+  | "startRunner"
+  | "enableModelRunner"
   | "list"
   | "inspect"
   | "pull"
@@ -133,6 +137,14 @@ export function buildDockerArguments(
       return ["model", "version"];
     case "info":
       return ["info", "--format", "{{json .}}"];
+    case "status":
+      return ["model", "status", "--json"];
+    case "installRunner":
+      return ["model", "install-runner"];
+    case "startRunner":
+      return ["model", "start-runner"];
+    case "enableModelRunner":
+      return ["desktop", "enable", "model-runner", "--tcp", "12434"];
     case "list":
       return ["model", "list", "--format", "json"];
     case "inspect":

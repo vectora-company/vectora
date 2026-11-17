@@ -1476,6 +1476,10 @@ function registerIpc(): void {
     assertTrustedRenderer(event);
     return getDmrOperations().detect();
   });
+  ipcMain.handle("vectora:dmr-install-runner", (event) => {
+    assertTrustedRenderer(event);
+    return getDmrOperations().ensureRunner();
+  });
   ipcMain.handle("vectora:dmr-list", (event) => {
     assertTrustedRenderer(event);
     return getDmrOperations().list();

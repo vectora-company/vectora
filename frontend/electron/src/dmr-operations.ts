@@ -23,6 +23,8 @@ export interface DmrDetection {
   readonly docker: boolean;
   readonly plugin: boolean;
   readonly runner: boolean;
+  readonly runnerInstalled?: boolean;
+  readonly desktop?: boolean;
   readonly host?: Record<string, unknown>;
   readonly detail?: string;
 }
@@ -44,11 +46,13 @@ interface DmrManifest {
 
 export interface DmrOperation {
   readonly id: string;
-  readonly operation: "prepare" | "start" | "stop" | "remove";
+  readonly operation:
+    "install_runner" | "start_runner" | "prepare" | "start" | "stop" | "remove";
   readonly reference: string;
   readonly status: "queued" | "running" | "completed" | "failed" | "cancelled";
   readonly phase:
     | "queued"
+    | "installing"
     | "pulling"
     | "configuring"
     | "starting"
@@ -84,6 +88,36 @@ function parseJsonObject(value: string): Record<string, unknown> {
   } catch {
     return {};
   }
+}
+
+function runnerIsRunning(result: DockerCommandResult): boolean {
+  const output = result.stdout.trim();
+  if (result.code !== 0 || !output) return false;
+  const status = parseJsonObject(output);
+  const running = status.running;
+  if (typeof running === "boolean") return running;
+  const state = [status.status, status.state, status.runner]
+    .filter((value): value is string => typeof value === "string")
+    .join(" ")
+    .toLowerCase();
+  if (state) {
+    if (/not running|stopped|disabled|unavailable/.test(state)) return false;
+    if (/running|ready|active/.test(state)) return true;
+  }
+  if (/not running|stopped|disabled|unavailable/i.test(output)) return false;
+  return true;
+}
+
+function runnerIsInstalled(result: DockerCommandResult): boolean {
+  return !/not installed|no runner images|runner not found/i.test(
+    `${result.stdout}\n${result.stderr}`,
+  );
+}
+
+function isDockerDesktop(host: Record<string, unknown>): boolean {
+  return [host.OperatingSystem, host.Name, host.Context]
+    .filter((value): value is string => typeof value === "string")
+    .some((value) => /docker desktop|docker-desktop/i.test(value));
 }
 
 /** Mantém manifestos em userData sem permitir que referências virem caminhos. */
@@ -190,9 +224,9 @@ export class DmrOperations {
   }
 
   async detect(): Promise<DmrDetection> {
-    let version: DockerCommandResult;
+    let info: DockerCommandResult;
     try {
-      version = await this.executor.execute("version", undefined, undefined, {
+      info = await this.executor.execute("info", undefined, undefined, {
         timeoutMs: 10_000,
       });
     } catch (error) {
@@ -201,6 +235,36 @@ export class DmrOperations {
         docker: false,
         plugin: false,
         runner: false,
+        runnerInstalled: false,
+        detail: error instanceof Error ? error.message : String(error),
+      };
+    }
+    if (info.code !== 0) {
+      return {
+        status: "docker_unavailable",
+        docker: false,
+        plugin: false,
+        runner: false,
+        runnerInstalled: false,
+        detail: errorText(info),
+      };
+    }
+    const host = parseJsonObject(info.stdout);
+    const desktop = isDockerDesktop(host);
+    let version: DockerCommandResult;
+    try {
+      version = await this.executor.execute("version", undefined, undefined, {
+        timeoutMs: 10_000,
+      });
+    } catch (error) {
+      return {
+        status: "plugin_unavailable",
+        docker: true,
+        plugin: false,
+        runner: false,
+        runnerInstalled: false,
+        desktop,
+        host,
         detail: error instanceof Error ? error.message : String(error),
       };
     }
@@ -210,26 +274,36 @@ export class DmrOperations {
         docker: true,
         plugin: false,
         runner: false,
+        runnerInstalled: false,
+        desktop,
+        host,
         detail: errorText(version),
       };
     }
     try {
-      const info = await this.executor.execute("info");
-      if (info.code !== 0) {
-        return {
-          status: "runner_unavailable",
-          docker: true,
-          plugin: true,
-          runner: false,
-          detail: errorText(info),
-        };
-      }
+      const runner = await this.executor.execute(
+        "status",
+        undefined,
+        undefined,
+        {
+          timeoutMs: 10_000,
+        },
+      );
+      const isRunning = runnerIsRunning(runner);
+      const installed = desktop || runnerIsInstalled(runner);
       return {
-        status: "ready",
+        status: isRunning
+          ? "ready"
+          : installed
+            ? "stopped"
+            : "runner_unavailable",
         docker: true,
         plugin: true,
-        runner: true,
-        host: parseJsonObject(info.stdout),
+        runner: isRunning,
+        runnerInstalled: installed,
+        desktop,
+        host,
+        ...(isRunning ? {} : { detail: errorText(runner) }),
       };
     } catch (error) {
       return {
@@ -237,6 +311,9 @@ export class DmrOperations {
         docker: true,
         plugin: true,
         runner: false,
+        runnerInstalled: desktop,
+        desktop,
+        host,
         detail: error instanceof Error ? error.message : String(error),
       };
     }
@@ -259,6 +336,58 @@ export class DmrOperations {
     await this.loadManifest();
     const item = this.createOperation("prepare", validatedReference);
     return this.queue(item, () => this.runPrepare(item));
+  }
+
+  async ensureRunner(): Promise<DmrOperation> {
+    const detection = await this.detect();
+    if (!detection.docker) throw new Error("Docker Engine não está disponível");
+    if (!detection.plugin)
+      throw new Error("O plugin Docker Model Runner não está instalado");
+    if (detection.runner) throw new Error("Docker Model Runner já está ativo");
+    const operation = detection.desktop
+      ? "install_runner"
+      : detection.runnerInstalled
+        ? "start_runner"
+        : "install_runner";
+    const item = this.createOperation(operation, "");
+    return this.queue(item, () => this.runEnsureRunner(item, detection));
+  }
+
+  private async runEnsureRunner(
+    item: MutableOperation,
+    detection: DmrDetection,
+  ): Promise<void> {
+    try {
+      await this.execute(
+        item,
+        item.operation === "start_runner" ? "starting" : "installing",
+        20,
+        () =>
+          this.executor.execute(
+            detection.desktop
+              ? "enableModelRunner"
+              : detection.runnerInstalled
+                ? "startRunner"
+                : "installRunner",
+            undefined,
+            undefined,
+            { operationId: item.id, timeoutMs: 10 * 60_000 },
+          ),
+      );
+      if (this.isCancelled(item)) return;
+      const currentDetection = await this.detect();
+      if (!currentDetection.runner)
+        throw new Error(
+          currentDetection.detail || "Docker Model Runner não iniciou",
+        );
+      this.complete(item);
+    } catch (error) {
+      if (!this.isCancelled(item)) {
+        item.status = "failed";
+        item.phase = "failed";
+        item.error = error instanceof Error ? error.message : String(error);
+      }
+    }
   }
 
   async start(reference: string, contextSize?: number): Promise<DmrOperation> {

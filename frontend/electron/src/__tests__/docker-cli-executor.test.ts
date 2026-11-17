@@ -17,6 +17,29 @@ afterEach(() => {
 });
 
 describe("Docker Model Runner command contract", () => {
+  it("usa comandos fixos para detectar e instalar/ativar o runner", () => {
+    expect(buildDockerArguments("status")).toEqual([
+      "model",
+      "status",
+      "--json",
+    ]);
+    expect(buildDockerArguments("installRunner")).toEqual([
+      "model",
+      "install-runner",
+    ]);
+    expect(buildDockerArguments("startRunner")).toEqual([
+      "model",
+      "start-runner",
+    ]);
+    expect(buildDockerArguments("enableModelRunner")).toEqual([
+      "desktop",
+      "enable",
+      "model-runner",
+      "--tcp",
+      "12434",
+    ]);
+  });
+
   it("gera somente argumentos do allowlist para pull e start", () => {
     expect(buildDockerArguments("pull", "hf.co/Qwen/Qwen3-0.6B")).toEqual([
       "model",

@@ -26,6 +26,13 @@ import { overwriteGetLocale, baseLocale } from "@/lib/paraglide/runtime";
 
 afterEach(cleanup);
 afterEach(() => overwriteGetLocale(() => baseLocale));
+const initialDesktopBridge = window.vectora;
+afterEach(() => {
+  Object.defineProperty(window, "vectora", {
+    configurable: true,
+    value: initialDesktopBridge,
+  });
+});
 
 function mockFetch(
   handlers: Partial<{
@@ -65,6 +72,7 @@ function mockFetch(
     hfModels?: object[];
     hfMetadata?: object;
     dmrJob?: { id: string; status: string; error?: string | null };
+    dmrHttpStatus?: object;
   }>,
 ) {
   global.fetch = vi
@@ -368,6 +376,38 @@ function mockFetch(
             handlers.dmrJob ?? { id: "a".repeat(32), status: "completed" },
         } as Response);
       }
+      if (url === "/provider-routing/dmr/models/jobs" && !method) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => [],
+        } as Response);
+      }
+      if (url === "/provider-routing/dmr/http-status") {
+        return Promise.resolve({
+          ok: true,
+          json: async () =>
+            handlers.dmrHttpStatus ?? {
+              configured: false,
+              base_url: "http://127.0.0.1:12434",
+              model: "",
+              reachable: false,
+              contract: null,
+              models: [],
+              managed_models: [],
+              state: "stopped",
+              platform: "linux",
+              architecture: "x64",
+              backend: null,
+              capabilities: {
+                cpus: null,
+                memory_bytes: null,
+                runtimes: [],
+                gpu_backends: [],
+                warnings: [],
+              },
+            },
+        } as Response);
+      }
       if (
         typeof url === "string" &&
         url.startsWith("/provider-routing/dmr/models/jobs/") &&
@@ -515,6 +555,55 @@ describe("ProviderRoutingTab - Hugging Face", () => {
         ),
       ).toBe(true);
     });
+  });
+});
+
+describe("ProviderRoutingTab — Docker Model Runner runtime", () => {
+  beforeEach(() => {
+    overwriteGetLocale(() => "pt");
+    mockFetch({ registered: [] });
+  });
+
+  it("expõe instalação do runner Engine e a executa pelo bridge desktop", async () => {
+    const ensureRunner = vi.fn(async () => ({
+      id: "dmr-install",
+      operation: "install_runner" as const,
+      reference: "",
+      status: "completed" as const,
+      phase: "completed" as const,
+      progress: 100,
+    }));
+    const bridge = {
+      detect: vi.fn(async () => ({
+        status: "stopped" as const,
+        docker: true,
+        plugin: true,
+        runner: false,
+        desktop: false,
+      })),
+      list: vi.fn(async () => ({ version: 1 as const, models: {} })),
+      ensureRunner,
+      getOperation: vi.fn(),
+      cancel: vi.fn(async () => true),
+      prepare: vi.fn(),
+      start: vi.fn(),
+      stop: vi.fn(),
+      remove: vi.fn(),
+      listOperations: vi.fn(async () => []),
+    };
+    Object.defineProperty(window, "vectora", {
+      configurable: true,
+      value: { dmr: bridge },
+    });
+
+    render(<ProviderRoutingTab />);
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Instalar Docker Model Runner",
+      }),
+    );
+
+    await waitFor(() => expect(ensureRunner).toHaveBeenCalledTimes(1));
   });
 });
 

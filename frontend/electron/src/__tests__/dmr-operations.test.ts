@@ -23,6 +23,189 @@ afterEach(() => {
 });
 
 describe("Electron DMR operation lifecycle", () => {
+  it("does not infer runner readiness from docker info alone", async () => {
+    const executor = {
+      execute: vi.fn(async (operation: string) => ({
+        operationId: operation,
+        code: operation === "status" ? 1 : 0,
+        signal: null,
+        stdout:
+          operation === "info"
+            ? JSON.stringify({ OperatingSystem: "Docker Engine" })
+            : operation === "status"
+              ? "Docker Model Runner is not running"
+              : "v1",
+        stderr: "",
+      })),
+      cancel: vi.fn(() => false),
+      dispose: vi.fn(),
+    };
+    executors.push(executor);
+    const directory = await mkdtemp(join(tmpdir(), "vectora-dmr-"));
+    const operations = new DmrOperations(
+      executor as unknown as DockerCliExecutor,
+      directory,
+    );
+
+    await expect(operations.detect()).resolves.toMatchObject({
+      status: "stopped",
+      docker: true,
+      plugin: true,
+      runner: false,
+    });
+    expect(executor.execute.mock.calls.map(([operation]) => operation)).toEqual(
+      ["info", "version", "status"],
+    );
+    await rm(directory, { recursive: true, force: true });
+  });
+
+  it("ativa o runner com o comando correto para Docker Desktop", async () => {
+    let runnerEnabled = false;
+    const executor = {
+      execute: vi.fn(async (operation: string) => ({
+        operationId: operation,
+        code: operation === "status" && !runnerEnabled ? 1 : 0,
+        signal: null,
+        stdout:
+          operation === "info"
+            ? JSON.stringify({ OperatingSystem: "Docker Desktop" })
+            : operation === "status"
+              ? JSON.stringify({ status: "running" })
+              : operation === "enableModelRunner"
+                ? ((runnerEnabled = true), "enabled")
+                : "v1",
+        stderr: "",
+      })),
+      cancel: vi.fn(() => false),
+      dispose: vi.fn(),
+    };
+    executors.push(executor);
+    const directory = await mkdtemp(join(tmpdir(), "vectora-dmr-"));
+    const operations = new DmrOperations(
+      executor as unknown as DockerCliExecutor,
+      directory,
+    );
+
+    const initial = await operations.ensureRunner();
+    await waitFor(() =>
+      ["completed", "failed"].includes(
+        operations.getOperation(initial.id)?.status ?? "",
+      ),
+    );
+    expect(operations.getOperation(initial.id)).toMatchObject({
+      status: "completed",
+    });
+    expect(executor.execute).toHaveBeenCalledWith(
+      "enableModelRunner",
+      undefined,
+      undefined,
+      expect.objectContaining({ operationId: initial.id }),
+    );
+    await rm(directory, { recursive: true, force: true });
+  });
+
+  it("inicia o runner Engine já instalado em vez de reinstalá-lo", async () => {
+    let runnerStarted = false;
+    const executor = {
+      execute: vi.fn(async (operation: string) => ({
+        operationId: operation,
+        code: 0,
+        signal: null,
+        stdout:
+          operation === "info"
+            ? JSON.stringify({ OperatingSystem: "Ubuntu Linux" })
+            : operation === "status"
+              ? JSON.stringify({
+                  status: runnerStarted ? "running" : "stopped",
+                })
+              : operation === "startRunner"
+                ? ((runnerStarted = true), "started")
+                : "v1",
+        stderr: "",
+      })),
+      cancel: vi.fn(() => false),
+      dispose: vi.fn(),
+    };
+    executors.push(executor);
+    const directory = await mkdtemp(join(tmpdir(), "vectora-dmr-"));
+    const operations = new DmrOperations(
+      executor as unknown as DockerCliExecutor,
+      directory,
+    );
+
+    const initial = await operations.ensureRunner();
+    await waitFor(() =>
+      ["completed", "failed"].includes(
+        operations.getOperation(initial.id)?.status ?? "",
+      ),
+    );
+    expect(operations.getOperation(initial.id)).toMatchObject({
+      status: "completed",
+    });
+    expect(initial.operation).toBe("start_runner");
+    expect(executor.execute).toHaveBeenCalledWith(
+      "startRunner",
+      undefined,
+      undefined,
+      expect.objectContaining({ operationId: initial.id }),
+    );
+    expect(executor.execute).not.toHaveBeenCalledWith(
+      "installRunner",
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+    );
+    await rm(directory, { recursive: true, force: true });
+  });
+
+  it("instala o runner Engine quando o status confirma que falta instalar", async () => {
+    let runnerInstalled = false;
+    const executor = {
+      execute: vi.fn(async (operation: string) => ({
+        operationId: operation,
+        code: operation === "status" && !runnerInstalled ? 1 : 0,
+        signal: null,
+        stdout:
+          operation === "info"
+            ? JSON.stringify({ OperatingSystem: "Ubuntu Linux" })
+            : operation === "status"
+              ? runnerInstalled
+                ? JSON.stringify({ status: "running" })
+                : "Docker Model Runner is not installed"
+              : operation === "installRunner"
+                ? ((runnerInstalled = true), "installed")
+                : "v1",
+        stderr: "",
+      })),
+      cancel: vi.fn(() => false),
+      dispose: vi.fn(),
+    };
+    executors.push(executor);
+    const directory = await mkdtemp(join(tmpdir(), "vectora-dmr-"));
+    const operations = new DmrOperations(
+      executor as unknown as DockerCliExecutor,
+      directory,
+    );
+
+    const initial = await operations.ensureRunner();
+    await waitFor(() =>
+      ["completed", "failed"].includes(
+        operations.getOperation(initial.id)?.status ?? "",
+      ),
+    );
+    expect(operations.getOperation(initial.id)).toMatchObject({
+      status: "completed",
+      operation: "install_runner",
+    });
+    expect(executor.execute).toHaveBeenCalledWith(
+      "installRunner",
+      undefined,
+      undefined,
+      expect.objectContaining({ operationId: initial.id }),
+    );
+    await rm(directory, { recursive: true, force: true });
+  });
+
   it("returns a pollable operation before the Docker command completes", async () => {
     const release = vi.fn<() => void>();
     let resolvePull: (() => void) | undefined;

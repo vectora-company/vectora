@@ -95,17 +95,21 @@ export interface VectoraDmrDetection {
   docker: boolean;
   plugin: boolean;
   runner: boolean;
+  runnerInstalled?: boolean;
+  desktop?: boolean;
   host?: Record<string, unknown>;
   detail?: string;
 }
 
 export interface VectoraDmrOperation {
   id: string;
-  operation: "prepare" | "start" | "stop" | "remove";
+  operation:
+    "install_runner" | "start_runner" | "prepare" | "start" | "stop" | "remove";
   reference: string;
   status: "queued" | "running" | "completed" | "failed" | "cancelled";
   phase:
     | "queued"
+    | "installing"
     | "pulling"
     | "configuring"
     | "starting"
@@ -217,6 +221,7 @@ export interface VectoraDesktopBridge {
   };
   dmr?: {
     detect: () => Promise<VectoraDmrDetection>;
+    ensureRunner: () => Promise<VectoraDmrOperation>;
     list: () => Promise<{
       version: 1;
       models: Record<string, VectoraDmrManifestModel>;

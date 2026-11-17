@@ -166,7 +166,15 @@ interface DmrStatus {
   models: string[];
   managed_models: string[];
   detail?: string | null;
-  state: "docker_unavailable" | "plugin_unavailable" | "stopped" | "ready";
+  state:
+    | "docker_unavailable"
+    | "plugin_unavailable"
+    | "runner_unavailable"
+    | "stopped"
+    | "ready";
+  runner_available: boolean;
+  runner_installed: boolean;
+  docker_desktop: boolean;
   platform: string;
   architecture: string;
   backend: string | null;
@@ -309,13 +317,20 @@ async function fetchDmrStatus(): Promise<DmrStatus> {
           : "stopped"
         : detection.status === "plugin_unavailable"
           ? "plugin_unavailable"
-          : "docker_unavailable";
+          : detection.status === "runner_unavailable"
+            ? "runner_unavailable"
+            : detection.status === "docker_unavailable"
+              ? "docker_unavailable"
+              : "stopped";
     const models = Object.keys(manifest.models);
     return {
       configured: httpStatus.configured ?? false,
       base_url: httpStatus.base_url ?? "http://127.0.0.1:12434",
       model: httpStatus.model ?? models[0] ?? "",
       cli_available: detection.docker && detection.plugin,
+      runner_available: detection.runner,
+      runner_installed: detection.runnerInstalled ?? false,
+      docker_desktop: detection.desktop ?? false,
       reachable: httpStatus.reachable ?? false,
       contract: httpStatus.contract ?? null,
       models: httpStatus.models ?? models,
@@ -342,6 +357,9 @@ async function fetchDmrStatus(): Promise<DmrStatus> {
     base_url: httpStatus.base_url ?? "http://127.0.0.1:12434",
     model: httpStatus.model ?? "",
     cli_available: false,
+    runner_available: httpStatus.reachable ?? false,
+    runner_installed: false,
+    docker_desktop: false,
     reachable: httpStatus.reachable ?? false,
     contract: httpStatus.contract ?? null,
     models: httpStatus.models ?? [],
@@ -435,7 +453,9 @@ async function createDmrModelJob(
 
 function dmrOperationToJob(operation: VectoraDmrOperation): DmrJob {
   const phase: DmrJob["phase"] =
-    operation.phase === "stopping" || operation.phase === "removing"
+    operation.phase === "stopping" ||
+    operation.phase === "removing" ||
+    operation.phase === "installing"
       ? "checking"
       : operation.phase;
   return {
@@ -553,6 +573,8 @@ function DmrSection() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [job, setJob] = useState<DmrJob | null>(null);
+  const [runtimeOperation, setRuntimeOperation] =
+    useState<VectoraDmrOperation | null>(null);
   const [modelQuery, setModelQuery] = useState("");
   const [discoveredModels, setDiscoveredModels] = useState<string[]>([]);
   const [discovering, setDiscovering] = useState(false);
@@ -672,6 +694,49 @@ function DmrSection() {
     }
   }
 
+  async function installRunner() {
+    const bridge = window.vectora?.dmr;
+    if (!bridge) return;
+    setBusy(true);
+    setError("");
+    try {
+      let operation = await bridge.ensureRunner();
+      setRuntimeOperation(operation);
+      while (operation.status === "queued" || operation.status === "running") {
+        await new Promise((resolve) => window.setTimeout(resolve, 300));
+        const next = await bridge.getOperation(operation.id);
+        if (!next) throw new Error("operação DMR não encontrada");
+        operation = next;
+        setRuntimeOperation(operation);
+      }
+      if (operation.status !== "completed") {
+        throw new Error(operation.error ?? "operação DMR falhou");
+      }
+      await refresh();
+    } catch (installError) {
+      setError(
+        installError instanceof Error
+          ? installError.message
+          : "Não foi possível instalar ou ativar o Docker Model Runner.",
+      );
+    } finally {
+      setRuntimeOperation(null);
+      setBusy(false);
+    }
+  }
+
+  async function cancelRunnerInstall() {
+    const bridge = window.vectora?.dmr;
+    if (!bridge || !runtimeOperation) return;
+    if (await bridge.cancel(runtimeOperation.id)) {
+      setRuntimeOperation({
+        ...runtimeOperation,
+        status: "cancelled",
+        phase: "cancelled",
+      });
+    }
+  }
+
   async function cancelPrepare() {
     if (!job || (job.status !== "queued" && job.status !== "running")) return;
     try {
@@ -781,6 +846,43 @@ function DmrSection() {
           {m.provider_routing_dmr_test()}
         </Button>
         {canManageDocker &&
+          status?.cli_available &&
+          !status.runner_available && (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={() => void installRunner()}
+            >
+              {status.docker_desktop
+                ? m.provider_routing_dmr_enable_runner()
+                : status.runner_installed
+                  ? m.provider_routing_dmr_start_runner()
+                  : m.provider_routing_dmr_install_runner()}
+            </Button>
+          )}
+        {runtimeOperation &&
+          (runtimeOperation.status === "queued" ||
+            runtimeOperation.status === "running") && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void cancelRunnerInstall()}
+            >
+              {m.provider_routing_dmr_cancel()}
+            </Button>
+          )}
+        {canManageDocker && status?.state === "plugin_unavailable" && (
+          <a
+            className="inline-flex items-center rounded-md border px-3 py-2 text-sm hover:bg-muted/50"
+            href="https://docs.docker.com/ai/model-runner/get-started/"
+            target="_blank"
+            rel="noreferrer"
+          >
+            {m.provider_routing_dmr_install_instructions()}
+          </a>
+        )}
+        {canManageDocker &&
         job &&
         (job.status === "queued" || job.status === "running") ? (
           <Button
@@ -801,7 +903,7 @@ function DmrSection() {
         ) : canManageDocker ? (
           <Button
             type="button"
-            disabled={busy || !model.trim()}
+            disabled={busy || !model.trim() || !status?.runner_available}
             onClick={() => void prepare()}
           >
             {m.provider_routing_dmr_prepare()}
@@ -828,6 +930,27 @@ function DmrSection() {
           </Button>
         )}
       </div>
+      {runtimeOperation &&
+        (runtimeOperation.status === "queued" ||
+          runtimeOperation.status === "running") && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="rounded-md border px-3 py-2 text-xs text-muted-foreground"
+          >
+            {runtimeOperation.operation === "start_runner"
+              ? m.provider_routing_dmr_starting_runner()
+              : m.provider_routing_dmr_installing()}
+            <progress
+              aria-label={
+                runtimeOperation.operation === "start_runner"
+                  ? m.provider_routing_dmr_starting_runner()
+                  : m.provider_routing_dmr_installing()
+              }
+              className="mt-2 block h-1.5 w-full"
+            />
+          </div>
+        )}
       <div className="space-y-2">
         <div className="flex flex-col gap-2 sm:flex-row">
           <div className="relative min-w-0 flex-1">
@@ -879,7 +1002,9 @@ function DmrSection() {
               ? m.provider_routing_dmr_stopped()
               : status.state === "plugin_unavailable"
                 ? m.provider_routing_dmr_missing_plugin()
-                : m.provider_routing_dmr_missing_cli()}
+                : status.state === "runner_unavailable"
+                  ? m.provider_routing_dmr_runner_unavailable()
+                  : m.provider_routing_dmr_missing_cli()}
           {` · ${status.platform}/${status.architecture}`}
           {status.backend ? ` · ${status.backend}` : ""}
           {status.capabilities.gpu_backends.length
