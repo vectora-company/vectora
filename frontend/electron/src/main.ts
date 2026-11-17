@@ -143,9 +143,15 @@ if (
   process.platform === "linux" &&
   (process.env.WAYLAND_DISPLAY || process.env.XDG_SESSION_TYPE === "wayland")
 ) {
-  // Chromium's Wayland surface factory cannot use Vulkan on some Linux
-  // desktops; disable it before app readiness to avoid GPU initialization errors.
-  app.commandLine.appendSwitch("disable-features", "Vulkan");
+  // Electron/Chromium can select native Wayland while its GPU backend still
+  // initializes Vulkan, leaving the BrowserWindow without a ready-to-show
+  // event on some Linux desktops. Prefer XWayland when available; retain the
+  // native Wayland path on systems without an X11 display.
+  if (process.env.DISPLAY) {
+    app.commandLine.appendSwitch("ozone-platform", "x11");
+  } else {
+    app.commandLine.appendSwitch("disable-gpu");
+  }
 }
 
 let electronCdpProxy: import("node:http").Server | null = null;
