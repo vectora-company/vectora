@@ -1,12 +1,6 @@
 // @vitest-environment jsdom
 
-import {
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-  within,
-} from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -130,7 +124,7 @@ describe("TranscriptionSettings", () => {
     useSettingsStore.setState({ transcriptionMode: "remote" });
     render(<TranscriptionSettings />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Registrar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Register" }));
     await waitFor(() =>
       expect(useSettingsStore.getState().transcriptionMode).toBe("local"),
     );
@@ -223,7 +217,7 @@ describe("TranscriptionSettings", () => {
 });
 
 describe("ChatModelSettings", () => {
-  it("registra um modelo disponível e atualiza o modelo principal", async () => {
+  it("carrega os modelos dos providers e exibe o modelo principal registrado", async () => {
     const fetchMock = vi.fn((input: RequestInfo | URL) =>
       Promise.resolve({
         ok: true,
@@ -239,15 +233,9 @@ describe("ChatModelSettings", () => {
     vi.stubGlobal("fetch", fetchMock);
     useSettingsStore.setState({ selectedModel: "openrouter:initial" });
     render(<ChatModelSettings />);
-    const modelName = await screen.findByText("ollama:qwen3");
-    const card = modelName.closest(".rounded-lg.border");
-    expect(card).not.toBeNull();
-    fireEvent.click(
-      within(card as HTMLElement).getByRole("button", { name: "Registrar" }),
-    );
-    await waitFor(() =>
-      expect(useSettingsStore.getState().selectedModel).toBe("ollama:qwen3"),
-    );
+    expect(await screen.findByText("openrouter:initial")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith("/models/providers");
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
   });
 });
 
