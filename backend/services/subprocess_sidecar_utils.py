@@ -19,10 +19,10 @@ from typing import Any
 def sidecar_process_options() -> dict[str, Any]:
     """Keep console signals on the backend process owner.
 
-    Windows console control events are delivered to every process in the
-    console group. Sidecars use their own group so Ctrl+C reaches the backend
-    first; the lifespan then terminates each child explicitly. POSIX uses a
-    new session for the same isolation.
+    Windows sidecars use a distinct console process group so Ctrl+C reaches
+    the backend owner first; POSIX sidecars inherit the parent's session and
+    process group so terminal hangup (SIGHUP) also reaches children that could
+    otherwise become orphaned.
     """
     if sys.platform == "win32":
         # Python exposes this constant on Windows. The fallback preserves
@@ -32,7 +32,10 @@ def sidecar_process_options() -> dict[str, Any]:
             subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200
         )
         return {"creationflags": create_new_process_group}
-    return {"start_new_session": True}
+    # Não destacar os sidecars em uma sessão própria: ao fechar o terminal,
+    # SIGHUP deve alcançar o backend e seus filhos (Electron/NATS). O backend
+    # ainda faz shutdown gracioso e encerra cada sidecar no lifespan.
+    return {}
 
 
 async def _terminate_windows_tree(

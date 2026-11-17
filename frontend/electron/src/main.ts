@@ -139,18 +139,17 @@ if (!installedTestsMode) {
   app.commandLine.appendSwitch("remote-debugging-address", "127.0.0.1");
   app.commandLine.appendSwitch("remote-debugging-port", electronCdpPort);
 }
-if (
-  process.platform === "linux" &&
-  (process.env.WAYLAND_DISPLAY || process.env.XDG_SESSION_TYPE === "wayland")
-) {
-  // Electron/Chromium can select native Wayland while its GPU backend still
-  // initializes Vulkan, leaving the BrowserWindow without a ready-to-show
-  // event on some Linux desktops. Prefer XWayland when available; retain the
-  // native Wayland path on systems without an X11 display.
-  if (process.env.DISPLAY) {
+// Restringe a renderização acelerada do Chromium a Vulkan ou Direct3D 12.
+app.commandLine.appendSwitch("use-gl", "angle");
+if (process.platform === "win32") {
+  // ANGLE expõe o caminho D3D11on12: a camada D3D11 é traduzida para D3D12.
+  app.commandLine.appendSwitch("use-angle", "d3d11on12");
+} else {
+  app.commandLine.appendSwitch("use-angle", "vulkan");
+  if (process.platform === "linux") {
+    // Usa XWayland/X11 como protocolo de janela; Vulkan continua sendo o
+    // backend gráfico. Wayland não é um backend de renderização.
     app.commandLine.appendSwitch("ozone-platform", "x11");
-  } else {
-    app.commandLine.appendSwitch("disable-gpu");
   }
 }
 
