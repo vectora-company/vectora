@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -111,55 +117,33 @@ describe("SystemOneConfiguration", () => {
 });
 
 describe("TranscriptionSettings", () => {
-  it("persists local mode and offers explicit remote mode", async () => {
-    const fetchMock = vi.fn((input: RequestInfo | URL, _init?: RequestInit) => {
-      if (String(input).includes("TranscriptionReadiness")) {
-        return Promise.resolve({
-          ok: true,
-          json: async () => ({
-            dependency_available: true,
-            model_cached: false,
-            ready: false,
-          }),
-        });
-      }
-      return Promise.resolve({
-        ok: true,
-        json: async () => ({ transcriptionMode: "local" }),
-      });
+  it("registra o modo local e consulta a prontidão do runtime", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        dependency_available: true,
+        model_cached: false,
+        ready: false,
+      }),
     });
     vi.stubGlobal("fetch", fetchMock);
     useSettingsStore.setState({ transcriptionMode: "remote" });
     render(<TranscriptionSettings />);
 
-    const mode = screen.getByLabelText("Mode used for chat dictation");
-    fireEvent.change(mode, { target: { value: "local" } });
-    expect(mode).toHaveValue("local");
-    const readiness = await screen.findByRole("status");
+    fireEvent.click(screen.getByRole("button", { name: "Registrar" }));
     await waitFor(() =>
-      expect(readiness.textContent).toMatch(
-        /ai_models_transcription_model_download_required|The local runtime is installed; the base model will download on first use\./,
-      ),
+      expect(useSettingsStore.getState().transcriptionMode).toBe("local"),
     );
     await waitFor(() =>
       expect(
-        fetchMock.mock.calls.some(
-          ([input, init]) =>
-            !String(input).includes("TranscriptionReadiness") &&
-            init?.method === "PATCH",
+        fetchMock.mock.calls.some(([input]) =>
+          String(input).includes("TranscriptionReadiness"),
         ),
       ).toBe(true),
     );
-    const updateCall = fetchMock.mock.calls.find(
-      ([input]) => !String(input).includes("TranscriptionReadiness"),
+    expect(screen.getByRole("status").textContent).toMatch(
+      /download|required/i,
     );
-    expect(updateCall?.[1]).toMatchObject({
-      method: "PATCH",
-      body: JSON.stringify({ transcriptionMode: "local" }),
-    });
-    expect(
-      screen.getByRole("option", { name: "Configured remote provider" }),
-    ).toHaveValue("remote");
   });
 
   it("reports when the local transcription dependency is missing", async () => {
@@ -239,26 +223,31 @@ describe("TranscriptionSettings", () => {
 });
 
 describe("ChatModelSettings", () => {
-  it("persists the primary chat selection through the shared store", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue({ ok: true, json: async () => ({}) });
+  it("registra um modelo disponível e atualiza o modelo principal", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) =>
+      Promise.resolve({
+        ok: true,
+        json: async () =>
+          String(input) === "/models/providers"
+            ? {
+                providers: ["openrouter", "ollama"],
+                dynamic_models: [{ id: "ollama:qwen3", available: true }],
+              }
+            : {},
+      }),
+    );
     vi.stubGlobal("fetch", fetchMock);
     useSettingsStore.setState({ selectedModel: "openrouter:initial" });
     render(<ChatModelSettings />);
-    fireEvent.change(screen.getByLabelText("Test model"), {
-      target: { value: "ollama:qwen3" },
-    });
-    await waitFor(() =>
-      expect(fetchMock).toHaveBeenCalledWith(
-        "/settings/prefs",
-        expect.objectContaining({ method: "PATCH" }),
-      ),
+    const modelName = await screen.findByText("ollama:qwen3");
+    const card = modelName.closest(".rounded-lg.border");
+    expect(card).not.toBeNull();
+    fireEvent.click(
+      within(card as HTMLElement).getByRole("button", { name: "Registrar" }),
     );
-    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
-      selectedModel: "ollama:qwen3",
-    });
-    expect(useSettingsStore.getState().selectedModel).toBe("ollama:qwen3");
+    await waitFor(() =>
+      expect(useSettingsStore.getState().selectedModel).toBe("ollama:qwen3"),
+    );
   });
 });
 

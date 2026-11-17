@@ -527,8 +527,8 @@ describe("ProviderRoutingTab — Ollama", () => {
   it("mostra estado vazio quando nenhum modelo está registrado", async () => {
     render(<ProviderRoutingTab />);
     await waitFor(() => {
-      // 3 seções: Ollama, OpenRouter, 9Router
-      expect(screen.getAllByText(/nenhum modelo registrado/i).length).toBe(4);
+      // Ollama, OpenRouter e 9Router exibem esta mensagem de estado vazio.
+      expect(screen.getAllByText(/nenhum modelo registrado/i).length).toBe(3);
     });
   });
 
@@ -1139,8 +1139,14 @@ describe("LlamaCppSection", () => {
 
     render(<ProviderRoutingTab />);
 
+    const llamaCard = screen
+      .getByRole("heading", { name: /llama\.cpp/i })
+      .closest(".rounded-lg.border");
+    expect(llamaCard).not.toBeNull();
     fireEvent.click(
-      await screen.findByRole("button", { name: /detectar modelos/i }),
+      within(llamaCard as HTMLElement).getByRole("button", {
+        name: /detectar modelos/i,
+      }),
     );
     fireEvent.click(await screen.findByRole("button", { name: /registrar/i }));
 
@@ -1168,6 +1174,7 @@ describe("LlamaCppSection", () => {
     const headings = screen.getAllByRole("heading", { level: 3 });
     const titles = headings.map((heading) => heading.textContent);
     expect(titles).toEqual([
+      "Detecção de capacidades dos modelos",
       "llama.cpp",
       "Ollama (modelos locais)",
       "Docker Model Runner",
