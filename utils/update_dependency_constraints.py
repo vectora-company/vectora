@@ -11,10 +11,18 @@ PROJECT = ROOT / "pyproject.toml"
 LOCK = ROOT / "uv.lock"
 DEPENDENCY_LINE = re.compile(r"^(\s*)(['\"])(.*)\2(,?\s*)$")
 LOWER_BOUND = re.compile(r">=\s*\d+(?:\.\d+)*(?:[a-zA-Z0-9.+-]*)?")
+UPPER_BOUND = re.compile(r"(<=|<)\s*(\d+(?:\.\d+)+)")
 
 
 def _normalize(name: str) -> str:
     return re.sub(r"[-_.]+", "-", name).lower()
+
+
+def _version_tuple(version: str) -> tuple[int, ...]:
+    match = re.match(r"\d+(?:\.\d+)*", version)
+    if match is None:
+        raise ValueError(f"Versão sem formato numérico: {version}")
+    return tuple(int(part) for part in match.group().split("."))
 
 
 def update_constraints() -> bool:
@@ -49,6 +57,15 @@ def update_constraints() -> bool:
             raise ValueError(f"Dependência ausente em uv.lock: {requirement}")
 
         version_constraint = requirement.split(";", maxsplit=1)[0]
+        upper_bounds = UPPER_BOUND.findall(version_constraint)
+        locked_tuple = _version_tuple(locked)
+        if any(
+            locked_tuple >= _version_tuple(bound)
+            if operator == "<"
+            else locked_tuple > _version_tuple(bound)
+            for operator, bound in upper_bounds
+        ):
+            continue
         lower_bound = LOWER_BOUND.search(version_constraint)
         if lower_bound and lower_bound.group().removeprefix(">=").strip() == locked:
             continue

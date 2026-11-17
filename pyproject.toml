@@ -336,7 +336,7 @@ exclude = ["backend/mcp/server.py", "tests/fixtures/dummy_mcp_server.py"]
 include = ["backend/sandbox/landlock.py", "backend/sandbox/rlimits.py"]
 
 [tool.ty.overrides.rules]
-unresolved-attribute = "ignore"
+missing-attribute = "ignore"
 
 [[tool.ty.overrides]]
 # extract.py: 8500+ linhas de parsers tree-sitter com imports opcionais (try/except).
@@ -345,10 +345,10 @@ unresolved-attribute = "ignore"
 include = ["backend/context_graph/extract.py"]
 
 [tool.ty.overrides.rules]
-unresolved-import = "ignore"
-unresolved-attribute = "ignore"
+import-not-found = "ignore"
+missing-attribute = "ignore"
 invalid-argument-type = "ignore"
-invalid-return-type = "ignore"
+invalid-explicit-return = "ignore"
 invalid-assignment = "ignore"
 
 [[tool.ty.overrides]]
@@ -384,10 +384,10 @@ include = [
 ]
 
 [tool.ty.overrides.rules]
-unresolved-import = "ignore"
-unresolved-attribute = "ignore"
+import-not-found = "ignore"
+missing-attribute = "ignore"
 invalid-argument-type = "ignore"
-invalid-return-type = "ignore"
+invalid-explicit-return = "ignore"
 invalid-assignment = "ignore"
 missing-argument = "ignore"
 unsupported-operator = "ignore"

@@ -1391,7 +1391,7 @@ class SandboxCredentialDelete(BaseModel):
 class SandboxPolicyResponse(SandboxPolicyBody):
     """Política efetiva (a do usuário com as restrições do repositório)."""
 
-    mask: list[str] = Field(default_factory=list)
+    mask: list[str] = Field(default_factory=list)  # ty: ignore[incompatible-mutable-override]
     ignored_repo_keys: list[str] = Field(default_factory=list)
     #: `True` quando existe uma política do usuário gravada para o workspace.
     user_policy: bool = False
