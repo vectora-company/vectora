@@ -25,6 +25,7 @@ export interface DmrDetection {
   readonly runner: boolean;
   readonly runnerInstalled?: boolean;
   readonly desktop?: boolean;
+  readonly pluginInstallSupported?: boolean;
   readonly host?: Record<string, unknown>;
   readonly detail?: string;
 }
@@ -47,11 +48,19 @@ interface DmrManifest {
 export interface DmrOperation {
   readonly id: string;
   readonly operation:
-    "install_runner" | "start_runner" | "prepare" | "start" | "stop" | "remove";
+    | "install_plugin"
+    | "install_runner"
+    | "start_runner"
+    | "prepare"
+    | "start"
+    | "stop"
+    | "remove";
   readonly reference: string;
   readonly status: "queued" | "running" | "completed" | "failed" | "cancelled";
   readonly phase:
     | "queued"
+    | "installing_plugin"
+    | "installing_runner"
     | "installing"
     | "pulling"
     | "configuring"
@@ -264,6 +273,8 @@ export class DmrOperations {
         runner: false,
         runnerInstalled: false,
         desktop,
+        pluginInstallSupported:
+          !desktop && (this.executor.canInstallPlugin?.() ?? false),
         host,
         detail: error instanceof Error ? error.message : String(error),
       };
@@ -276,6 +287,8 @@ export class DmrOperations {
         runner: false,
         runnerInstalled: false,
         desktop,
+        pluginInstallSupported:
+          !desktop && (this.executor.canInstallPlugin?.() ?? false),
         host,
         detail: errorText(version),
       };
@@ -341,14 +354,16 @@ export class DmrOperations {
   async ensureRunner(): Promise<DmrOperation> {
     const detection = await this.detect();
     if (!detection.docker) throw new Error("Docker Engine não está disponível");
-    if (!detection.plugin)
+    if (!detection.plugin && !detection.pluginInstallSupported)
       throw new Error("O plugin Docker Model Runner não está instalado");
     if (detection.runner) throw new Error("Docker Model Runner já está ativo");
-    const operation = detection.desktop
-      ? "install_runner"
-      : detection.runnerInstalled
-        ? "start_runner"
-        : "install_runner";
+    const operation = !detection.plugin
+      ? "install_plugin"
+      : detection.desktop
+        ? "install_runner"
+        : detection.runnerInstalled
+          ? "start_runner"
+          : "install_runner";
     const item = this.createOperation(operation, "");
     return this.queue(item, () => this.runEnsureRunner(item, detection));
   }
@@ -358,24 +373,40 @@ export class DmrOperations {
     detection: DmrDetection,
   ): Promise<void> {
     try {
+      let currentDetection = detection;
+      if (item.operation === "install_plugin") {
+        await this.execute(item, "installing_plugin", 10, () =>
+          this.executor.execute("installPlugin", undefined, undefined, {
+            operationId: item.id,
+            timeoutMs: 10 * 60_000,
+          }),
+        );
+        if (this.isCancelled(item)) return;
+        currentDetection = await this.detect();
+        if (!currentDetection.plugin) {
+          throw new Error(
+            currentDetection.detail ||
+              "O plugin Docker Model Runner não ficou disponível após a instalação",
+          );
+        }
+      }
+      const runnerOperation = currentDetection.desktop
+        ? "enableModelRunner"
+        : currentDetection.runnerInstalled
+          ? "startRunner"
+          : "installRunner";
       await this.execute(
         item,
-        item.operation === "start_runner" ? "starting" : "installing",
-        20,
+        item.operation === "start_runner" ? "starting" : "installing_runner",
+        item.operation === "install_plugin" ? 55 : 20,
         () =>
-          this.executor.execute(
-            detection.desktop
-              ? "enableModelRunner"
-              : detection.runnerInstalled
-                ? "startRunner"
-                : "installRunner",
-            undefined,
-            undefined,
-            { operationId: item.id, timeoutMs: 10 * 60_000 },
-          ),
+          this.executor.execute(runnerOperation, undefined, undefined, {
+            operationId: item.id,
+            timeoutMs: 10 * 60_000,
+          }),
       );
       if (this.isCancelled(item)) return;
-      const currentDetection = await this.detect();
+      currentDetection = await this.detect();
       if (!currentDetection.runner)
         throw new Error(
           currentDetection.detail || "Docker Model Runner não iniciou",

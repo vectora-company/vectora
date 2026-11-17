@@ -97,6 +97,7 @@ export interface VectoraDmrDetection {
   runner: boolean;
   runnerInstalled?: boolean;
   desktop?: boolean;
+  pluginInstallSupported?: boolean;
   host?: Record<string, unknown>;
   detail?: string;
 }
@@ -104,11 +105,19 @@ export interface VectoraDmrDetection {
 export interface VectoraDmrOperation {
   id: string;
   operation:
-    "install_runner" | "start_runner" | "prepare" | "start" | "stop" | "remove";
+    | "install_plugin"
+    | "install_runner"
+    | "start_runner"
+    | "prepare"
+    | "start"
+    | "stop"
+    | "remove";
   reference: string;
   status: "queued" | "running" | "completed" | "failed" | "cancelled";
   phase:
     | "queued"
+    | "installing_plugin"
+    | "installing_runner"
     | "installing"
     | "pulling"
     | "configuring"

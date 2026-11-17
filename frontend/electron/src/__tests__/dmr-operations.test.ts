@@ -23,6 +23,71 @@ afterEach(() => {
 });
 
 describe("Electron DMR operation lifecycle", () => {
+  it("instala o plugin de sistema e o runner quando ambos faltam", async () => {
+    let pluginInstalled = false;
+    let runnerInstalled = false;
+    const executor = {
+      canInstallPlugin: vi.fn(() => true),
+      execute: vi.fn(async (operation: string) => ({
+        operationId: operation,
+        code:
+          operation === "version" && !pluginInstalled
+            ? 1
+            : operation === "status" && !runnerInstalled
+              ? 1
+              : 0,
+        signal: null,
+        stdout:
+          operation === "info"
+            ? JSON.stringify({ OperatingSystem: "Ubuntu Linux" })
+            : operation === "version"
+              ? pluginInstalled
+                ? "v1"
+                : "docker: unknown command: model"
+              : operation === "status"
+                ? runnerInstalled
+                  ? JSON.stringify({ status: "running" })
+                  : "Docker Model Runner is not installed"
+                : operation === "installPlugin"
+                  ? ((pluginInstalled = true), "installed")
+                  : operation === "installRunner"
+                    ? ((runnerInstalled = true), "installed")
+                    : "",
+        stderr: "",
+      })),
+      cancel: vi.fn(() => false),
+      dispose: vi.fn(),
+    };
+    executors.push(executor);
+    const directory = await mkdtemp(join(tmpdir(), "vectora-dmr-"));
+    const operations = new DmrOperations(
+      executor as unknown as DockerCliExecutor,
+      directory,
+    );
+
+    await expect(operations.detect()).resolves.toMatchObject({
+      status: "plugin_unavailable",
+      pluginInstallSupported: true,
+    });
+    const initial = await operations.ensureRunner();
+    await waitFor(() =>
+      ["completed", "failed"].includes(
+        operations.getOperation(initial.id)?.status ?? "",
+      ),
+    );
+    expect(operations.getOperation(initial.id)).toMatchObject({
+      status: "completed",
+      operation: "install_plugin",
+    });
+    expect(
+      executor.execute.mock.calls.map(([operation]) => operation),
+    ).toContain("installPlugin");
+    expect(
+      executor.execute.mock.calls.map(([operation]) => operation),
+    ).toContain("installRunner");
+    await rm(directory, { recursive: true, force: true });
+  });
+
   it("does not infer runner readiness from docker info alone", async () => {
     const executor = {
       execute: vi.fn(async (operation: string) => ({

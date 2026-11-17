@@ -175,6 +175,7 @@ interface DmrStatus {
   runner_available: boolean;
   runner_installed: boolean;
   docker_desktop: boolean;
+  plugin_install_supported: boolean;
   platform: string;
   architecture: string;
   backend: string | null;
@@ -331,6 +332,7 @@ async function fetchDmrStatus(): Promise<DmrStatus> {
       runner_available: detection.runner,
       runner_installed: detection.runnerInstalled ?? false,
       docker_desktop: detection.desktop ?? false,
+      plugin_install_supported: detection.pluginInstallSupported ?? false,
       reachable: httpStatus.reachable ?? false,
       contract: httpStatus.contract ?? null,
       models: httpStatus.models ?? models,
@@ -360,6 +362,7 @@ async function fetchDmrStatus(): Promise<DmrStatus> {
     runner_available: httpStatus.reachable ?? false,
     runner_installed: false,
     docker_desktop: false,
+    plugin_install_supported: false,
     reachable: httpStatus.reachable ?? false,
     contract: httpStatus.contract ?? null,
     models: httpStatus.models ?? [],
@@ -455,7 +458,9 @@ function dmrOperationToJob(operation: VectoraDmrOperation): DmrJob {
   const phase: DmrJob["phase"] =
     operation.phase === "stopping" ||
     operation.phase === "removing" ||
-    operation.phase === "installing"
+    operation.phase === "installing" ||
+    operation.phase === "installing_plugin" ||
+    operation.phase === "installing_runner"
       ? "checking"
       : operation.phase;
   return {
@@ -861,6 +866,18 @@ function DmrSection() {
                   : m.provider_routing_dmr_install_runner()}
             </Button>
           )}
+        {canManageDocker &&
+          status?.state === "plugin_unavailable" &&
+          status.plugin_install_supported && (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={() => void installRunner()}
+            >
+              {m.provider_routing_dmr_install_plugin()}
+            </Button>
+          )}
         {runtimeOperation &&
           (runtimeOperation.status === "queued" ||
             runtimeOperation.status === "running") && (
@@ -872,16 +889,18 @@ function DmrSection() {
               {m.provider_routing_dmr_cancel()}
             </Button>
           )}
-        {canManageDocker && status?.state === "plugin_unavailable" && (
-          <a
-            className="inline-flex items-center rounded-md border px-3 py-2 text-sm hover:bg-muted/50"
-            href="https://docs.docker.com/ai/model-runner/get-started/"
-            target="_blank"
-            rel="noreferrer"
-          >
-            {m.provider_routing_dmr_install_instructions()}
-          </a>
-        )}
+        {canManageDocker &&
+          status?.state === "plugin_unavailable" &&
+          !status.plugin_install_supported && (
+            <a
+              className="inline-flex items-center rounded-md border px-3 py-2 text-sm hover:bg-muted/50"
+              href="https://docs.docker.com/ai/model-runner/get-started/"
+              target="_blank"
+              rel="noreferrer"
+            >
+              {m.provider_routing_dmr_install_instructions()}
+            </a>
+          )}
         {canManageDocker &&
         job &&
         (job.status === "queued" || job.status === "running") ? (
@@ -938,14 +957,22 @@ function DmrSection() {
             aria-live="polite"
             className="rounded-md border px-3 py-2 text-xs text-muted-foreground"
           >
-            {runtimeOperation.operation === "start_runner"
-              ? m.provider_routing_dmr_starting_runner()
-              : m.provider_routing_dmr_installing()}
+            {runtimeOperation.operation === "install_plugin"
+              ? m.provider_routing_dmr_installing_plugin()
+              : runtimeOperation.phase === "installing_runner"
+                ? m.provider_routing_dmr_installing()
+                : runtimeOperation.operation === "start_runner"
+                  ? m.provider_routing_dmr_starting_runner()
+                  : m.provider_routing_dmr_installing()}
             <progress
               aria-label={
-                runtimeOperation.operation === "start_runner"
-                  ? m.provider_routing_dmr_starting_runner()
-                  : m.provider_routing_dmr_installing()
+                runtimeOperation.operation === "install_plugin"
+                  ? m.provider_routing_dmr_installing_plugin()
+                  : runtimeOperation.phase === "installing_runner"
+                    ? m.provider_routing_dmr_installing()
+                    : runtimeOperation.operation === "start_runner"
+                      ? m.provider_routing_dmr_starting_runner()
+                      : m.provider_routing_dmr_installing()
               }
               className="mt-2 block h-1.5 w-full"
             />

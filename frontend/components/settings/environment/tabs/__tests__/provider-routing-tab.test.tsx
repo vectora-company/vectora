@@ -605,6 +605,49 @@ describe("ProviderRoutingTab — Docker Model Runner runtime", () => {
 
     await waitFor(() => expect(ensureRunner).toHaveBeenCalledTimes(1));
   });
+
+  it("expõe a instalação do plugin oficial quando o host Linux a suporta", async () => {
+    const ensureRunner = vi.fn(async () => ({
+      id: "dmr-plugin-install",
+      operation: "install_plugin" as const,
+      reference: "",
+      status: "completed" as const,
+      phase: "completed" as const,
+      progress: 100,
+    }));
+    Object.defineProperty(window, "vectora", {
+      configurable: true,
+      value: {
+        dmr: {
+          detect: vi.fn(async () => ({
+            status: "plugin_unavailable" as const,
+            docker: true,
+            plugin: false,
+            runner: false,
+            pluginInstallSupported: true,
+          })),
+          list: vi.fn(async () => ({ version: 1 as const, models: {} })),
+          ensureRunner,
+          getOperation: vi.fn(),
+          cancel: vi.fn(async () => true),
+          prepare: vi.fn(),
+          start: vi.fn(),
+          stop: vi.fn(),
+          remove: vi.fn(),
+          listOperations: vi.fn(async () => []),
+        },
+      },
+    });
+
+    render(<ProviderRoutingTab />);
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Instalar Docker Model Runner",
+      }),
+    );
+
+    await waitFor(() => expect(ensureRunner).toHaveBeenCalledTimes(1));
+  });
 });
 
 describe("ProviderRoutingTab — Ollama", () => {
