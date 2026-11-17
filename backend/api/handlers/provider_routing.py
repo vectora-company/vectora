@@ -78,6 +78,30 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/provider-routing", tags=["provider-routing"])
 
+
+@router.get("/model-capabilities")
+async def get_model_capabilities(
+    provider: str | None = None, capability: str | None = None, refresh: bool = False
+) -> dict[str, Any]:
+    """Descobre modelos e capacidades anunciados pelos providers configurados."""
+    from backend.services.model_catalog import (
+        MODEL_CAPABILITIES,
+        invalidate_model_catalog,
+        list_model_catalog,
+    )
+
+    if capability and capability not in MODEL_CAPABILITIES:
+        raise HTTPException(status_code=422, detail="Capability desconhecida")
+    if refresh:
+        invalidate_model_catalog()
+    models = await list_model_catalog()
+    if provider:
+        models = [model for model in models if model["provider"] == provider]
+    if capability:
+        models = [model for model in models if capability in model["capabilities"]]
+    return {"capabilities": list(MODEL_CAPABILITIES), "models": models}
+
+
 OLLAMA_WINGET_TIMEOUT_SECONDS = 120.0
 # The official Windows package is currently ~1.6 GB. Keep a finite deadline,
 # but allow slower connections to finish instead of abandoning a resumable

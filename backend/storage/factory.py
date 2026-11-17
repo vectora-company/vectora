@@ -367,25 +367,20 @@ def _build_openai_compatible_embeddings(
 def _build_lc_embeddings() -> Any:
     """Constrói o provider/modelo de embedding explicitamente selecionado.
 
-    Ordem de resolução:
-    1. ``rag_settings.embed_provider`` em runtime (aba de memória do
-       workbench, ``PATCH /rag/settings``), se != "auto" e buildável — mesmo
-       padrão que ``_build_reranker()`` já usa pra ``rerank_provider``. Sem
-       isso a escolha do usuário na UI era só persistida, nunca lida aqui.
-    2. ``settings.embedding_provider`` (env var ``EMBEDDING_PROVIDER``),
-       se "auto"/vazio em runtime — respeita a escolha estática de quem não
-       usa a UI (VPS/CLI).
-    3. Em modo auto, seleciona o primeiro provider configurado na ordem
-       Cohere, Voyage, OpenAI, Google, Ollama e OpenRouter. Falhas em execução
-       não trocam silenciosamente provider/modelo.
-    4. Nada configurado → None (modo sem embeddings).
+    O identificador selecionado em ``rag_settings.embed_model`` é canônico
+    (``provider:model-id``). A capacidade é escolhida em IA Models; credenciais
+    e endpoints pertencem às telas de Integrações e Provider Routing.
     """
     from backend.settings import settings as _s
     from backend.workspace.runtime_settings import runtime_settings
 
     rag = runtime_settings.rag_settings
-    runtime_pref = str(rag.get("embed_provider", "auto"))
-    runtime_model = str(rag.get("embed_model") or "") or None
+    selected_model = str(rag.get("embed_model") or "")
+    if not selected_model or ":" not in selected_model:
+        return None
+    runtime_pref, runtime_model = selected_model.split(":", 1)
+    if not runtime_pref or not runtime_model:
+        return None
 
     builders: dict[str, Any] = {
         "cohere": lambda: _build_cohere_embeddings(runtime_model),
@@ -415,24 +410,16 @@ def _build_lc_embeddings() -> Any:
             runtime_model,
         ),
     }
-    preference = (
-        runtime_pref if runtime_pref in builders else (_s.embedding_provider or "")
-    )
-    if preference in builders:
-        preferred = builders[preference]()
-        if preferred is not None:
-            return preferred
+    builder = builders.get(runtime_pref)
+    if builder is None:
         logger.warning(
-            "storage/factory: embedding_provider=%r indisponível", preference
+            "storage/factory: provider de embedding desconhecido %r", runtime_pref
         )
         return None
-
-    for provider, builder in builders.items():
-        embeddings = builder()
-        if embeddings is not None:
-            logger.info("storage/factory: embedding selecionado %s", provider)
-            return embeddings
-    return None
+    embeddings = builder()
+    if embeddings is None:
+        logger.warning("storage/factory: embedding %s indisponível", selected_model)
+    return embeddings
 
 
 # ---------------------------------------------------------------------------

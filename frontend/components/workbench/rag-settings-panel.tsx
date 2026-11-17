@@ -4,7 +4,7 @@
  * RagSettingsPanel — gear + painel de configuração do RAG na aba de memória.
  *
  * Controla (persistido no backend via /rag/settings): reranker on/off + top_k,
- * providers de rerank/embedding, tipos de arquivo a ingerir. Lista as coleções
+ * tipos de arquivo a ingerir. Modelos de IA ficam na tela IA Models. Lista as coleções
  * (/rag/collections) com botão de apagar. Caso de uso paralelo ao Context Graph:
  * usar o RAG para código enquanto o grafo cuida dos markdowns.
  *
@@ -18,7 +18,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Search, Settings2, Trash2, RefreshCw } from "lucide-react";
+import { Settings2, Trash2, RefreshCw } from "lucide-react";
 
 import {
   ALL_GRAPH_FILE_TYPES,
@@ -31,17 +31,9 @@ import { m } from "@/lib/paraglide/messages";
 interface RagSettings {
   reranker_enabled: boolean;
   reranker_top_k: number;
-  rerank_provider: string;
   rerank_model: string;
-  rerank_provider_effective?: string;
-  embed_provider: string;
   embed_model: string;
   ingest_file_types: string[];
-  embed_provider_available?: Record<string, boolean>;
-  //: Quais providers de rerank têm key/modelo configurados — vem de
-  //: GET /rag/settings (backend/api/handlers/rag.py). "auto" nunca entra
-  //: aqui: resolve para o provider padrão definido pelo backend.
-  rerank_provider_available?: Record<string, boolean>;
 }
 
 interface Collection {
@@ -52,50 +44,9 @@ interface Collection {
 const DEFAULTS: RagSettings = {
   reranker_enabled: true,
   reranker_top_k: 5,
-  rerank_provider: "auto",
   rerank_model: "",
-  embed_provider: "auto",
   embed_model: "",
   ingest_file_types: [],
-  rerank_provider_available: {},
-  embed_provider_available: {},
-};
-
-// Reranker: Cohere/Voyage/OpenRouter, cada um com modelo configurável.
-// Embedding aceita os providers suportados —
-// backend resolve em storage/factory.py::_build_lc_embeddings (lê
-// embed_provider/embed_model deste mesmo /rag/settings).
-export const RERANK_PROVIDERS = [
-  "auto",
-  "cohere",
-  "voyage",
-  "openrouter",
-  "llamacpp",
-] as const;
-export const EMBED_PROVIDERS = [
-  "auto",
-  "cohere",
-  "voyage",
-  "openai",
-  "google-genai",
-  "ollama",
-  "openrouter",
-  "llamacpp",
-  "nine_router",
-  "dmr",
-] as const;
-
-export const RAG_PROVIDER_LABELS: Record<string, () => string> = {
-  auto: m.rag_provider_auto,
-  cohere: m.rag_provider_cohere,
-  voyage: m.rag_provider_voyage,
-  openai: m.rag_provider_openai,
-  "google-genai": m.rag_provider_google,
-  ollama: m.rag_provider_ollama,
-  openrouter: m.rag_provider_openrouter,
-  llamacpp: m.rag_provider_llamacpp,
-  nine_router: m.rag_provider_nine_router,
-  dmr: m.rag_provider_dmr,
 };
 
 export function useRagSettings({
@@ -278,10 +229,6 @@ export function RagSettingsForm({
   settingsStatus,
   collectionsStatus,
   patching,
-  includeModelSettings = true,
-  modelSettings = "all",
-  includeProviderSelection = true,
-  includeRerankerToggle = true,
   includeIngestionSettings = true,
   includeCollections = true,
 }: Pick<
@@ -298,10 +245,6 @@ export function RagSettingsForm({
   | "collectionsStatus"
   | "patching"
 > & {
-  includeModelSettings?: boolean;
-  modelSettings?: "all" | "embeddings" | "rerankers";
-  includeProviderSelection?: boolean;
-  includeRerankerToggle?: boolean;
   includeIngestionSettings?: boolean;
   includeCollections?: boolean;
 }) {
@@ -321,181 +264,6 @@ export function RagSettingsForm({
   }
   return (
     <div className="min-w-0 space-y-3 text-xs" aria-busy={patching}>
-      {includeModelSettings && (
-        <>
-          {modelSettings !== "embeddings" && (
-            <>
-              {/* Reranker on/off + top_k */}
-              {includeRerankerToggle && (
-                <label className="flex items-center justify-between gap-2 cursor-pointer select-none">
-                  <span className="text-foreground">
-                    {m.rag_reranker_enabled()}
-                  </span>
-                  <input
-                    type="checkbox"
-                    checked={settings.reranker_enabled}
-                    onChange={(e) =>
-                      void patch({ reranker_enabled: e.target.checked })
-                    }
-                    className="accent-[var(--color-primary)]"
-                  />
-                </label>
-              )}
-              <p className="-mt-1.5 text-[10px] text-muted-foreground">
-                {m.rag_reranker_help()}
-              </p>
-              <label className="flex items-center justify-between gap-2">
-                <span className="text-foreground">
-                  {m.rag_reranker_top_k()}
-                </span>
-                <input
-                  type="number"
-                  min={1}
-                  max={50}
-                  value={settings.reranker_top_k}
-                  disabled={!settings.reranker_enabled}
-                  onChange={(e) =>
-                    void patch({
-                      reranker_top_k: Math.max(1, Number(e.target.value) || 1),
-                    })
-                  }
-                  className="w-16 bg-background border border-border/60 rounded px-1.5 py-0.5 text-right disabled:opacity-40"
-                />
-              </label>
-
-              {/* Providers */}
-              {includeProviderSelection && (
-                <label className="flex items-center justify-between gap-2">
-                  <span className="text-foreground">
-                    {m.rag_rerank_provider()}
-                  </span>
-                  <ProviderSelect
-                    value={settings.rerank_provider}
-                    onChange={(v) =>
-                      void patch({ rerank_provider: v, rerank_model: "" })
-                    }
-                    providers={RERANK_PROVIDERS}
-                    unavailable={
-                      new Set(
-                        Object.entries(settings.rerank_provider_available ?? {})
-                          .filter(([, available]) => !available)
-                          .map(([provider]) => provider),
-                      )
-                    }
-                  />
-                </label>
-              )}
-              {(settings.rerank_provider === "auto"
-                ? settings.rerank_provider_effective
-                : settings.rerank_provider) &&
-                settings.rerank_provider_available?.[
-                  settings.rerank_provider === "auto"
-                    ? (settings.rerank_provider_effective ?? "")
-                    : settings.rerank_provider
-                ] === false && (
-                  <p className="text-[10px] text-amber-600 dark:text-amber-400">
-                    {m.rag_rerank_provider_unavailable_warning()}
-                  </p>
-                )}
-              {["cohere", "voyage", "openrouter", "llamacpp"].includes(
-                settings.rerank_provider,
-              ) && (
-                <label className="flex items-center justify-between gap-2">
-                  <span className="text-foreground">
-                    {m.rag_rerank_model()}
-                  </span>
-                  <input
-                    value={settings.rerank_model}
-                    onChange={(e) =>
-                      void patch({ rerank_model: e.target.value })
-                    }
-                    className="w-56 bg-background border border-border/60 rounded px-1.5 py-0.5 text-foreground"
-                  />
-                </label>
-              )}
-            </>
-          )}
-          {modelSettings !== "rerankers" && (
-            <>
-              {includeProviderSelection && (
-                <label className="flex items-center justify-between gap-2">
-                  <span className="text-foreground">
-                    {m.rag_embed_provider()}
-                  </span>
-                  <ProviderSelect
-                    value={settings.embed_provider}
-                    onChange={(v) =>
-                      void patch({ embed_provider: v, embed_model: "" })
-                    }
-                    providers={EMBED_PROVIDERS}
-                    unavailable={
-                      new Set(
-                        Object.entries(settings.embed_provider_available ?? {})
-                          .filter(([, available]) => !available)
-                          .map(([provider]) => provider),
-                      )
-                    }
-                  />
-                </label>
-              )}
-              {settings.embed_provider === "cohere" && (
-                <label className="flex items-center justify-between gap-2">
-                  <span className="text-foreground">{m.rag_embed_model()}</span>
-                  <input
-                    value={settings.embed_model}
-                    onChange={(e) =>
-                      void patch({ embed_model: e.target.value })
-                    }
-                    className="w-56 bg-background border border-border/60 rounded px-1.5 py-0.5 text-foreground"
-                  />
-                </label>
-              )}
-              {settings.embed_provider === "voyage" && (
-                <label className="flex items-center justify-between gap-2">
-                  <span className="text-foreground">{m.rag_embed_model()}</span>
-                  <input
-                    value={settings.embed_model}
-                    onChange={(e) =>
-                      void patch({ embed_model: e.target.value })
-                    }
-                    className="w-56 bg-background border border-border/60 rounded px-1.5 py-0.5 text-foreground"
-                  />
-                </label>
-              )}
-              {[
-                "openai",
-                "google-genai",
-                "llamacpp",
-                "nine_router",
-                "dmr",
-              ].includes(settings.embed_provider) && (
-                <label className="flex items-center justify-between gap-2">
-                  <span className="text-foreground">{m.rag_embed_model()}</span>
-                  <input
-                    value={settings.embed_model}
-                    onChange={(e) =>
-                      void patch({ embed_model: e.target.value })
-                    }
-                    className="w-56 bg-background border border-border/60 rounded px-1.5 py-0.5 text-foreground"
-                  />
-                </label>
-              )}
-              <p className="text-[10px] text-muted-foreground">
-                {m.rag_embed_reindex_warning()}
-              </p>
-              {(settings.embed_provider === "ollama" ||
-                settings.embed_provider === "openrouter") && (
-                <EmbedModelPicker
-                  provider={settings.embed_provider}
-                  value={settings.embed_model}
-                  onChange={(v) => void patch({ embed_model: v })}
-                />
-              )}
-            </>
-          )}
-        </>
-      )}
-
       {/* Tipos de arquivo a ingerir */}
       {includeIngestionSettings && (
         <div>
@@ -643,144 +411,5 @@ export function RagSettingsPanel() {
       <RagSettingsButton open={state.open} onToggle={state.toggle} />
       <RagSettingsSlidePanel {...state} />
     </>
-  );
-}
-
-function ProviderSelect({
-  value,
-  onChange,
-  providers,
-  unavailable,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  providers: readonly string[];
-  //: Providers sem key/config — ficam no dropdown mas desabilitados, com
-  //: sufixo "(sem chave)". Escolher um provider que sabidamente não vai
-  //: funcionar é pior que impedir a escolha.
-  unavailable?: Set<string>;
-}) {
-  return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="bg-background border border-border/60 rounded px-1.5 py-0.5 text-foreground"
-    >
-      {providers.map((p) => (
-        <option key={p} value={p} disabled={unavailable?.has(p)}>
-          {RAG_PROVIDER_LABELS[p]()}
-          {unavailable?.has(p) ? ` ${m.rag_provider_no_key_suffix()}` : ""}
-        </option>
-      ))}
-    </select>
-  );
-}
-
-interface DiscoveredModel {
-  id: string;
-  label: string;
-}
-
-/** Seletor de modelo pro provider de embedding quando é Ollama/OpenRouter —
- * nenhum dos dois tem um default sensato (ao contrário de Cohere/Voyage, que
- * já têm modelo fixo em settings.py), então o usuário escolhe explicitamente
- * a partir de uma lista descoberta, nunca texto livre (erro de digitação
- * viraria falha silenciosa de embedding — mesmo motivo que o seletor de
- * LLM em provider-routing-tab.tsx já evita texto livre). */
-function EmbedModelPicker({
-  provider,
-  value,
-  onChange,
-}: {
-  provider: "ollama" | "openrouter";
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  const [models, setModels] = useState<DiscoveredModel[]>([]);
-  const [query, setQuery] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  const loadOllama = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch("/provider-routing/ollama/models");
-      if (!res.ok) return;
-      const data = (await res.json()) as {
-        reachable: boolean;
-        models: { name: string }[];
-      };
-      setModels(data.models.map((mo) => ({ id: mo.name, label: mo.name })));
-    } catch {
-      /* Ollama fora do ar — lista fica vazia, sem quebrar o painel */
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const searchOpenRouter = useCallback(async (q: string) => {
-    setLoading(true);
-    try {
-      const res = await fetch(
-        `/provider-routing/openrouter/models${q ? `?q=${encodeURIComponent(q)}` : ""}`,
-      );
-      if (!res.ok) return;
-      const data = (await res.json()) as {
-        models: { id: string; name: string }[];
-      };
-      setModels(data.models.map((mo) => ({ id: mo.id, label: mo.name })));
-    } catch {
-      /* offline: mantém a lista já carregada */
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    // A resposta do provider substitui a lista; não limpamos estado
-    // sincronamente no efeito para evitar uma renderização em cascata.
-    // Network loading updates state asynchronously after the effect starts.
-    // oxlint-disable-next-line react/set-state-in-effect
-    if (provider === "ollama") void loadOllama();
-    // oxlint-disable-next-line react/set-state-in-effect
-    else void searchOpenRouter("");
-  }, [provider, loadOllama, searchOpenRouter]);
-
-  return (
-    <div className="space-y-1">
-      {provider === "openrouter" && (
-        <div className="flex items-center gap-1">
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") void searchOpenRouter(query);
-            }}
-            placeholder={m.rag_embed_model_search_placeholder()}
-            className="flex-1 bg-background border border-border/60 rounded px-1.5 py-0.5 text-foreground"
-          />
-          <button
-            onClick={() => void searchOpenRouter(query)}
-            aria-label={m.rag_embed_model_search_placeholder()}
-            className="shrink-0 text-muted-foreground hover:text-foreground"
-          >
-            <Search className="h-3 w-3" />
-          </button>
-        </div>
-      )}
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        disabled={loading}
-        className="w-full bg-background border border-border/60 rounded px-1.5 py-0.5 text-foreground disabled:opacity-40"
-      >
-        <option value="">{m.rag_embed_model_select_placeholder()}</option>
-        {models.map((mo) => (
-          <option key={mo.id} value={mo.id}>
-            {mo.label}
-          </option>
-        ))}
-      </select>
-    </div>
   );
 }

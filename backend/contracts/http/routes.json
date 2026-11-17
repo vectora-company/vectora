@@ -797,6 +797,13 @@
     "methods": [
       "GET"
     ],
+    "name": "get_model_catalog_models_catalog_get",
+    "path": "/models/catalog"
+  },
+  {
+    "methods": [
+      "GET"
+    ],
     "name": "get_configured_providers_models_providers_get",
     "path": "/models/providers"
   },
@@ -1127,6 +1134,13 @@
     ],
     "name": "test_llamacpp_connection_provider_routing_llamacpp_test_post",
     "path": "/provider-routing/llamacpp/test"
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "name": "get_model_capabilities_provider_routing_model_capabilities_get",
+    "path": "/provider-routing/model-capabilities"
   },
   {
     "methods": [

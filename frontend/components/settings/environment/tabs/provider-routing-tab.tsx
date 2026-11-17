@@ -3101,9 +3101,127 @@ function LlamaCppSection() {
     </div>
   );
 }
+function ModelCapabilityDiscovery() {
+  const [models, setModels] = useState<
+    Array<{
+      id: string;
+      name: string;
+      provider: string;
+      capabilities: string[];
+    }>
+  >([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+
+  const discover = useCallback(async () => {
+    setLoading(true);
+    setError(false);
+    try {
+      const response = await fetch(
+        "/provider-routing/model-capabilities?refresh=true",
+      );
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = (await response.json()) as { models?: typeof models };
+      setModels(data.models ?? []);
+    } catch {
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const capabilityCounts = models.reduce<Record<string, number>>(
+    (counts, model) => {
+      for (const capability of model.capabilities)
+        counts[capability] = (counts[capability] ?? 0) + 1;
+      return counts;
+    },
+    {},
+  );
+
+  return (
+    <section className="space-y-3 rounded-lg border p-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-medium">
+            {mDyn("provider_routing_capability_detection_title")}
+          </h3>
+          <p className="text-xs text-muted-foreground">
+            {mDyn("provider_routing_capability_detection_description")}
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={loading}
+          onClick={() => void discover()}
+        >
+          <RefreshCw
+            className={`mr-2 size-3.5 ${loading ? "animate-spin" : ""}`}
+          />
+          {mDyn("provider_routing_detect_capabilities")}
+        </Button>
+      </div>
+      {error ? (
+        <p className="text-xs text-destructive">
+          {mDyn("provider_routing_capability_detection_failed")}
+        </p>
+      ) : models.length ? (
+        <div className="space-y-3">
+          <div className="flex flex-wrap gap-2">
+            {Object.entries(capabilityCounts)
+              .toSorted(([a], [b]) => a.localeCompare(b))
+              .map(([capability, count]) => (
+                <span
+                  key={capability}
+                  className="rounded-md border px-2 py-1 text-xs"
+                >
+                  {capability.replaceAll("_", " ")} · {count}
+                </span>
+              ))}
+          </div>
+          <div className="max-h-72 space-y-1 overflow-y-auto rounded-md border p-2">
+            {models.map((model) => (
+              <div
+                key={model.id}
+                className="flex flex-wrap items-center justify-between gap-2 border-b py-1.5 last:border-0"
+              >
+                <span className="min-w-0 truncate font-mono text-xs">
+                  {model.id}
+                </span>
+                <div className="flex flex-wrap gap-1">
+                  {model.capabilities.length ? (
+                    model.capabilities.map((capability) => (
+                      <span
+                        key={capability}
+                        className="rounded bg-muted px-1.5 py-0.5 text-[10px]"
+                      >
+                        {capability.replaceAll("_", " ")}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-[10px] text-muted-foreground">
+                      {mDyn("provider_routing_capability_unknown")}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          {mDyn("provider_routing_capability_detection_empty")}
+        </p>
+      )}
+    </section>
+  );
+}
+
 export function ProviderRoutingTab() {
   return (
     <div className="space-y-6 [&_button]:!h-8 [&_button]:!px-3 [&_button]:!text-sm">
+      <ModelCapabilityDiscovery />
       <LlamaCppSection />
       <OllamaSection />
       <DmrSection />

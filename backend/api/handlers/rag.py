@@ -28,47 +28,16 @@ router = APIRouter(prefix="/rag", tags=["rag"])
 class RagSettingsBody(BaseModel):
     reranker_enabled: bool | None = None
     reranker_top_k: int | None = None
-    rerank_provider: str | None = None
     rerank_model: str | None = None
-    embed_provider: str | None = None
     embed_model: str | None = None
     ingest_file_types: list[str] | None = None
 
 
 @router.get("/settings")
 async def get_rag_settings() -> dict[str, Any]:
-    from backend.settings import settings
     from backend.workspace.runtime_settings import runtime_settings
 
-    out = dict(runtime_settings.rag_settings)
-    # Disponibilidade de credenciais para os providers diretos; o modelo
-    # escolhido é persistido separadamente em rag_settings.
-    out["rerank_provider_available"] = {
-        "cohere": bool(settings.get_cohere_api_key()),
-        "voyage": bool(settings.voyage_api_key),
-        "openrouter": bool(settings.openrouter_api_key),
-        "llamacpp": bool(settings.llamacpp_base_url),
-    }
-    default_rerank_provider = str(settings.reranker_type)
-    out["rerank_provider_effective"] = (
-        out["rerank_provider"]
-        if out["rerank_provider"] != "auto"
-        else default_rerank_provider
-    )
-    out["embed_provider_available"] = {
-        "cohere": bool(settings.get_cohere_api_key()),
-        "voyage": bool(settings.voyage_api_key),
-        "openai": bool(settings.openai_api_key),
-        "google-genai": bool(settings.google_api_key),
-        "ollama": bool(settings.ollama_base_url),
-        "openrouter": bool(settings.openrouter_api_key),
-        "llamacpp": bool(settings.llamacpp_base_url),
-        "nine_router": bool(
-            settings.nine_router_base_url and settings.nine_router_api_key
-        ),
-        "dmr": bool(settings.dmr_base_url),
-    }
-    return out
+    return dict(runtime_settings.rag_settings)
 
 
 @router.patch("/settings")

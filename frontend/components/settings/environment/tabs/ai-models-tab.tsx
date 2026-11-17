@@ -18,149 +18,259 @@ import {
   getModelProvider,
 } from "@/lib/config/deployment-config";
 import { Button } from "@/components/ui/button";
-import {
-  RagSettingsForm,
-  EMBED_PROVIDERS,
-  RERANK_PROVIDERS,
-  RAG_PROVIDER_LABELS,
-  useRagSettings,
-} from "@/components/workbench/rag-settings-panel";
-
-function formatRagModelLabel(provider: string, model: string): string {
-  return `${RAG_PROVIDER_LABELS[provider]?.() ?? provider}${model ? ` · ${model}` : ""}`;
-}
+import { useRagSettings } from "@/components/workbench/rag-settings-panel";
 
 function RetrievalModelSettings() {
   const state = useRagSettings({ autoLoad: true });
-  const activeEmbed = state.settings.embed_provider;
-  const activeReranker = state.settings.rerank_provider;
-  const saveProvider = (type: "embed" | "rerank", provider: string) =>
-    void state.patch(
-      type === "embed"
-        ? { embed_provider: provider, embed_model: "" }
-        : { rerank_provider: provider, rerank_model: "" },
-    );
   return (
     <div className="space-y-4">
-      <section className="space-y-3 rounded-lg border bg-[#1f1f1f] p-3">
-        <div>
-          <h4 className="text-sm font-medium">
-            {mDyn("ai_models_embeddings_title")}
-          </h4>
-          <p className="text-xs text-muted-foreground">
-            {mDyn("ai_models_embeddings_card_description")}
-          </p>
-        </div>
-        <div className="flex items-center justify-between rounded-lg border bg-[#1a1a1a] px-3 py-2">
-          <span className="flex min-w-0 items-center gap-2 truncate text-sm">
-            <Sparkles className="size-4 shrink-0" />
-            {formatRagModelLabel(activeEmbed, state.settings.embed_model)}
-          </span>
-          <span className="text-sm font-medium">
-            {m.provider_routing_already_registered()}
-          </span>
-        </div>
-        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-          {EMBED_PROVIDERS.filter((provider) => provider !== activeEmbed).map(
-            (provider) => (
-              <div
-                key={provider}
-                className="flex min-w-0 items-center justify-between gap-2 rounded-lg border bg-[#1a1a1a] px-3 py-2"
-              >
-                <span className="flex min-w-0 items-center gap-2 truncate text-sm">
-                  <Sparkles className="size-4 shrink-0" />
-                  {RAG_PROVIDER_LABELS[provider]?.() ?? provider}
-                </span>
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() => saveProvider("embed", provider)}
-                >
-                  {m.provider_routing_register()}
-                </Button>
-              </div>
-            ),
-          )}
-        </div>
-        <RagSettingsForm
-          {...state}
-          modelSettings="embeddings"
-          includeProviderSelection={false}
-          includeIngestionSettings={false}
-          includeCollections={false}
+      <CapabilityModelList
+        capability="embedding"
+        title={mDyn("ai_models_embeddings_title")}
+        description={mDyn("ai_models_embeddings_card_description")}
+        selected={state.settings.embed_model}
+        onSelect={(model) => void state.patch({ embed_model: model })}
+      />
+      <CapabilityModelList
+        capability="reranking"
+        title={mDyn("ai_models_rerankers_title")}
+        description={mDyn("ai_models_rerankers_card_description")}
+        selected={state.settings.rerank_model}
+        onSelect={(model) => void state.patch({ rerank_model: model })}
+        enabled={state.settings.reranker_enabled}
+        onToggle={() =>
+          void state.patch({
+            reranker_enabled: !state.settings.reranker_enabled,
+          })
+        }
+      />
+      <label className="flex items-center justify-between gap-3 text-xs">
+        <span>{m.rag_reranker_top_k()}</span>
+        <input
+          type="number"
+          min={1}
+          max={50}
+          disabled={!state.settings.reranker_enabled}
+          value={state.settings.reranker_top_k}
+          onChange={(event) =>
+            void state.patch({
+              reranker_top_k: Math.max(1, Number(event.target.value) || 1),
+            })
+          }
+          className="h-8 w-20 rounded-md border bg-background px-2 text-right disabled:opacity-40"
         />
-      </section>
-      <section className="space-y-3 rounded-lg border bg-[#1f1f1f] p-3">
-        <div>
-          <h4 className="text-sm font-medium">
-            {mDyn("ai_models_rerankers_title")}
-          </h4>
-          <p className="text-xs text-muted-foreground">
-            {mDyn("ai_models_rerankers_card_description")}
-          </p>
-        </div>
+      </label>
+    </div>
+  );
+}
+
+type CatalogModel = {
+  id: string;
+  name: string;
+  provider: string;
+  capabilities: string[];
+};
+
+function CapabilityModelList({
+  capability,
+  title,
+  description,
+  selected,
+  onSelect,
+  enabled,
+  onToggle,
+}: {
+  capability: "embedding" | "reranking";
+  title: string;
+  description: string;
+  selected: string;
+  onSelect: (id: string) => void;
+  enabled?: boolean;
+  onToggle?: () => void;
+}) {
+  const [models, setModels] = useState<CatalogModel[]>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    let alive = true;
+    void fetch(`/models/catalog?capability=${capability}`)
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return (await response.json()) as { models?: CatalogModel[] };
+      })
+      .then((data) => {
+        if (alive) setModels(data.models ?? []);
+      })
+      .catch(() => {
+        if (alive) setModels([]);
+      })
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [capability]);
+  const current = models.find((model) => model.id === selected);
+  const options = models.filter((model) => model.id !== selected);
+  return (
+    <section className="space-y-3 rounded-lg border bg-[#1f1f1f] p-3">
+      <div>
+        <h4 className="text-sm font-medium">{title}</h4>
+        <p className="text-xs text-muted-foreground">{description}</p>
+      </div>
+      {onToggle && (
         <div className="flex items-center justify-between gap-2">
           <span className="text-sm text-muted-foreground">
-            {mDyn("ai_models_rerankers_title")}:{" "}
-            {state.settings.reranker_enabled
-              ? mDyn("ai_models_enabled")
-              : mDyn("ai_models_disabled")}
+            {title}:{" "}
+            {enabled ? mDyn("ai_models_enabled") : mDyn("ai_models_disabled")}
           </span>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() =>
-              void state.patch({
-                reranker_enabled: !state.settings.reranker_enabled,
-              })
-            }
-          >
-            {state.settings.reranker_enabled
+          <Button type="button" variant="outline" onClick={onToggle}>
+            {enabled
               ? mDyn("ai_models_disable_rerankers")
               : mDyn("ai_models_enable_rerankers")}
           </Button>
         </div>
+      )}
+      {selected && (
         <div className="flex items-center justify-between rounded-lg border bg-[#1a1a1a] px-3 py-2">
           <span className="flex min-w-0 items-center gap-2 truncate text-sm">
             <Sparkles className="size-4 shrink-0" />
-            {formatRagModelLabel(activeReranker, state.settings.rerank_model)}
+            {current?.name ?? selected}
           </span>
           <span className="text-sm font-medium">
             {m.provider_routing_already_registered()}
           </span>
         </div>
+      )}
+      {loading ? (
+        <p className="text-xs text-muted-foreground">
+          {m.workbench_settings_loading()}
+        </p>
+      ) : options.length ? (
         <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-          {RERANK_PROVIDERS.filter(
-            (provider) => provider !== activeReranker,
-          ).map((provider) => (
+          {options.map((model) => (
             <div
-              key={provider}
+              key={model.id}
               className="flex min-w-0 items-center justify-between gap-2 rounded-lg border bg-[#1a1a1a] px-3 py-2"
             >
               <span className="flex min-w-0 items-center gap-2 truncate text-sm">
                 <Sparkles className="size-4 shrink-0" />
-                {RAG_PROVIDER_LABELS[provider]?.() ?? provider}
+                <span className="truncate">{model.name}</span>
+                <span className="shrink-0 text-[10px] text-muted-foreground">
+                  {model.provider}
+                </span>
               </span>
               <Button
                 type="button"
                 size="sm"
-                onClick={() => saveProvider("rerank", provider)}
+                onClick={() => onSelect(model.id)}
               >
                 {m.provider_routing_register()}
               </Button>
             </div>
           ))}
         </div>
-        <RagSettingsForm
-          {...state}
-          modelSettings="rerankers"
-          includeProviderSelection={false}
-          includeRerankerToggle={false}
-          includeIngestionSettings={false}
-          includeCollections={false}
-        />
-      </section>
-    </div>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          {mDyn("ai_models_no_models_for_capability")}
+        </p>
+      )}
+    </section>
+  );
+}
+
+const CATALOG_CAPABILITIES = [
+  "chat",
+  "decision",
+  "vision",
+  "embedding",
+  "reranking",
+  "moderation",
+  "image_generation",
+  "video_understanding",
+  "video_generation",
+  "speech_to_text",
+  "text_to_speech",
+  "realtime_audio",
+  "audio_generation",
+] as const;
+
+function ProviderModelCatalog() {
+  const [models, setModels] = useState<CatalogModel[]>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    let alive = true;
+    void fetch("/models/catalog")
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return (await response.json()) as { models?: CatalogModel[] };
+      })
+      .then((data) => {
+        if (alive) setModels(data.models ?? []);
+      })
+      .catch(() => {
+        if (alive) setModels([]);
+      })
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  return (
+    <section className="space-y-3 rounded-lg border bg-[#1f1f1f] p-3">
+      <div>
+        <h4 className="text-sm font-medium">
+          {mDyn("ai_models_provider_catalog_title")}
+        </h4>
+        <p className="text-xs text-muted-foreground">
+          {mDyn("ai_models_provider_catalog_description")}
+        </p>
+      </div>
+      {loading ? (
+        <p className="text-xs text-muted-foreground">
+          {m.workbench_settings_loading()}
+        </p>
+      ) : (
+        <div className="space-y-4">
+          {CATALOG_CAPABILITIES.map((capability) => {
+            const matches = models.filter((model) =>
+              model.capabilities.includes(capability),
+            );
+            if (!matches.length) return null;
+            return (
+              <div key={capability} className="space-y-2">
+                <h5 className="text-xs font-medium">
+                  {mDyn(`ai_capability_${capability}`)}
+                </h5>
+                <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                  {matches.map((model) => (
+                    <div
+                      key={`${capability}:${model.id}`}
+                      className="flex min-w-0 items-center justify-between gap-2 rounded-lg border bg-[#1a1a1a] px-3 py-2"
+                    >
+                      <span className="min-w-0 truncate text-xs">
+                        {model.name}
+                      </span>
+                      <span className="shrink-0 text-[10px] text-muted-foreground">
+                        {model.provider}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+          {models.length === 0 && (
+            <p className="text-xs text-muted-foreground">
+              {mDyn("ai_models_no_models_for_capability")}
+            </p>
+          )}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -1297,6 +1407,7 @@ export function AiModelsTab() {
       </section>
       <MediaModelsSection />
       <RetrievalModelSettings />
+      <ProviderModelCatalog />
       <section className="space-y-3 rounded-lg border bg-[#1f1f1f] p-3">
         <TranscriptionSettings />
         <LocalSpeechSettings />
