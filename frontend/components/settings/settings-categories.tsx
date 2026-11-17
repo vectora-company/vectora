@@ -46,6 +46,13 @@ const IntegracoesTab = lazyWithRetry(
     })),
   "settings-integracoes-tab",
 );
+const MediaSettingsTab = lazyWithRetry(
+  () =>
+    import("./environment/tabs/media-settings-tab").then((mod) => ({
+      default: mod.MediaSettingsTab,
+    })),
+  "settings-media-tab",
+);
 const ProviderRoutingTab = lazyWithRetry(
   () =>
     import("./environment/tabs/provider-routing-tab").then((mod) => ({
@@ -241,6 +248,12 @@ export function buildSettingsCategoryGroups({
       group: "ambiente",
       label: m.settings_category_ai_models(),
       Component: AiModelsTab,
+    },
+    {
+      id: "media",
+      group: "ambiente",
+      label: m.settings_category_media(),
+      Component: MediaSettingsTab,
     },
     {
       id: "provider_routing",

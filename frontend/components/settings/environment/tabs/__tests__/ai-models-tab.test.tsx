@@ -6,11 +6,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ChatModelSettings,
   LocalSpeechSettings,
-  MediaLimitsSettings,
   SystemOneConfiguration,
   TranscriptionSettings,
 } from "../ai-models-tab";
 import { useSettingsStore } from "@/lib/stores/settings-store";
+import { MediaLimitsSettings } from "../media-settings-tab";
 
 vi.mock("@/components/chat/model-selector", () => ({
   ModelSelector: ({
@@ -401,7 +401,7 @@ describe("MediaLimitsSettings", () => {
     render(<MediaLimitsSettings />);
 
     const pages = await screen.findByLabelText(
-      /PDF pages per attachment|ai_models_media_limits_pdf_pages/,
+      /PDF pages per attachment|media_limits_pdf_pages/,
     );
     expect(pages).toHaveValue(20);
     expect(screen.getAllByRole("spinbutton")).toHaveLength(5);
@@ -415,11 +415,11 @@ describe("MediaLimitsSettings", () => {
     render(<MediaLimitsSettings />);
 
     const pages = await screen.findByLabelText(
-      /PDF pages per attachment|ai_models_media_limits_pdf_pages/,
+      /PDF pages per attachment|media_limits_pdf_pages/,
     );
     fireEvent.change(pages, { target: { value: "40" } });
     fireEvent.click(
-      screen.getByRole("button", { name: /Save|ai_models_media_limits_save/ }),
+      screen.getByRole("button", { name: /Save|media_limits_save/ }),
     );
 
     await waitFor(() =>
@@ -441,11 +441,11 @@ describe("MediaLimitsSettings", () => {
     render(<MediaLimitsSettings />);
 
     const pages = await screen.findByLabelText(
-      /PDF pages per attachment|ai_models_media_limits_pdf_pages/,
+      /PDF pages per attachment|media_limits_pdf_pages/,
     );
     fireEvent.change(pages, { target: { value: "900" } });
     fireEvent.click(
-      screen.getByRole("button", { name: /Save|ai_models_media_limits_save/ }),
+      screen.getByRole("button", { name: /Save|media_limits_save/ }),
     );
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
@@ -463,9 +463,7 @@ describe("MediaLimitsSettings", () => {
     render(<MediaLimitsSettings />);
 
     expect(
-      await screen.findByText(
-        /administrator|ai_models_media_limits_unavailable/,
-      ),
+      await screen.findByText(/administrator|media_limits_unavailable/),
     ).toBeInTheDocument();
   });
 });

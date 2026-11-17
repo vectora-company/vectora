@@ -1704,7 +1704,7 @@ function RegisteredModelsList({
         </p>
       ) : (
         <div
-          className={`space-y-1.5 ${registered.length > 6 ? "max-h-80 overflow-y-auto pr-1" : ""}`}
+          className={`space-y-1.5 ${registered.length > 6 ? "max-h-[26rem] overflow-y-auto pr-1" : ""}`}
         >
           {registered.map((model) => (
             <div
@@ -3244,7 +3244,7 @@ function LlamaCppSection() {
       <div
         className={
           filteredModels.length > 6
-            ? "max-h-80 space-y-2 overflow-y-auto pr-1"
+            ? "max-h-[26rem] space-y-2 overflow-y-auto pr-1"
             : "space-y-2"
         }
       >
