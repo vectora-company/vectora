@@ -233,7 +233,9 @@ describe("ChatModelSettings", () => {
     vi.stubGlobal("fetch", fetchMock);
     useSettingsStore.setState({ selectedModel: "openrouter:initial" });
     render(<ChatModelSettings />);
-    expect(await screen.findByText("openrouter:initial")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("region", { name: "Primary chat model" }),
+    ).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith("/models/providers");
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
   });
