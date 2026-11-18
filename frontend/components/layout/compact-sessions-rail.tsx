@@ -24,7 +24,7 @@ export function CompactSessionsRail({
     <nav
       data-testid="compact-sessions-rail"
       aria-label={m.mobile_shell_controls()}
-      className={`flex w-12 shrink-0 flex-col items-center gap-1 bg-sidebar py-2 ${
+      className={`flex w-12 shrink-0 flex-col items-center gap-1 bg-sidebar py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] ${
         side === "left" ? "border-r" : "border-l"
       } border-border/60`}
     >
@@ -41,7 +41,7 @@ export function CompactSessionsRail({
         aria-label={m.sidebar_new_chat()}
         title={m.sidebar_new_chat()}
         onClick={onNewChat}
-        className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+        className="flex h-7 w-7 pointer-coarse:h-10 pointer-coarse:w-10 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
       >
         <Plus className="size-4" aria-hidden="true" />
       </button>
