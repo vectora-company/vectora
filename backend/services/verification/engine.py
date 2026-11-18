@@ -53,6 +53,15 @@ class VerificationResult:
             return "Verificação concluída com sucesso."
         return f"Falha nos quality gates: {self.failure_feedback or ''}"
 
+    @property
+    def detail(self) -> str:
+        """Texto curto do desfecho, para o estado do AgentRun."""
+        if self.outcome == "not_run":
+            return "Nenhum quality gate foi executado: a execução não foi verificada."
+        if self.passed:
+            return "Verificação concluída com sucesso."
+        return f"Falha nos quality gates: {self.failure_feedback or ''}"
+
     def to_evidence_entry(self) -> dict[str, Any]:
         """Formata o resultado da verificação como evidência persistível no AgentRun."""
         return {
