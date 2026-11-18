@@ -390,6 +390,8 @@
   "chat_url_preview_loading": "Loading link preview…",
   "chat_url_preview_remove": "Remove link preview",
   "chat_url_preview_unavailable": "Link preview unavailable or blocked",
+  "chat_warning_generic": "The agent raised a warning. The turn continues.",
+  "chat_warning_tool_call_repeated": "The agent repeated the same action several times in a row. The turn continues.",
   "ci_build_failed": "Build {name} failed ❌",
   "ci_build_passed": "Build {name} passed ✅",
   "commandbar_local": "Local",

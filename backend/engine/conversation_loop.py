@@ -1323,6 +1323,7 @@ async def run_conversation(  # noqa: PLR0911
                 await emit(
                     ErrorSignal(
                         code="TOOL_CALL_REPEATED",
+                        severity="warning",
                         message=(
                             f"Mesma tool call ({nomes}) repetida "
                             f"{_REPEATED_CALL_THRESHOLD}x seguidas com argumentos "

@@ -143,6 +143,16 @@ export function isNetworkError(err: unknown): boolean {
  * (`RATE_LIMIT`, `AUTH`, `STREAM_ERROR`) — aqui mapeamos para i18n. Erros de
  * limite/quota do provedor (ex.: 429 do Gemini) não vazam o JSON cru.
  */
+/** Texto do aviso não fatal do runtime, por código. */
+export function streamWarningMessage(code?: string): string {
+  switch (code) {
+    case "TOOL_CALL_REPEATED":
+      return msg.chat_warning_tool_call_repeated();
+    default:
+      return msg.chat_warning_generic();
+  }
+}
+
 export function streamErrorMessage(code?: string): string {
   switch (code) {
     case "RATE_LIMIT":
@@ -596,6 +606,12 @@ export function useStreamHandler({
             streamCompletedNormally = true;
             break;
           }
+          if (event.type === "error" && event.severity === "warning") {
+            // Aviso do runtime: o turno continua, então nada é encerrado nem
+            // marcado como erro e o conteúdo parcial fica como está.
+            useToastStore.getState().warning(streamWarningMessage(event.code));
+            continue;
+          }
           if (event.type === "error") {
             // Erro de aplicação reportado pelo backend (ex.: 429/quota do
             // provedor). Em vez de exibir o JSON cru como se fosse a resposta
@@ -862,6 +878,12 @@ export function useStreamHandler({
             );
             streamCompletedNormally = true;
             break;
+          }
+          if (event.type === "error" && event.severity === "warning") {
+            // Aviso do runtime: o turno continua, então nada é encerrado nem
+            // marcado como erro e o conteúdo parcial fica como está.
+            useToastStore.getState().warning(streamWarningMessage(event.code));
+            continue;
           }
           if (event.type === "error") {
             const friendly = streamErrorMessage(event.code);

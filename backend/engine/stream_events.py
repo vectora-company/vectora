@@ -203,6 +203,8 @@ class UIMetrics:
 class ErrorSignal:
     message: str
     code: str = "INTERNAL"
+    #: ``warning`` não encerra o turno (o loop continua); ``error`` é terminal.
+    severity: Literal["warning", "error"] = "error"
 
 
 @dataclass(frozen=True, slots=True)

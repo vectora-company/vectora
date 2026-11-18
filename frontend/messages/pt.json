@@ -390,6 +390,8 @@
   "chat_url_preview_loading": "Carregando prévia do link…",
   "chat_url_preview_remove": "Remover prévia do link",
   "chat_url_preview_unavailable": "Prévia indisponível ou bloqueada",
+  "chat_warning_generic": "O agente emitiu um aviso. O turno continua.",
+  "chat_warning_tool_call_repeated": "O agente repetiu a mesma ação várias vezes seguidas. O turno continua.",
   "ci_build_failed": "Build {name} falhou ❌",
   "ci_build_passed": "Build {name} passou ✅",
   "commandbar_local": "Local",

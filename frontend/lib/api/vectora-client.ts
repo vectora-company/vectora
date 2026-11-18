@@ -181,7 +181,13 @@ export type StreamEvent =
       type: "rag_citations";
       citations: Array<{ index: number; source: string; chunk: string }>;
     }
-  | { type: "error"; message: string; code?: string }
+  | {
+      type: "error";
+      message: string;
+      code?: string;
+      /** `warning`: o turno continua; ausente ou `error`: terminal. */
+      severity?: "warning" | "error";
+    }
   | {
       type: "done";
       thread_id: string;
@@ -1176,7 +1182,10 @@ async function* readSSEStream(
         const event = parseSSELine(line);
         if (!event) continue;
         yield event;
-        if (event.type === "done" || event.type === "error") return;
+        // Só `done` e erro terminal encerram a leitura: um aviso do runtime
+        // (`severity: "warning"`) deixa o stream aberto até o `done`.
+        if (event.type === "done") return;
+        if (event.type === "error" && event.severity !== "warning") return;
       }
     }
   } finally {
