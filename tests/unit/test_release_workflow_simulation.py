@@ -130,14 +130,14 @@ def _gh_rules(
     return [
         Rule(
             ["api", f"{api}/contents/.github/workflows?ref={SHA}", "--jq", "*"],
-            stdout=".github/workflows/pr-checks.yml aaa\n",
+            stdout=".github/workflows/pr-gate.yml aaa\n",
         ),
         Rule(
             ["api", f"{api}/contents/.github/workflows?ref=master", "--jq", "*"],
             stdout=(
-                ".github/workflows/pr-checks.yml bbb\n"
+                ".github/workflows/pr-gate.yml bbb\n"
                 if diverged
-                else ".github/workflows/pr-checks.yml aaa\n"
+                else ".github/workflows/pr-gate.yml aaa\n"
             ),
         ),
         tag_lookup,
