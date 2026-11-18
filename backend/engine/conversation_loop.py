@@ -177,6 +177,7 @@ async def _bind_decision_model_snapshot(
         "laya-local": settings.systemone_laya_model,
         "clef-api": settings.systemone_clef_api_model,
         "jev-api": settings.systemone_jev_api_model,
+        "openrouter-api": settings.systemone_openrouter_model,
     }
     runtime = {
         "preferences_revision": await asyncio.to_thread(

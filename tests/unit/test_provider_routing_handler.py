@@ -3203,7 +3203,7 @@ def test_decision_model_status_with_empty_local_model(
     entries = {
         entry["provider"]: entry for entry in response.json()["capability_matrix"]
     }
-    assert len(entries) == 4
+    assert len(entries) == 5
     assert entries["clef-local"]["model"] == "unconfigured"
     assert entries["clef-local"]["discovered"] is (not capabilities_fail)
     assert entries["clef-local"]["ready"] is (not capabilities_fail)

@@ -18,7 +18,9 @@ from pydantic import BaseModel, Field, TypeAdapter, ValidationError, model_valid
 from backend.llm.systemone.errors import SystemOneValidationError
 
 QuestionType = Literal["noul", "choice", "score"]
-DecisionProviderType = Literal["clef-local", "laya-local", "clef-api", "jev-api"]
+DecisionProviderType = Literal[
+    "clef-local", "laya-local", "clef-api", "jev-api", "openrouter-api"
+]
 CapabilityEvidenceLevel = Literal["documented", "observed", "unverified"]
 
 

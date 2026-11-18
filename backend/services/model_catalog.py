@@ -367,9 +367,14 @@ async def _router_catalogs(client: httpx.AsyncClient) -> list[dict[str, Any]]:
     entries: list[dict[str, Any]] = []
     if settings.openrouter_api_key:
         headers = {"Authorization": f"Bearer {settings.openrouter_api_key}"}
+        seen_router_models: set[str] = set()
         for catalog_url in (
             "https://openrouter.ai/api/v1/models",
             "https://openrouter.ai/api/v1/embeddings/models",
+            # Fala e decisões têm modalidades de saída próprias e não entram
+            # na listagem padrão de chat.
+            "https://openrouter.ai/api/v1/models?output_modalities=speech",
+            "https://openrouter.ai/api/v1/models?output_modalities=decisions",
         ):
             is_embedding_catalog = catalog_url.endswith("/embeddings/models")
             payload = await _get_json(client, catalog_url, headers=headers)
@@ -382,6 +387,9 @@ async def _router_catalogs(client: httpx.AsyncClient) -> list[dict[str, Any]]:
                     for value in architecture.get("output_modalities", [])
                 ]
                 model_id = str(model["id"])
+                if model_id in seen_router_models:
+                    continue
+                seen_router_models.add(model_id)
                 caps = _guess_capabilities("openrouter", model_id)
                 if "embeddings" in output_modalities or is_embedding_catalog:
                     caps = list(dict.fromkeys([*caps, "embedding"]))
@@ -393,8 +401,10 @@ async def _router_catalogs(client: httpx.AsyncClient) -> list[dict[str, Any]]:
                     caps = list(dict.fromkeys([*caps, "reranking"]))
                 if "text" in output_modalities and "embedding" not in caps:
                     caps = list(dict.fromkeys([*caps, "chat"]))
-                if "audio" in output_modalities:
+                if "audio" in output_modalities or "speech" in output_modalities:
                     caps = list(dict.fromkeys([*caps, "text_to_speech"]))
+                if "decisions" in output_modalities:
+                    caps = ["decision"]
                 if "image" in output_modalities:
                     caps = list(dict.fromkeys([*caps, "image_generation"]))
                 if "video" in output_modalities:
@@ -414,17 +424,17 @@ async def _router_catalogs(client: httpx.AsyncClient) -> list[dict[str, Any]]:
                     for value in architecture.get("input_modalities", [])
                 ):
                     caps = list(dict.fromkeys([*caps, "realtime_audio"]))
-                entries.append(
-                    _entry(
-                        "openrouter",
-                        model_id,
-                        name=str(model.get("name") or model_id),
-                        capabilities=caps,
-                        confidence="router_metadata"
-                        if output_modalities
-                        else "inferred",
-                    )
+                entry = _entry(
+                    "openrouter",
+                    model_id,
+                    name=str(model.get("name") or model_id),
+                    capabilities=caps,
+                    confidence="router_metadata" if output_modalities else "inferred",
                 )
+                if "decision" in caps:
+                    # O adaptador do OpenRouter Decisions executa esses modelos.
+                    entry["executable_capabilities"].append("decision")
+                entries.append(entry)
     # Providers locais/compatíveis: catálogo dinâmico, sem credenciais no retorno.
     ollama_url = (settings.ollama_base_url or "http://127.0.0.1:11434").rstrip("/")
     ollama_headers = (

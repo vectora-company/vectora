@@ -452,9 +452,9 @@ class Settings(BaseSettings):
     evaluation_recording_enabled: bool = False
     """Persist redacted model inputs for explicit Evaluation Lab exports."""
 
-    systemone_provider: Literal["clef-local", "laya-local", "clef-api", "jev-api"] = (
-        "clef-local"
-    )
+    systemone_provider: Literal[
+        "clef-local", "laya-local", "clef-api", "jev-api", "openrouter-api"
+    ] = "clef-local"
     """Provedor ativo de Decision Models."""
 
     systemone_local_base_url: str = "http://127.0.0.1:8080"
@@ -500,6 +500,9 @@ class Settings(BaseSettings):
         from backend.llm.systemone.endpoints import normalize_jev_model
 
         return normalize_jev_model(value)
+
+    systemone_openrouter_model: str = "typesafe/jev-1.14"
+    """Slug do modelo de decisão no OpenRouter (usa a chave `openrouter_api_key`)."""
 
     systemone_allow_remote_fallback: bool = False
     """Permite fallback para API remota se local falhar (requer consentimento explícito)."""

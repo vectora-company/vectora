@@ -21,6 +21,7 @@ const PROVIDERS: Array<{ value: DecisionModelProvider; label: string }> = [
   { value: "laya-local", label: "Laya local" },
   { value: "clef-api", label: "Clef Cloudflare" },
   { value: "jev-api", label: "JEV" },
+  { value: "openrouter-api", label: "OpenRouter" },
 ];
 
 interface Readiness {

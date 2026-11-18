@@ -46,7 +46,7 @@ describe("DecisionModelMenu", () => {
     render(<DecisionModelMenu />);
     fireEvent.click(screen.getByRole("button", { name: /Laya local/ }));
 
-    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(4));
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(5));
     const itens = await screen.findAllByText("Laya local");
     // Gatilho + item da lista.
     expect(itens).toHaveLength(2);
