@@ -1150,6 +1150,12 @@ function servicesDisabled(): boolean {
 }
 
 /** Register updater events and expose their merged status to the renderer. */
+function servicesDisabled(): boolean {
+  return ["1", "true", "yes", "on"].includes(
+    (process.env.VECTORA_NO_SERVICES ?? "").trim().toLowerCase(),
+  );
+}
+
 function setupAutoUpdater(): void {
   if (servicesDisabled()) {
     // Registrado no log do sidecar: confirma que a flag chegou ao Electron.
