@@ -54,6 +54,7 @@ import { buildContextMenuTemplate, contextMenuLabels } from "./context-menu.js";
 import {
   getFreePort,
   backendPath,
+  backendTransportOptions,
   isInstalledTestsMode,
   natsBinaryPath,
   spawnBackendProcess,
@@ -437,13 +438,14 @@ protocol.registerSchemesAsPrivileged([
  */
 /** Build the IPC transport for the currently isolated runtime profile. */
 function backendTransport(): http.RequestOptions {
-  if (process.platform !== "win32") {
-    return { socketPath: path.join(runtimeHome, "vectora.sock") };
-  }
-  if (backendPipePath) {
-    return { socketPath: backendPipePath };
-  }
-  return { host: "127.0.0.1", port: backendPort ?? undefined };
+  return backendTransportOptions(
+    process.platform,
+    runtimeHome,
+    resolveExternalBackendConnection(process.env) ??
+      (backendPipePath
+        ? { port: backendPort, pipePath: backendPipePath }
+        : null),
+  );
 }
 
 const _HOP_BY_HOP = new Set([

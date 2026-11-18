@@ -1,12 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ResizableDialogContent } from "@/components/ui/resizable-dialog";
 
 interface CanvasDocumentDialogProps {
   open: boolean;
@@ -26,14 +22,24 @@ export function CanvasDocumentDialog({
 }: CanvasDocumentDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[min(85vh,52rem)] w-[min(92vw,78rem)] max-w-none flex-col gap-0 overflow-hidden p-0">
+      <ResizableDialogContent
+        storageKey="canvas-document"
+        defaultWidth={1248}
+        defaultHeight={832}
+        minWidth={480}
+        minHeight={320}
+        maxWidth={1600}
+        maxHeight={1200}
+        className="max-h-[85vh] max-w-[92vw] gap-0 p-0"
+        aria-describedby={undefined}
+      >
         <DialogHeader className="shrink-0 border-b border-border/60 px-4 py-3">
           <DialogTitle className={titleClassName ?? "truncate text-sm"}>
             {title}
           </DialogTitle>
         </DialogHeader>
         <div className="min-h-0 flex-1">{children}</div>
-      </DialogContent>
+      </ResizableDialogContent>
     </Dialog>
   );
 }

@@ -15,6 +15,8 @@ interface ResizableDialogContentProps extends React.ComponentProps<
   defaultHeight?: number;
   minWidth?: number;
   minHeight?: number;
+  maxWidth?: number;
+  maxHeight?: number;
   showCloseButton?: boolean;
   /** Chave para persistir o tamanho no Zustand. Se omitido, não persiste. */
   storageKey?: string;
@@ -27,6 +29,8 @@ export function ResizableDialogContent({
   defaultHeight = 460,
   minWidth = 340,
   minHeight = 280,
+  maxWidth = Number.POSITIVE_INFINITY,
+  maxHeight = Number.POSITIVE_INFINITY,
   showCloseButton = true,
   storageKey,
   style,
@@ -55,8 +59,8 @@ export function ResizableDialogContent({
     const dx = e.clientX - startRef.current.x;
     const dy = e.clientY - startRef.current.y;
     setSize({
-      w: Math.max(minWidth, startRef.current.w + dx),
-      h: Math.max(minHeight, startRef.current.h + dy),
+      w: Math.min(maxWidth, Math.max(minWidth, startRef.current.w + dx)),
+      h: Math.min(maxHeight, Math.max(minHeight, startRef.current.h + dy)),
     });
   };
 
