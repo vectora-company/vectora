@@ -9,6 +9,7 @@ import {
   pingBackendHttp,
   waitForBackendReady,
   killBackendTree,
+  stopBackendProcess,
   backendPath,
   isInstalledTestsMode,
   natsBinaryPath,
@@ -33,6 +34,14 @@ function spawnDummy(env: NodeJS.ProcessEnv): ChildProcess {
   });
   spawned.push(child);
   return child;
+}
+
+function signalTree(
+  pid: number,
+  signal: string,
+  callback?: (error?: Error) => void,
+): void {
+  treeKill(pid, signal as NodeJS.Signals, () => callback?.());
 }
 
 afterEach(async () => {
@@ -134,10 +143,12 @@ describe("resolveExternalBackendConnection", () => {
       VECTORA_EXTERNAL_BACKEND: "1",
       VECTORA_PORT: "8080",
       VECTORA_IPC_PIPE: "\\\\.\\pipe\\vectora-1234",
+      VECTORA_WEB_MODE: "1",
     });
     expect(result).toEqual({
       port: 8080,
       pipePath: "\\\\.\\pipe\\vectora-1234",
+      webMode: true,
     });
   });
 
@@ -146,7 +157,7 @@ describe("resolveExternalBackendConnection", () => {
       VECTORA_EXTERNAL_BACKEND: "1",
       VECTORA_PORT: "8080",
     });
-    expect(result).toEqual({ port: 8080, pipePath: null });
+    expect(result).toEqual({ port: 8080, pipePath: null, webMode: false });
   });
 
   it("edge case: VECTORA_PORT ausente ou não-numérico vira null, não NaN", () => {
@@ -163,20 +174,26 @@ describe("resolveExternalBackendConnection", () => {
 });
 
 describe("backendTransportOptions", () => {
-  it("uses loopback TCP for an externally managed backend on Linux and macOS", () => {
-    const external = { port: 8080, pipePath: null };
+  it("uses the runtime Unix socket for an external desktop backend", () => {
+    const external = { port: 8080, pipePath: null, webMode: false };
     expect(
       backendTransportOptions("linux", "/home/user/.vectora", external),
-    ).toEqual({
-      host: "127.0.0.1",
-      port: 8080,
-    });
+    ).toEqual({ socketPath: path.join("/home/user/.vectora", "vectora.sock") });
     expect(
       backendTransportOptions("darwin", "/Users/user/.vectora", external),
     ).toEqual({
-      host: "127.0.0.1",
-      port: 8080,
+      socketPath: path.join("/Users/user/.vectora", "vectora.sock"),
     });
+  });
+
+  it("uses loopback TCP for an external web backend on Linux and macOS", () => {
+    const external = { port: 8080, pipePath: null, webMode: true };
+    expect(
+      backendTransportOptions("linux", "/home/user/.vectora", external),
+    ).toEqual({ host: "127.0.0.1", port: 8080 });
+    expect(
+      backendTransportOptions("darwin", "/Users/user/.vectora", external),
+    ).toEqual({ host: "127.0.0.1", port: 8080 });
   });
 
   it("keeps the Unix socket for an Electron-owned Linux/macOS backend", () => {
@@ -192,12 +209,14 @@ describe("backendTransportOptions", () => {
       backendTransportOptions("win32", "C:\\Vectora", {
         port: 8080,
         pipePath: "\\\\.\\pipe\\vectora-1",
+        webMode: false,
       }),
     ).toEqual({ socketPath: "\\\\.\\pipe\\vectora-1" });
     expect(
       backendTransportOptions("win32", "C:\\Vectora", {
         port: 8080,
         pipePath: null,
+        webMode: true,
       }),
     ).toEqual({ host: "127.0.0.1", port: 8080 });
   });
@@ -350,20 +369,8 @@ describe("killBackendTree", () => {
     await new Promise((resolve) => setTimeout(resolve, 100)); // deixa o processo assentar
     const pid = child.pid!;
 
-    await new Promise<void>((resolve) => {
-      if (process.platform === "win32") {
-        // No Windows, killBackendTree() usa spawnSync (taskkill) — síncrono,
-        // não invoca o callback treeKillFn (esse é só o caminho não-Windows).
-        killBackendTree(pid, process.platform, () => {});
-        resolve();
-      } else {
-        killBackendTree(pid, process.platform, (killPid, cb) => {
-          treeKill(killPid, () => {
-            cb?.();
-            resolve();
-          });
-        });
-      }
+    await killBackendTree(pid, process.platform, (killPid, signal, cb) => {
+      treeKill(killPid, signal as NodeJS.Signals, () => cb?.());
     });
 
     await new Promise((resolve) => setTimeout(resolve, 200)); // dá tempo do SO liberar o PID
@@ -400,19 +407,13 @@ describe("killBackendTree", () => {
 
     await new Promise((resolve) => setTimeout(resolve, 100)); // deixa os dois assentarem
 
-    await new Promise<void>((resolve) => {
-      if (process.platform === "win32") {
-        killBackendTree(parentPid, process.platform, () => {});
-        resolve();
-      } else {
-        killBackendTree(parentPid, process.platform, (killPid, cb) => {
-          treeKill(killPid, () => {
-            cb?.();
-            resolve();
-          });
-        });
-      }
-    });
+    await killBackendTree(
+      parentPid,
+      process.platform,
+      (killPid, signal, cb) => {
+        treeKill(killPid, signal as NodeJS.Signals, () => cb?.());
+      },
+    );
 
     await new Promise((resolve) => setTimeout(resolve, 300)); // dá tempo do SO liberar os PIDs
     expect(() => process.kill(parentPid, 0)).toThrow();
@@ -449,8 +450,8 @@ describe("killBackendTree", () => {
     await new Promise((resolve) => setTimeout(resolve, 100));
 
     expect(() => {
-      killBackendTree(parentPid, process.platform, (killPid, cb) => {
-        treeKill(killPid, () => cb?.());
+      killBackendTree(parentPid, process.platform, (killPid, signal, cb) => {
+        treeKill(killPid, signal as NodeJS.Signals, () => cb?.());
       });
     }).not.toThrow();
   });
@@ -460,13 +461,48 @@ describe("killBackendTree", () => {
     const parent = spawnDummy({ TEST_HEALTH_PORT: String(port) });
     const parentPid = parent.pid!;
     let calledWithPid: number | null = null;
-    const treeKillFn = (pid: number, cb?: (err?: Error) => void) => {
+    const treeKillFn = (
+      pid: number,
+      _signal: string,
+      cb?: (err?: Error) => void,
+    ) => {
       calledWithPid = pid;
       cb?.();
     };
 
-    killBackendTree(parentPid, "linux", treeKillFn);
+    await killBackendTree(parentPid, "linux", treeKillFn);
 
     expect(calledWithPid).toBe(parentPid);
+  });
+});
+
+describe("stopBackendProcess", () => {
+  it("espera a saída do backend antes de concluir o shutdown", async () => {
+    const child = spawnDummy({ TEST_HEALTH_PORT: String(await getFreePort()) });
+    const stopped = await stopBackendProcess(
+      child,
+      process.platform,
+      signalTree,
+    );
+
+    expect(stopped).toBe(true);
+    expect(child.exitCode !== null || child.signalCode !== null).toBe(true);
+  });
+
+  it("escala para SIGKILL quando o backend ignora SIGTERM", async () => {
+    const child = spawnDummy({
+      TEST_HEALTH_PORT: String(await getFreePort()),
+      IGNORE_SIGTERM: "1",
+    });
+    const stopped = await stopBackendProcess(
+      child,
+      process.platform,
+      signalTree,
+      100,
+      2_000,
+    );
+
+    expect(stopped).toBe(true);
+    expect(child.exitCode !== null || child.signalCode !== null).toBe(true);
   });
 });

@@ -69,6 +69,9 @@ export function ImageFallbackModelSection() {
     setModel(value);
     void saveImageFallbackModel(value);
   };
+  const providerForModel = (modelId: string) =>
+    models.find((item) => item.id === modelId)?.provider ??
+    getModelProvider(modelId as ModelOption);
 
   return (
     <div className="space-y-2">
@@ -78,6 +81,12 @@ export function ImageFallbackModelSection() {
       </p>
       <Select value={model} onValueChange={onChange}>
         <SelectTrigger className="h-8 text-xs">
+          {model !== IMAGE_FALLBACK_NONE && (
+            <ProviderIcon
+              provider={providerForModel(model)}
+              className="size-4 shrink-0"
+            />
+          )}
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -91,6 +100,10 @@ export function ImageFallbackModelSection() {
               )
           ).map((mid) => (
             <SelectItem key={mid} value={mid} className="text-xs">
+              <ProviderIcon
+                provider={providerForModel(mid)}
+                className="mr-2 size-4 shrink-0"
+              />
               {getModelDisplayName(mid as ModelOption) || mid}
             </SelectItem>
           ))}

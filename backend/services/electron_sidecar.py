@@ -201,6 +201,13 @@ async def ensure_electron_sidecar() -> asyncio.subprocess.Process | None:
         if launch is None:
             return None
         exe, exe_args = launch
+        if sys.platform == "linux":
+            # Ozone escolhe o backend de janelas antes de executar o main.js.
+            # app.commandLine.appendSwitch() mantém a configuração dos
+            # renderers, mas não muda a plataforma já selecionada pelo
+            # processo principal; passe x11 antes do entrypoint para garantir
+            # XWayland também na BrowserWindow nativa.
+            exe_args = ["--ozone-platform=x11", *exe_args]
 
         cdp_port = _ensure_electron_cdp_port()
         cdp_proxy_port = _ensure_electron_cdp_proxy_port()

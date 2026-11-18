@@ -7,5 +7,5 @@ import {
 
 export function MemorySettings() {
   const state = useRagSettings({ autoLoad: true });
-  return <RagSettingsForm {...state} includeModelSettings={false} />;
+  return <RagSettingsForm {...state} />;
 }

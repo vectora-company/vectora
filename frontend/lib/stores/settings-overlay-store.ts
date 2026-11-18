@@ -24,6 +24,7 @@ export type SettingsCategoryId =
   | "conta"
   | "integracoes"
   | "ai_models"
+  | "media"
   | "provider_routing"
   | "connect"
   | "plugins"

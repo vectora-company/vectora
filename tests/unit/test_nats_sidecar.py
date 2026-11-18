@@ -39,6 +39,10 @@ def _reset_sidecar_state(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "backend.services.win_job_object.create_job_object", lambda: None
     )
+    # All child-process PIDs in this module are simulated. The shared POSIX
+    # shutdown helper signals the process group by PID, so keep lifecycle
+    # tests isolated from any real group that may reuse a fixture PID.
+    monkeypatch.setattr(nats_sidecar, "terminate_gracefully", AsyncMock())
 
     nats_sidecar._proc = None
     nats_sidecar._url = None
@@ -186,14 +190,18 @@ async def test_ensure_nats_sidecar_reuses_running_process():
 @pytest.mark.asyncio
 async def test_stop_nats_sidecar_terminates_and_clears_state():
     fake_proc = MagicMock()
-    fake_proc.terminate = MagicMock()
     fake_proc.wait = AsyncMock(return_value=None)
     nats_sidecar._proc = fake_proc
     nats_sidecar._url = "nats://127.0.0.1:4222"
 
-    await nats_sidecar.stop_nats_sidecar()
+    terminate_mock = AsyncMock()
+    with patch.object(nats_sidecar, "terminate_gracefully", new=terminate_mock):
+        await nats_sidecar.stop_nats_sidecar()
 
-    fake_proc.terminate.assert_called_once()
+    terminate_mock.assert_awaited_once()
+    call = terminate_mock.await_args
+    assert call is not None
+    assert call.args == (fake_proc,)
     assert nats_sidecar._proc is None
     assert nats_sidecar.current_url() is None
 
@@ -393,7 +401,6 @@ class TestOrphanPidFile:
 
         fake_proc = MagicMock()
         fake_proc.pid = 4242
-        fake_proc.terminate = MagicMock()
         fake_proc.wait = AsyncMock(return_value=None)
         nats_sidecar._proc = fake_proc
         nats_sidecar._url = "nats://127.0.0.1:4222"
@@ -416,7 +423,6 @@ class TestOrphanPidFile:
 
         fake_proc = MagicMock()
         fake_proc.pid = 4242
-        fake_proc.terminate = MagicMock()
         fake_proc.wait = AsyncMock(return_value=None)
         nats_sidecar._proc = fake_proc
         nats_sidecar._url = "nats://127.0.0.1:4222"

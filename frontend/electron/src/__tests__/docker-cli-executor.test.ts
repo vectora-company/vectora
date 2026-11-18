@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   buildDockerArguments,
   resolveDockerExecutable,
+  resolveModelPluginInstaller,
   validateContextSize,
   validateModelReference,
 } from "../docker-cli-executor.js";
@@ -17,6 +18,45 @@ afterEach(() => {
 });
 
 describe("Docker Model Runner command contract", () => {
+  it("usa pkexec e instala somente o pacote oficial em Linux", () => {
+    const available = new Set(["/usr/bin/pkexec", "/usr/bin/apt-get"]);
+    expect(
+      resolveModelPluginInstaller("linux", (filePath) =>
+        available.has(filePath),
+      ),
+    ).toEqual({
+      executable: "/usr/bin/pkexec",
+      args: ["/usr/bin/apt-get", "install", "-y", "docker-model-plugin"],
+    });
+    expect(resolveModelPluginInstaller("darwin", () => true)).toBeNull();
+  });
+
+  it("usa comandos fixos para detectar e instalar/ativar o runner", () => {
+    expect(() => buildDockerArguments("installPlugin")).toThrow(
+      "gerenciador do sistema",
+    );
+    expect(buildDockerArguments("status")).toEqual([
+      "model",
+      "status",
+      "--json",
+    ]);
+    expect(buildDockerArguments("installRunner")).toEqual([
+      "model",
+      "install-runner",
+    ]);
+    expect(buildDockerArguments("startRunner")).toEqual([
+      "model",
+      "start-runner",
+    ]);
+    expect(buildDockerArguments("enableModelRunner")).toEqual([
+      "desktop",
+      "enable",
+      "model-runner",
+      "--tcp",
+      "12434",
+    ]);
+  });
+
   it("gera somente argumentos do allowlist para pull e start", () => {
     expect(buildDockerArguments("pull", "hf.co/Qwen/Qwen3-0.6B")).toEqual([
       "model",

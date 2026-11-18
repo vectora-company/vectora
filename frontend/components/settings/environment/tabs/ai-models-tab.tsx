@@ -1,8 +1,7 @@
 "use client";
 
-import { ModelSelector } from "@/components/chat/model-selector";
-import { MediaModelsSection } from "./provider-routing-tab";
 import { ImageFallbackModelSection } from "./image-model-section";
+import { ProviderIcon } from "@/components/icons/provider-icons";
 import { useCallback, useEffect, useState } from "react";
 import {
   hydrateDecisionModelPreferences,
@@ -13,18 +12,167 @@ import { useWorkspacesStore } from "@/lib/stores/workspaces-store";
 import { m } from "@/lib/paraglide/messages";
 import { mDyn } from "@/lib/i18n-dyn";
 import {
-  RagSettingsForm,
-  useRagSettings,
-} from "@/components/workbench/rag-settings-panel";
+  getAllowedModels,
+  getModelDisplayName,
+  getModelProvider,
+} from "@/lib/config/deployment-config";
+import { Button } from "@/components/ui/button";
+import { useRagSettings } from "@/components/workbench/rag-settings-panel";
 
 function RetrievalModelSettings() {
   const state = useRagSettings({ autoLoad: true });
   return (
-    <RagSettingsForm
-      {...state}
-      includeIngestionSettings={false}
-      includeCollections={false}
-    />
+    <div className="space-y-4">
+      <CapabilityModelList
+        capability="embedding"
+        title={mDyn("ai_models_embeddings_title")}
+        description={mDyn("ai_models_embeddings_card_description")}
+        selected={state.settings.embed_model}
+        onSelect={(model) => void state.patch({ embed_model: model })}
+      />
+      <CapabilityModelList
+        capability="reranking"
+        title={mDyn("ai_models_rerankers_title")}
+        description={mDyn("ai_models_rerankers_card_description")}
+        selected={state.settings.rerank_model}
+        onSelect={(model) => void state.patch({ rerank_model: model })}
+        enabled={state.settings.reranker_enabled}
+        onToggle={() =>
+          void state.patch({
+            reranker_enabled: !state.settings.reranker_enabled,
+          })
+        }
+      />
+    </div>
+  );
+}
+
+type CatalogModel = {
+  id: string;
+  name: string;
+  provider: string;
+  capabilities: string[];
+};
+
+function providerFromModelId(modelId: string): string {
+  return modelId.includes(":")
+    ? modelId.slice(0, modelId.indexOf(":"))
+    : "auto";
+}
+
+function CapabilityModelList({
+  capability,
+  title,
+  description,
+  selected,
+  onSelect,
+  enabled,
+  onToggle,
+}: {
+  capability: "embedding" | "reranking";
+  title: string;
+  description: string;
+  selected: string;
+  onSelect: (id: string) => void;
+  enabled?: boolean;
+  onToggle?: () => void;
+}) {
+  const [models, setModels] = useState<CatalogModel[]>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    let alive = true;
+    void fetch(`/models/catalog?capability=${capability}`)
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return (await response.json()) as { models?: CatalogModel[] };
+      })
+      .then((data) => {
+        if (alive) setModels(data.models ?? []);
+      })
+      .catch(() => {
+        if (alive) setModels([]);
+      })
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [capability]);
+  const current = models.find((model) => model.id === selected);
+  const options = models.filter((model) => model.id !== selected);
+  return (
+    <section className="space-y-3 rounded-lg border bg-[#1f1f1f] p-3">
+      <div>
+        <h4 className="text-sm font-medium">{title}</h4>
+        <p className="text-xs text-muted-foreground">{description}</p>
+      </div>
+      {onToggle && (
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-sm text-muted-foreground">
+            {title}:{" "}
+            {enabled ? mDyn("ai_models_enabled") : mDyn("ai_models_disabled")}
+          </span>
+          <Button type="button" variant="outline" onClick={onToggle}>
+            {enabled
+              ? mDyn("ai_models_disable_rerankers")
+              : mDyn("ai_models_enable_rerankers")}
+          </Button>
+        </div>
+      )}
+      {selected && (
+        <div className="flex items-center justify-between rounded-lg border bg-[#1a1a1a] px-3 py-2">
+          <span className="flex min-w-0 items-center gap-2 truncate text-sm">
+            <ProviderIcon
+              provider={current?.provider ?? providerFromModelId(selected)}
+              className="size-4 shrink-0"
+            />
+            {current?.name ?? selected}
+          </span>
+          <span className="text-sm font-medium">
+            {m.provider_routing_already_registered()}
+          </span>
+        </div>
+      )}
+      {loading ? (
+        <p className="text-xs text-muted-foreground">
+          {m.workbench_settings_loading()}
+        </p>
+      ) : options.length ? (
+        <div
+          className={`grid gap-2 md:grid-cols-2 xl:grid-cols-3 ${options.length > 6 ? "max-h-[26rem] overflow-y-auto pr-1" : ""}`}
+        >
+          {options.map((model) => (
+            <div
+              key={model.id}
+              className="flex min-w-0 items-center justify-between gap-2 rounded-lg border bg-[#1a1a1a] px-3 py-2"
+            >
+              <span className="flex min-w-0 items-center gap-2 truncate text-sm">
+                <ProviderIcon
+                  provider={model.provider}
+                  className="size-4 shrink-0"
+                />
+                <span className="truncate">{model.name}</span>
+                <span className="shrink-0 text-[10px] text-muted-foreground">
+                  {model.provider}
+                </span>
+              </span>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => onSelect(model.id)}
+              >
+                {m.provider_routing_register()}
+              </Button>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          {mDyn("ai_models_no_models_for_capability")}
+        </p>
+      )}
+    </section>
   );
 }
 
@@ -194,17 +342,23 @@ export function SystemOneConfiguration() {
       </label>
       <label className="grid gap-1 text-xs">
         {mDyn("ai_models_systemone_default_provider")}
-        <select
-          className="h-8 rounded-md border bg-background px-2 text-sm"
-          value={config.provider}
-          onChange={(event) => void save({ provider: event.target.value })}
-        >
-          {DECISION_PROVIDERS.map((item) => (
-            <option key={item.id} value={item.id}>
-              {mDyn(item.label)}
-            </option>
-          ))}
-        </select>
+        <div className="flex items-center gap-2">
+          <ProviderIcon
+            provider={config.provider}
+            className="size-4 shrink-0 text-muted-foreground"
+          />
+          <select
+            className="h-8 min-w-0 flex-1 rounded-md border bg-background px-2 text-sm"
+            value={config.provider}
+            onChange={(event) => void save({ provider: event.target.value })}
+          >
+            {DECISION_PROVIDERS.map((item) => (
+              <option key={item.id} value={item.id}>
+                {mDyn(item.label)}
+              </option>
+            ))}
+          </select>
+        </div>
       </label>
       <label className="grid gap-1 text-xs">
         {mDyn("ai_models_base_url")}
@@ -371,9 +525,22 @@ function DecisionModelsSection() {
     };
   }, [provider]);
 
+  const activeProvider = DECISION_PROVIDERS.find(
+    (item) => item.id === provider,
+  );
+  const readiness = !enabled
+    ? m.decision_models_readiness_no_guardrail()
+    : statusError
+      ? m.decision_models_readiness_unavailable()
+      : status?.ready
+        ? m.decision_models_readiness_ready()
+        : status?.configured
+          ? m.decision_models_readiness_unhealthy()
+          : m.decision_models_readiness_unconfigured();
+
   return (
     <section
-      className="space-y-3 rounded-lg border p-3"
+      className="space-y-3 rounded-lg border bg-[#1f1f1f] p-3"
       aria-label={mDyn("ai_models_decision_models")}
     >
       <div>
@@ -384,57 +551,61 @@ function DecisionModelsSection() {
           {mDyn("ai_models_decision_models_description")}
         </p>
       </div>
-      <label className="flex items-center gap-2 text-sm">
-        <input
-          type="checkbox"
-          checked={enabled}
-          onChange={(event) => setEnabled(event.target.checked)}
-        />
-        {mDyn("ai_models_enable_for_user")}
-      </label>
-      <label className="grid gap-1 text-xs">
-        {mDyn("ai_models_selected_provider")}
-        <select
-          className="h-8 rounded-md border bg-background px-2 text-sm"
-          value={provider}
-          onChange={(event) =>
-            setProvider(event.target.value as DecisionModelProvider)
-          }
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm text-muted-foreground">
+          {mDyn("ai_models_decision_models")}:{" "}
+          {enabled ? mDyn("ai_models_enabled") : mDyn("ai_models_disabled")}
+        </span>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => setEnabled(!enabled)}
         >
-          {DECISION_PROVIDERS.map((item) => (
-            <option key={item.id} value={item.id}>
-              {mDyn(item.label)}
-            </option>
-          ))}
-        </select>
-      </label>
+          {enabled
+            ? mDyn("ai_models_disable_decision_models")
+            : mDyn("ai_models_enable_decision_models")}
+        </Button>
+      </div>
+      <div className="flex items-center justify-between rounded-lg border bg-[#1a1a1a] px-3 py-2">
+        <span className="flex min-w-0 items-center gap-2 truncate text-sm">
+          <ProviderIcon provider={provider} className="size-4 shrink-0" />
+          {status?.model ||
+            (activeProvider ? mDyn(activeProvider.label) : provider)}
+        </span>
+        <span className="text-sm font-medium">
+          {m.provider_routing_already_registered()}
+        </span>
+      </div>
+      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+        {DECISION_PROVIDERS.filter((item) => item.id !== provider).map(
+          (item) => (
+            <div
+              key={item.id}
+              className="flex min-w-0 items-center justify-between gap-2 rounded-lg border bg-[#1a1a1a] px-3 py-2"
+            >
+              <span className="flex min-w-0 items-center gap-2 truncate text-sm">
+                <ProviderIcon provider={item.id} className="size-4 shrink-0" />
+                {mDyn(item.label)}
+              </span>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => setProvider(item.id)}
+              >
+                {m.provider_routing_register()}
+              </Button>
+            </div>
+          ),
+        )}
+      </div>
       <p role="status" className="text-xs text-muted-foreground">
-        {!enabled
-          ? m.decision_models_readiness_no_guardrail()
-          : statusError
-            ? m.decision_models_readiness_unavailable()
-            : status
-              ? status.ready
-                ? m.decision_models_readiness_ready()
-                : !status.configured
-                  ? m.decision_models_readiness_unconfigured()
-                  : status.credential_valid === false
-                    ? m.decision_models_readiness_no_credential()
-                    : !status.healthy
-                      ? m.decision_models_readiness_unhealthy()
-                      : m.decision_models_readiness_no_guardrail()
-              : m.decision_models_readiness_checking()}
+        {readiness}
       </p>
-      {status?.model && (
-        <p className="text-xs text-muted-foreground">
-          {mDyn("ai_models_configured_model", { model: status.model })}
-        </p>
-      )}
       <fieldset className="space-y-2">
         <legend className="text-xs font-medium">
           {mDyn("ai_models_allowed_surfaces")}
         </legend>
-        <div className="grid gap-2 sm:grid-cols-2">
+        <div className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
           {DECISION_SURFACES.map(([id, label]) => (
             <label key={id} className="flex items-center gap-2 text-xs">
               <input
@@ -449,16 +620,13 @@ function DecisionModelsSection() {
           ))}
         </div>
       </fieldset>
+      <SystemOneConfiguration />
     </section>
   );
 }
 
-/**
- * Dedicated AI configuration surface. Provider Routing remains focused on
- * transport/provider endpoints; capability defaults such as vision and audio
- * live here with the decision-model controls that will follow in this area.
- */
 export function TranscriptionSettings() {
+  const selectedModel = useSettingsStore((state) => state.selectedModel);
   const transcriptionMode = useSettingsStore(
     (state) => state.transcriptionMode,
   );
@@ -522,31 +690,70 @@ export function TranscriptionSettings() {
   };
   return (
     <section
-      className="space-y-2 rounded-lg border p-3"
+      className="space-y-3 rounded-lg border bg-[#1f1f1f] p-3"
       aria-label={mDyn("ai_models_transcription")}
     >
-      <h4 className="text-sm font-medium">
-        {mDyn("ai_models_audio_transcription")}
-      </h4>
-      <label className="grid gap-1 text-xs text-muted-foreground">
-        {mDyn("ai_models_transcription_mode_label")}
-        <select
-          aria-label={mDyn("ai_models_transcription_mode_label")}
-          className="h-9 rounded-md border bg-background px-2 text-sm text-foreground"
-          value={transcriptionMode}
-          onChange={(event) =>
-            setTranscriptionMode(event.target.value as "local" | "remote")
-          }
-        >
-          <option value="remote">
-            {mDyn("ai_models_transcription_remote")}
-          </option>
-          <option value="local">{mDyn("ai_models_transcription_local")}</option>
-        </select>
-      </label>
-      <p className="text-xs text-muted-foreground">
-        {mDyn("ai_models_transcription_description")}
-      </p>
+      <div>
+        <h4 className="text-sm font-medium">
+          {mDyn("ai_models_audio_transcription")}
+        </h4>
+        <p className="text-xs text-muted-foreground">
+          {mDyn("ai_models_transcription_description")}
+        </p>
+      </div>
+      <div className="flex items-center justify-between rounded-lg border bg-[#1a1a1a] px-3 py-2">
+        <span className="flex min-w-0 items-center gap-2 truncate text-sm">
+          <ProviderIcon
+            provider={
+              transcriptionMode === "local"
+                ? "whisper-local"
+                : providerFromModelId(selectedModel)
+            }
+            className="size-4 shrink-0"
+          />
+          {mDyn(
+            transcriptionMode === "local"
+              ? "ai_models_transcription_local"
+              : "ai_models_transcription_remote",
+          )}
+        </span>
+        <span className="text-sm font-medium">
+          {m.provider_routing_already_registered()}
+        </span>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {(["remote", "local"] as const)
+          .filter((mode) => mode !== transcriptionMode)
+          .map((mode) => (
+            <div
+              key={mode}
+              className="flex items-center justify-between gap-2 rounded-lg border bg-[#1a1a1a] px-3 py-2"
+            >
+              <span className="flex min-w-0 items-center gap-2 truncate text-sm">
+                <ProviderIcon
+                  provider={
+                    mode === "local"
+                      ? "whisper-local"
+                      : providerFromModelId(selectedModel)
+                  }
+                  className="size-4 shrink-0"
+                />
+                {mDyn(
+                  mode === "local"
+                    ? "ai_models_transcription_local"
+                    : "ai_models_transcription_remote",
+                )}
+              </span>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => setTranscriptionMode(mode)}
+              >
+                {m.provider_routing_register()}
+              </Button>
+            </div>
+          ))}
+      </div>
       {transcriptionMode === "local" && (
         <p role="status" className="text-xs text-muted-foreground">
           {!localReadiness
@@ -833,214 +1040,128 @@ export function LocalSpeechSettings() {
   );
 }
 
-const MEDIA_LIMIT_FIELDS = [
-  ["pdf_pages", "ai_models_media_limits_pdf_pages"],
-  ["video_frames", "ai_models_media_limits_video_frames"],
-  ["max_side", "ai_models_media_limits_max_side"],
-  ["quality", "ai_models_media_limits_quality"],
-  ["max_images", "ai_models_media_limits_max_images"],
-] as const;
-
-type MediaLimitName = (typeof MEDIA_LIMIT_FIELDS)[number][0];
-
-type MediaLimitsData = Record<
-  MediaLimitName,
-  { value: number; default: number; min: number; max: number }
->;
-
-function isMediaLimitsData(value: unknown): value is MediaLimitsData {
-  if (typeof value !== "object" || value === null) return false;
-  const record = value as Record<string, unknown>;
-  return MEDIA_LIMIT_FIELDS.every(([name]) => {
-    const item = record[name] as { value?: unknown } | undefined;
-    return typeof item?.value === "number";
-  });
-}
-
-/**
- * Limites das imagens geradas de PDF e vídeo: páginas, quadros, resolução,
- * qualidade e teto de imagens (`backend/services/media_limits.py`).
- */
-export function MediaLimitsSettings() {
-  const [data, setData] = useState<MediaLimitsData | null>(null);
-  const [unavailable, setUnavailable] = useState(false);
-  const [draft, setDraft] = useState<Record<string, string>>({});
-  const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
-  const [errorText, setErrorText] = useState("");
-
-  const apply = useCallback((value: MediaLimitsData) => {
-    setData(value);
-    setDraft(
-      Object.fromEntries(
-        MEDIA_LIMIT_FIELDS.map(([name]) => [name, String(value[name].value)]),
-      ),
-    );
-  }, []);
-
-  useEffect(() => {
-    let active = true;
-    void fetch("/admin/media-limits")
-      .then(async (response) => {
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const value: unknown = await response.json();
-        if (!isMediaLimitsData(value)) throw new Error("formato inesperado");
-        return value;
-      })
-      .then((value) => {
-        if (active) apply(value);
-      })
-      .catch(() => {
-        if (active) setUnavailable(true);
-      });
-    return () => {
-      active = false;
-    };
-  }, [apply]);
-
-  const save = async (): Promise<void> => {
-    if (!data) return;
-    const body: Record<string, number> = {};
-    for (const [name] of MEDIA_LIMIT_FIELDS) {
-      const next = Number(draft[name]);
-      if (Number.isFinite(next) && next !== data[name].value) body[name] = next;
-    }
-    const response = await fetch("/admin/media-limits", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    if (response.ok) {
-      const value: unknown = await response.json();
-      if (isMediaLimitsData(value)) apply(value);
-      setStatus("saved");
-      setErrorText("");
-      return;
-    }
-    let detail = `HTTP ${response.status}`;
-    try {
-      const payload = (await response.json()) as { detail?: string };
-      if (typeof payload.detail === "string") detail = payload.detail;
-    } catch {
-      /* mantém o status HTTP */
-    }
-    setStatus("error");
-    setErrorText(detail);
-  };
-
-  if (unavailable) {
-    return (
-      <section
-        className="space-y-2 rounded-lg border p-3"
-        aria-label={mDyn("ai_models_media_limits_title")}
-      >
-        <h4 className="text-sm font-medium">
-          {mDyn("ai_models_media_limits_title")}
-        </h4>
-        <p className="text-xs text-muted-foreground">
-          {mDyn("ai_models_media_limits_unavailable")}
-        </p>
-      </section>
-    );
-  }
-  if (!data) return null;
-
-  return (
-    <section
-      className="space-y-3 rounded-lg border p-3"
-      aria-label={mDyn("ai_models_media_limits_title")}
-    >
-      <div>
-        <h4 className="text-sm font-medium">
-          {mDyn("ai_models_media_limits_title")}
-        </h4>
-        <p className="text-xs text-muted-foreground">
-          {mDyn("ai_models_media_limits_description")}
-        </p>
-      </div>
-      {MEDIA_LIMIT_FIELDS.map(([name, labelKey]) => {
-        const limit = data[name];
-        return (
-          <label
-            key={name}
-            className="grid gap-1 text-xs text-muted-foreground"
-          >
-            {mDyn(labelKey)}
-            <input
-              type="number"
-              inputMode="numeric"
-              aria-label={mDyn(labelKey)}
-              className="h-9 rounded-md border bg-background px-2 text-sm text-foreground"
-              min={limit.min}
-              max={limit.max}
-              value={draft[name] ?? ""}
-              onChange={(event) =>
-                setDraft((current) => ({
-                  ...current,
-                  [name]: event.target.value,
-                }))
-              }
-            />
-            <span>
-              {mDyn("ai_models_media_limits_range")} {limit.min}–{limit.max},{" "}
-              {mDyn("ai_models_media_limits_default")} {limit.default}
-            </span>
-          </label>
-        );
-      })}
-      <button
-        type="button"
-        className="h-8 rounded-md border px-3 text-xs"
-        onClick={() => void save()}
-      >
-        {mDyn("ai_models_media_limits_save")}
-      </button>
-      {status === "saved" && (
-        <p role="status" className="text-xs text-muted-foreground">
-          {mDyn("ai_models_media_limits_saved")}
-        </p>
-      )}
-      {status === "error" && (
-        <p role="alert" className="text-xs text-destructive">
-          {mDyn("ai_models_media_limits_error")} {errorText}
-        </p>
-      )}
-    </section>
-  );
-}
-
 export function ChatModelSettings() {
   const selected = useSettingsStore((state) => state.selectedModel);
   const setSelected = useSettingsStore((state) => state.setSelectedModel);
+  const [dynamicModels, setDynamicModels] = useState<
+    Array<{ id: string; available?: boolean; provider?: string }>
+  >([]);
+  const [configuredProviders, setConfiguredProviders] = useState<
+    string[] | null
+  >(null);
+  useEffect(() => {
+    let alive = true;
+    void fetch("/models/providers")
+      .then((response) => (response.ok ? response.json() : null))
+      .then(
+        (
+          data: {
+            providers?: string[];
+            dynamic_models?: Array<{
+              id: string;
+              available?: boolean;
+              provider?: string;
+            }>;
+          } | null,
+        ) => {
+          if (alive) {
+            setConfiguredProviders(
+              Array.isArray(data?.providers) ? data.providers : null,
+            );
+            setDynamicModels(data?.dynamic_models ?? []);
+          }
+        },
+      )
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const allowedModels = getAllowedModels().filter(
+    (model) =>
+      model === selected ||
+      !configuredProviders ||
+      configuredProviders.length === 0 ||
+      configuredProviders.includes(getModelProvider(model)),
+  );
+  const models = [
+    ...new Set([
+      ...allowedModels,
+      ...dynamicModels
+        .filter((model) => model.available !== false || model.id === selected)
+        .map((model) => model.id),
+      selected,
+    ]),
+  ];
+  const registerable = models.filter((model) => model !== selected);
+  const providerFor = (modelId: string) =>
+    dynamicModels.find((model) => model.id === modelId)?.provider ??
+    providerFromModelId(modelId);
   return (
     <section
-      className="space-y-3 rounded-lg border p-3"
+      className="space-y-3 rounded-lg border bg-[#1f1f1f] p-3"
       aria-label={mDyn("ai_models_chat_primary")}
     >
-      <h4 className="text-sm font-medium">{mDyn("ai_models_chat_primary")}</h4>
-      <p className="text-xs text-muted-foreground">
-        {mDyn("ai_models_chat_primary_help")}
-      </p>
-      <ModelSelector value={selected} onChange={setSelected} />
+      <div>
+        <h4 className="text-sm font-medium">
+          {mDyn("ai_models_chat_primary")}
+        </h4>
+        <p className="text-xs text-muted-foreground">
+          {mDyn("ai_models_chat_primary_help")}
+        </p>
+      </div>
+      <div className="flex items-center justify-between rounded-lg border bg-[#1a1a1a] px-3 py-2">
+        <span className="flex min-w-0 items-center gap-2 truncate text-sm">
+          <ProviderIcon
+            provider={providerFor(selected)}
+            className="size-4 shrink-0"
+          />
+          {getModelDisplayName(selected)}
+        </span>
+        <span className="text-sm font-medium">
+          {m.provider_routing_already_registered()}
+        </span>
+      </div>
+      <div
+        className={`grid gap-2 md:grid-cols-2 xl:grid-cols-3 ${registerable.length > 6 ? "max-h-[26rem] overflow-y-auto pr-1" : ""}`}
+      >
+        {registerable.map((model) => (
+          <div
+            key={model}
+            className="flex min-w-0 items-center justify-between gap-2 rounded-lg border bg-[#1a1a1a] px-3 py-2"
+          >
+            <span className="flex min-w-0 items-center gap-2 truncate text-sm">
+              <ProviderIcon
+                provider={providerFor(model)}
+                className="size-4 shrink-0"
+              />
+              {getModelDisplayName(model)}
+            </span>
+            <Button type="button" size="sm" onClick={() => setSelected(model)}>
+              {m.provider_routing_register()}
+            </Button>
+          </div>
+        ))}
+      </div>
     </section>
   );
 }
 
 export function AiModelsTab() {
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div>
         <h3 className="text-sm font-medium text-foreground">
           {m.settings_category_ai_models()}
         </h3>
-        <p className="mt-1 text-xs leading-5 text-muted-foreground">
+        <p className="pt-1 text-xs leading-5 text-muted-foreground">
           {m.ai_models_description()}
         </p>
       </div>
       <ChatModelSettings />
       <DecisionModelsSection />
-      <SystemOneConfiguration />
       <section
-        className="space-y-3 rounded-lg border p-3"
+        className="space-y-3 rounded-lg border bg-[#1f1f1f] p-3"
         aria-label={mDyn("ai_models_vision_input")}
       >
         <h4 className="text-sm font-medium">
@@ -1048,24 +1169,11 @@ export function AiModelsTab() {
         </h4>
         <ImageFallbackModelSection />
       </section>
-      <MediaModelsSection />
-      <section
-        className="space-y-3 rounded-lg border p-3"
-        aria-label={mDyn("ai_models_embeddings_and_reranker")}
-      >
-        <div>
-          <h4 className="text-sm font-medium">
-            {mDyn("ai_models_embeddings_reranker_retrieval")}
-          </h4>
-          <p className="text-xs text-muted-foreground">
-            {mDyn("ai_models_embeddings_description")}
-          </p>
-        </div>
-        <RetrievalModelSettings />
+      <RetrievalModelSettings />
+      <section className="space-y-3 rounded-lg border bg-[#1f1f1f] p-3">
+        <TranscriptionSettings />
+        <LocalSpeechSettings />
       </section>
-      <TranscriptionSettings />
-      <LocalSpeechSettings />
-      <MediaLimitsSettings />
     </div>
   );
 }

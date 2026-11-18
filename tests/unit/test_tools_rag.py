@@ -1220,7 +1220,7 @@ class TestManageRetriever:
 
 
 # ---------------------------------------------------------------------------
-# _build_reranker — Cohere ↔ VoyageAI
+# _build_reranker — modelo canônico provider:model
 # ---------------------------------------------------------------------------
 
 
@@ -1229,8 +1229,17 @@ class TestBuildReranker:
         """Verifica o comportamento de cohere without key returns none."""
         from backend.tools.rag import _build_reranker
 
-        with patch("backend.tools.rag.settings") as ms:
-            ms.reranker_type = "cohere"
+        with (
+            patch("backend.tools.rag.settings") as ms,
+            patch(
+                "backend.tools.rag._rag_runtime",
+                return_value={
+                    "reranker_enabled": True,
+                    "rerank_model": "cohere:rerank-v4",
+                    "reranker_top_k": 5,
+                },
+            ),
+        ):
             ms.get_cohere_api_key.return_value = None
             assert _build_reranker() is None
 
@@ -1238,8 +1247,17 @@ class TestBuildReranker:
         """Verifica o comportamento de voyage without key returns none."""
         from backend.tools.rag import _build_reranker
 
-        with patch("backend.tools.rag.settings") as ms:
-            ms.reranker_type = "voyage"
+        with (
+            patch("backend.tools.rag.settings") as ms,
+            patch(
+                "backend.tools.rag._rag_runtime",
+                return_value={
+                    "reranker_enabled": True,
+                    "rerank_model": "voyage:rerank-2",
+                    "reranker_top_k": 5,
+                },
+            ),
+        ):
             ms.voyage_api_key = None
             assert _build_reranker() is None
 
@@ -1247,8 +1265,16 @@ class TestBuildReranker:
         """Verifica o comportamento de unknown type returns none."""
         from backend.tools.rag import _build_reranker
 
-        with patch("backend.tools.rag.settings") as ms:
-            ms.reranker_type = "qualquer-outro"
+        with (
+            patch("backend.tools.rag.settings"),
+            patch(
+                "backend.tools.rag._rag_runtime",
+                return_value={
+                    "reranker_enabled": True,
+                    "rerank_model": "desconhecido:modelo",
+                },
+            ),
+        ):
             assert _build_reranker() is None
 
     def test_cohere_client_construction_failure_returns_none(self):
@@ -1257,8 +1283,17 @@ class TestBuildReranker:
         propaga pro chamador de `_build_reranker`."""
         from backend.tools.rag import _build_reranker
 
-        with patch("backend.tools.rag.settings") as ms:
-            ms.reranker_type = "cohere"
+        with (
+            patch("backend.tools.rag.settings") as ms,
+            patch(
+                "backend.tools.rag._rag_runtime",
+                return_value={
+                    "reranker_enabled": True,
+                    "rerank_model": "cohere:rerank-v4",
+                    "reranker_top_k": 5,
+                },
+            ),
+        ):
             # get_cohere_api_key() devolve algo não-vazio (passa no guard de
             # _build_cohere_reranker), mas CohereClient valida de novo e
             # rejeita string vazia — simula um estado inconsistente real.
@@ -1270,8 +1305,17 @@ class TestBuildReranker:
         from backend.llm.voyage.rerank import VectoraVoyageRerank
         from backend.tools.rag import _build_reranker
 
-        with patch("backend.tools.rag.settings") as ms:
-            ms.reranker_type = "voyage"
+        with (
+            patch("backend.tools.rag.settings") as ms,
+            patch(
+                "backend.tools.rag._rag_runtime",
+                return_value={
+                    "reranker_enabled": True,
+                    "rerank_model": "voyage:rerank-2",
+                    "reranker_top_k": 5,
+                },
+            ),
+        ):
             ms.voyage_api_key = "voy-1"
             ms.voyage_rerank_model = "rerank-2"
             ms.reranker_top_k = 5
@@ -1299,27 +1343,30 @@ class TestBuildReranker:
             ms.get_cohere_api_key.return_value = "ck-1"
             assert _build_reranker() is None
 
-    def test_reranker_provider_pref_forces_voyage(self):
-        """Verifica o comportamento de reranker provider pref forces voyage."""
-        from backend.llm.voyage.rerank import VectoraVoyageRerank
+    def test_model_id_selects_provider_without_provider_preference(self):
         from backend.tools import rag as rag_mod
         from backend.tools.rag import _build_reranker
 
+        cohere_reranker = object()
         with (
-            patch("backend.tools.rag.settings") as ms,
+            patch("backend.tools.rag.settings"),
             patch.object(
                 rag_mod,
                 "_rag_runtime",
                 lambda: {
                     "reranker_enabled": True,
                     "reranker_top_k": 5,
-                    "rerank_provider": "voyage",
+                    "rerank_model": "cohere:rerank-v4",
                 },
             ),
+            patch.object(
+                rag_mod,
+                "_build_cohere_reranker",
+                return_value=cohere_reranker,
+            ) as build_cohere,
+            patch.object(rag_mod, "_build_voyage_reranker") as build_voyage,
         ):
-            ms.reranker_type = "cohere"  # mas a preferência força voyage
-            ms.voyage_api_key = "voy-1"
-            ms.voyage_rerank_model = "rerank-2"
-            ms.get_cohere_api_key.return_value = None
             out = _build_reranker()
-        assert isinstance(out, VectoraVoyageRerank)
+        assert out is cohere_reranker
+        build_cohere.assert_called_once_with("rerank-v4")
+        build_voyage.assert_not_called()

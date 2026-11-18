@@ -6556,6 +6556,120 @@
         "title": "NineRouterStatus",
         "type": "object"
       },
+      "OllamaConfigRequest": {
+        "properties": {
+          "api_key": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key"
+          },
+          "base_url": {
+            "title": "Base Url",
+            "type": "string"
+          },
+          "clear_api_key": {
+            "default": false,
+            "title": "Clear Api Key",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "base_url"
+        ],
+        "title": "OllamaConfigRequest",
+        "type": "object"
+      },
+      "OllamaConfigStatus": {
+        "properties": {
+          "api_key_configured": {
+            "title": "Api Key Configured",
+            "type": "boolean"
+          },
+          "api_key_masked": {
+            "title": "Api Key Masked",
+            "type": "string"
+          },
+          "base_url": {
+            "title": "Base Url",
+            "type": "string"
+          },
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "configured",
+          "base_url",
+          "api_key_configured",
+          "api_key_masked"
+        ],
+        "title": "OllamaConfigStatus",
+        "type": "object"
+      },
+      "OllamaConnectionTestRequest": {
+        "properties": {
+          "api_key": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key"
+          },
+          "base_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Url"
+          }
+        },
+        "title": "OllamaConnectionTestRequest",
+        "type": "object"
+      },
+      "OllamaConnectionTestResponse": {
+        "properties": {
+          "models": {
+            "items": {
+              "$ref": "#/components/schemas/OllamaModelInfo"
+            },
+            "title": "Models",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "empty",
+              "unreachable",
+              "auth_error",
+              "incompatible"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "OllamaConnectionTestResponse",
+        "type": "object"
+      },
       "OllamaDiscoveryResponse": {
         "properties": {
           "models": {
@@ -6637,6 +6751,22 @@
             ],
             "title": "Detail"
           },
+          "download_total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Download Total"
+          },
+          "downloaded": {
+            "default": 0,
+            "title": "Downloaded",
+            "type": "integer"
+          },
           "executable": {
             "anyOf": [
               {
@@ -6650,6 +6780,11 @@
           },
           "installed": {
             "title": "Installed",
+            "type": "boolean"
+          },
+          "managed": {
+            "default": false,
+            "title": "Managed",
             "type": "boolean"
           },
           "phase": {
@@ -7662,17 +7797,6 @@
             ],
             "title": "Embed Model"
           },
-          "embed_provider": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Embed Provider"
-          },
           "ingest_file_types": {
             "anyOf": [
               {
@@ -7697,17 +7821,6 @@
               }
             ],
             "title": "Rerank Model"
-          },
-          "rerank_provider": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Rerank Provider"
           },
           "reranker_enabled": {
             "anyOf": [
@@ -17427,6 +17540,68 @@
         "summary": "Metrics"
       }
     },
+    "/models/catalog": {
+      "get": {
+        "description": "Catálogo multi-provider com capabilities e proveniência da detecção.",
+        "operationId": "get_model_catalog_models_catalog_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "capability",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Capability"
+            }
+          },
+          {
+            "in": "query",
+            "name": "refresh",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Refresh",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Model Catalog Models Catalog Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Model Catalog",
+        "tags": [
+          "models"
+        ]
+      }
+    },
     "/models/providers": {
       "get": {
         "description": "Providers de LLM com credencial configurada + modelos dinâmicos.",
@@ -17768,24 +17943,6 @@
       "get": {
         "description": "Sonda somente o endpoint HTTP do DMR, sem executar comandos Docker.\n\nA UI Electron usa este contrato junto da detecção feita pela bridge nativa;\nassim o backend não precisa possuir nem iniciar o CLI Docker para atualizar\no estado do provider.",
         "operationId": "get_dmr_http_status_provider_routing_dmr_http_status_get",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "x-vectora-desktop-bridge",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Vectora-Desktop-Bridge"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "content": {
@@ -17798,16 +17955,6 @@
               }
             },
             "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
           }
         },
         "summary": "Get Dmr Http Status",
@@ -17818,26 +17965,8 @@
     },
     "/provider-routing/dmr/models": {
       "get": {
-        "description": "Lista modelos descobertos pelo contrato que o DMR anunciou.",
+        "description": "Lista modelos anunciados pelo endpoint HTTP do DMR.",
         "operationId": "list_dmr_models_provider_routing_dmr_models_get",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "x-vectora-desktop-bridge",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Vectora-Desktop-Bridge"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "content": {
@@ -17850,16 +17979,6 @@
               }
             },
             "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
           }
         },
         "summary": "List Dmr Models",
@@ -18472,26 +18591,18 @@
     },
     "/provider-routing/dmr/test": {
       "post": {
-        "description": "Executa a detecção de CLI e o probe HTTP sem alterar estado.",
+        "description": "Testa um endpoint HTTP sem exigir Docker CLI ou Electron.",
         "operationId": "test_dmr_connection_provider_routing_dmr_test_post",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "x-vectora-desktop-bridge",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Vectora-Desktop-Bridge"
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DmrConfigRequest"
+              }
             }
-          }
-        ],
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "content": {
@@ -19496,6 +19607,60 @@
         ]
       }
     },
+    "/provider-routing/llamacpp/runtime/cancel": {
+      "post": {
+        "description": "Solicita cancelamento cooperativo do download do runtime.",
+        "operationId": "cancel_llamacpp_install_provider_routing_llamacpp_runtime_cancel_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-vectora-desktop-bridge",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Vectora-Desktop-Bridge"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response Cancel Llamacpp Install Provider Routing Llamacpp Runtime Cancel Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Llamacpp Install",
+        "tags": [
+          "provider-routing"
+        ]
+      }
+    },
     "/provider-routing/llamacpp/runtime/cleanup": {
       "post": {
         "description": "Apaga somente versões inativas além da retenção solicitada.",
@@ -19615,6 +19780,73 @@
           }
         },
         "summary": "Rollback Llamacpp Runtime",
+        "tags": [
+          "provider-routing"
+        ]
+      }
+    },
+    "/provider-routing/llamacpp/runtime/start": {
+      "post": {
+        "description": "Restart the most recently confirmed, locally installed GGUF model.",
+        "operationId": "start_confirmed_llamacpp_runtime_provider_routing_llamacpp_runtime_start_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-vectora-desktop-bridge",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Vectora-Desktop-Bridge"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "title": "Response Start Confirmed Llamacpp Runtime Provider Routing Llamacpp Runtime Start Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Confirmed Llamacpp Runtime",
         "tags": [
           "provider-routing"
         ]
@@ -20058,6 +20290,84 @@
         ]
       }
     },
+    "/provider-routing/model-capabilities": {
+      "get": {
+        "description": "Descobre modelos e capacidades anunciados pelos providers configurados.",
+        "operationId": "get_model_capabilities_provider_routing_model_capabilities_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "provider",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Provider"
+            }
+          },
+          {
+            "in": "query",
+            "name": "capability",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Capability"
+            }
+          },
+          {
+            "in": "query",
+            "name": "refresh",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Refresh",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Model Capabilities Provider Routing Model Capabilities Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Model Capabilities",
+        "tags": [
+          "provider-routing"
+        ]
+      }
+    },
     "/provider-routing/nine-router/config": {
       "delete": {
         "description": "Executa a operação clear nine router config.",
@@ -20277,9 +20587,69 @@
         ]
       }
     },
+    "/provider-routing/ollama/config": {
+      "get": {
+        "operationId": "get_ollama_config_provider_routing_ollama_config_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OllamaConfigStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Ollama Config",
+        "tags": [
+          "provider-routing"
+        ]
+      },
+      "post": {
+        "operationId": "set_ollama_config_provider_routing_ollama_config_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OllamaConfigRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OllamaConfigStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Ollama Config",
+        "tags": [
+          "provider-routing"
+        ]
+      }
+    },
     "/provider-routing/ollama/models": {
       "get": {
-        "description": "Consulta {OLLAMA_BASE_URL}/api/tags. Host fora do ar → reachable=False,\nnunca deixa a exceção subir como 500 (é esperado o host estar desligado).",
+        "description": "Consulta o catálogo do Ollama sem propagar indisponibilidade como 500.",
         "operationId": "discover_ollama_models_provider_routing_ollama_models_get",
         "responses": {
           "200": {
@@ -20414,7 +20784,7 @@
     },
     "/provider-routing/ollama/runtime/install": {
       "post": {
-        "description": "Run the complete Ollama wizard under one cancellable deadline.",
+        "description": "Install the Ollama runtime without starting its server.",
         "operationId": "install_ollama_runtime_provider_routing_ollama_runtime_install_post",
         "parameters": [
           {
@@ -20462,6 +20832,56 @@
         ]
       }
     },
+    "/provider-routing/ollama/runtime/start": {
+      "post": {
+        "description": "Start an installed Ollama runtime without attempting installation.",
+        "operationId": "start_ollama_runtime_provider_routing_ollama_runtime_start_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-vectora-desktop-bridge",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Vectora-Desktop-Bridge"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OllamaRuntimeStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Ollama Runtime",
+        "tags": [
+          "provider-routing"
+        ]
+      }
+    },
     "/provider-routing/ollama/runtime/status": {
       "get": {
         "description": "Executa a operação ollama runtime status.",
@@ -20479,6 +20899,97 @@
           }
         },
         "summary": "Ollama Runtime Status",
+        "tags": [
+          "provider-routing"
+        ]
+      }
+    },
+    "/provider-routing/ollama/runtime/stop": {
+      "post": {
+        "description": "Stop only the Ollama server process owned by this Vectora instance.",
+        "operationId": "stop_ollama_runtime_provider_routing_ollama_runtime_stop_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-vectora-desktop-bridge",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Vectora-Desktop-Bridge"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OllamaRuntimeStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stop Ollama Runtime",
+        "tags": [
+          "provider-routing"
+        ]
+      }
+    },
+    "/provider-routing/ollama/test": {
+      "post": {
+        "operationId": "test_ollama_connection_provider_routing_ollama_test_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OllamaConnectionTestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OllamaConnectionTestResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Test Ollama Connection",
         "tags": [
           "provider-routing"
         ]

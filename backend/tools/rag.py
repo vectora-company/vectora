@@ -247,20 +247,19 @@ def _build_reranker(workspace_id: str = "default") -> Any:
     """Constrói somente o provider de rerank efetivamente selecionado.
 
     Honra os settings de runtime: ``reranker_enabled`` (off → None, sem rerank) e
-    ``rerank_provider`` ("auto" usa ``settings.reranker_type``). Uma falha não
-    troca de provider silenciosamente; o caller degrada para os resultados
+    o modelo canônico ``provider:model-id`` selecionado em IA Models. Uma falha
+    não troca de provider silenciosamente; o caller degrada para os resultados
     recuperados sem rerank.
     """
     rag = _rag_runtime()
     if not rag.get("reranker_enabled", True):
         return None
-    pref = str(rag.get("rerank_provider", "auto"))
-    model = str(rag.get("rerank_model") or "") or None
-    rtype = (
-        pref
-        if pref in ("cohere", "voyage", "openrouter", "llamacpp", "systemone")
-        else settings.reranker_type
-    )
+    selected_model = str(rag.get("rerank_model") or "")
+    if ":" not in selected_model:
+        return None
+    rtype, model = selected_model.split(":", 1)
+    if not rtype or not model:
+        return None
     if rtype == "systemone":
         return _build_systemone_reranker(workspace_id=workspace_id)
     if rtype == "openrouter":

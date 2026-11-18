@@ -439,8 +439,7 @@ class RuntimeSettings:
     def rag_settings(self) -> dict[str, object]:
         """Settings de RAG configuráveis em runtime (aba de memória).
 
-        Defaults espelham o comportamento atual: reranker ligado, top_k=5,
-        providers em "auto" (usa o padrão configurado), ingestão de todos os tipos.
+        Providers são inferidos do ID canônico do modelo selecionado.
         """
         val = self.get("rag_settings", {})
         data: dict[str, object] = (
@@ -452,13 +451,7 @@ class RuntimeSettings:
         return {
             "reranker_enabled": bool(data.get("reranker_enabled", True)),
             "reranker_top_k": top_k or 5,
-            "rerank_provider": str(data.get("rerank_provider", "auto")),
             "rerank_model": str(data.get("rerank_model", "")),
-            "embed_provider": str(data.get("embed_provider", "auto")),
-            # Nome do modelo de embedding quando embed_provider força ollama/
-            # openrouter — esses dois não têm um default sensato (ao contrário
-            # de Cohere/Voyage, que já têm modelo fixo em settings.py), então
-            # o usuário escolhe explicitamente (ver storage/factory.py).
             "embed_model": str(data.get("embed_model", "")),
             "ingest_file_types": (
                 [str(x) for x in raw_types] if isinstance(raw_types, list) else []

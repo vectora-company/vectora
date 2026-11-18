@@ -6,11 +6,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ChatModelSettings,
   LocalSpeechSettings,
-  MediaLimitsSettings,
   SystemOneConfiguration,
   TranscriptionSettings,
 } from "../ai-models-tab";
 import { useSettingsStore } from "@/lib/stores/settings-store";
+import { MediaLimitsSettings } from "../media-settings-tab";
 
 vi.mock("@/components/chat/model-selector", () => ({
   ModelSelector: ({
@@ -111,55 +111,33 @@ describe("SystemOneConfiguration", () => {
 });
 
 describe("TranscriptionSettings", () => {
-  it("persists local mode and offers explicit remote mode", async () => {
-    const fetchMock = vi.fn((input: RequestInfo | URL, _init?: RequestInit) => {
-      if (String(input).includes("TranscriptionReadiness")) {
-        return Promise.resolve({
-          ok: true,
-          json: async () => ({
-            dependency_available: true,
-            model_cached: false,
-            ready: false,
-          }),
-        });
-      }
-      return Promise.resolve({
-        ok: true,
-        json: async () => ({ transcriptionMode: "local" }),
-      });
+  it("registra o modo local e consulta a prontidão do runtime", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        dependency_available: true,
+        model_cached: false,
+        ready: false,
+      }),
     });
     vi.stubGlobal("fetch", fetchMock);
     useSettingsStore.setState({ transcriptionMode: "remote" });
     render(<TranscriptionSettings />);
 
-    const mode = screen.getByLabelText("Mode used for chat dictation");
-    fireEvent.change(mode, { target: { value: "local" } });
-    expect(mode).toHaveValue("local");
-    const readiness = await screen.findByRole("status");
+    fireEvent.click(screen.getByRole("button", { name: "Register" }));
     await waitFor(() =>
-      expect(readiness.textContent).toMatch(
-        /ai_models_transcription_model_download_required|The local runtime is installed; the base model will download on first use\./,
-      ),
+      expect(useSettingsStore.getState().transcriptionMode).toBe("local"),
     );
     await waitFor(() =>
       expect(
-        fetchMock.mock.calls.some(
-          ([input, init]) =>
-            !String(input).includes("TranscriptionReadiness") &&
-            init?.method === "PATCH",
+        fetchMock.mock.calls.some(([input]) =>
+          String(input).includes("TranscriptionReadiness"),
         ),
       ).toBe(true),
     );
-    const updateCall = fetchMock.mock.calls.find(
-      ([input]) => !String(input).includes("TranscriptionReadiness"),
+    expect(screen.getByRole("status").textContent).toMatch(
+      /download|required/i,
     );
-    expect(updateCall?.[1]).toMatchObject({
-      method: "PATCH",
-      body: JSON.stringify({ transcriptionMode: "local" }),
-    });
-    expect(
-      screen.getByRole("option", { name: "Configured remote provider" }),
-    ).toHaveValue("remote");
   });
 
   it("reports when the local transcription dependency is missing", async () => {
@@ -239,26 +217,27 @@ describe("TranscriptionSettings", () => {
 });
 
 describe("ChatModelSettings", () => {
-  it("persists the primary chat selection through the shared store", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue({ ok: true, json: async () => ({}) });
+  it("carrega os modelos dos providers e exibe o modelo principal registrado", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) =>
+      Promise.resolve({
+        ok: true,
+        json: async () =>
+          String(input) === "/models/providers"
+            ? {
+                providers: ["openrouter", "ollama"],
+                dynamic_models: [{ id: "ollama:qwen3", available: true }],
+              }
+            : {},
+      }),
+    );
     vi.stubGlobal("fetch", fetchMock);
     useSettingsStore.setState({ selectedModel: "openrouter:initial" });
     render(<ChatModelSettings />);
-    fireEvent.change(screen.getByLabelText("Test model"), {
-      target: { value: "ollama:qwen3" },
-    });
-    await waitFor(() =>
-      expect(fetchMock).toHaveBeenCalledWith(
-        "/settings/prefs",
-        expect.objectContaining({ method: "PATCH" }),
-      ),
-    );
-    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
-      selectedModel: "ollama:qwen3",
-    });
-    expect(useSettingsStore.getState().selectedModel).toBe("ollama:qwen3");
+    expect(
+      await screen.findByRole("region", { name: "Primary chat model" }),
+    ).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith("/models/providers");
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
   });
 });
 
@@ -422,7 +401,7 @@ describe("MediaLimitsSettings", () => {
     render(<MediaLimitsSettings />);
 
     const pages = await screen.findByLabelText(
-      /PDF pages per attachment|ai_models_media_limits_pdf_pages/,
+      /PDF pages per attachment|media_limits_pdf_pages/,
     );
     expect(pages).toHaveValue(20);
     expect(screen.getAllByRole("spinbutton")).toHaveLength(5);
@@ -436,11 +415,11 @@ describe("MediaLimitsSettings", () => {
     render(<MediaLimitsSettings />);
 
     const pages = await screen.findByLabelText(
-      /PDF pages per attachment|ai_models_media_limits_pdf_pages/,
+      /PDF pages per attachment|media_limits_pdf_pages/,
     );
     fireEvent.change(pages, { target: { value: "40" } });
     fireEvent.click(
-      screen.getByRole("button", { name: /Save|ai_models_media_limits_save/ }),
+      screen.getByRole("button", { name: /Save|media_limits_save/ }),
     );
 
     await waitFor(() =>
@@ -462,11 +441,11 @@ describe("MediaLimitsSettings", () => {
     render(<MediaLimitsSettings />);
 
     const pages = await screen.findByLabelText(
-      /PDF pages per attachment|ai_models_media_limits_pdf_pages/,
+      /PDF pages per attachment|media_limits_pdf_pages/,
     );
     fireEvent.change(pages, { target: { value: "900" } });
     fireEvent.click(
-      screen.getByRole("button", { name: /Save|ai_models_media_limits_save/ }),
+      screen.getByRole("button", { name: /Save|media_limits_save/ }),
     );
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
@@ -484,9 +463,7 @@ describe("MediaLimitsSettings", () => {
     render(<MediaLimitsSettings />);
 
     expect(
-      await screen.findByText(
-        /administrator|ai_models_media_limits_unavailable/,
-      ),
+      await screen.findByText(/administrator|media_limits_unavailable/),
     ).toBeInTheDocument();
   });
 });

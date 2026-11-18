@@ -1,4 +1,4 @@
-"""Informações de modelos LLM para o frontend (model selector).
+"""Catálogo de modelos e provedores configurados para o frontend.
 
 Endpoint (exige auth via middleware):
     GET /models/providers — providers de LLM com credencial configurada +
@@ -15,6 +15,29 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 router = APIRouter(prefix="/models", tags=["models"])
+
+
+@router.get("/catalog")
+async def get_model_catalog(
+    capability: str | None = None, refresh: bool = False
+) -> dict:
+    """Catálogo multi-provider com capabilities e proveniência da detecção."""
+    from backend.services.model_catalog import (
+        MODEL_CAPABILITIES,
+        invalidate_model_catalog,
+        list_model_catalog,
+    )
+
+    if refresh:
+        invalidate_model_catalog()
+    if capability and capability not in MODEL_CAPABILITIES:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=422, detail="Capability desconhecida")
+    models = await list_model_catalog()
+    if capability:
+        models = [item for item in models if capability in item["capabilities"]]
+    return {"capabilities": list(MODEL_CAPABILITIES), "models": models}
 
 
 @router.get("/providers")
