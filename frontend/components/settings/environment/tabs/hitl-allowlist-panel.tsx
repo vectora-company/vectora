@@ -147,7 +147,7 @@ export function HitlAllowlistPanel() {
       </label>
 
       {workspaceName && (
-        <p className="text-[11px] text-muted-foreground">{workspaceName}</p>
+        <p className="text-xs text-muted-foreground">{workspaceName}</p>
       )}
       {loading && (
         <div className="flex items-center gap-2 py-6 text-xs text-muted-foreground">
@@ -191,7 +191,7 @@ export function HitlAllowlistPanel() {
           ))}
         </div>
       )}
-      {notice && <p className="text-xs text-green-600">{notice}</p>}
+      {notice && <p className="text-xs text-success">{notice}</p>}
       <ConfirmDialog
         open={pendingRevoke !== null}
         title={m.hitl_allowlist_revoke_title()}

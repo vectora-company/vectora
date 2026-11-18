@@ -172,10 +172,7 @@ export function PluginsTab() {
                     <span className="text-sm font-medium truncate">
                       {s.name}
                     </span>
-                    <Badge
-                      variant="secondary"
-                      className="text-[10px] h-4 px-1.5"
-                    >
+                    <Badge variant="secondary" className="text-2xs h-4 px-1.5">
                       {s.transport}
                     </Badge>
                   </div>
@@ -196,7 +193,7 @@ export function PluginsTab() {
                     {v?.state === "loading" ? (
                       <Loader2 className="w-3 h-3 animate-spin" />
                     ) : v?.state === "ok" ? (
-                      <CheckCircle2 className="w-3 h-3 text-green-500" />
+                      <CheckCircle2 className="w-3 h-3 text-success" />
                     ) : v?.state === "error" ? (
                       <XCircle className="w-3 h-3 text-destructive" />
                     ) : (
@@ -215,7 +212,7 @@ export function PluginsTab() {
               </div>
               {v?.msg && (
                 <p
-                  className={`mt-2 text-xs px-2 py-1 rounded ${v.state === "ok" ? "bg-green-500/10 text-green-600 dark:text-green-400" : "bg-destructive/10 text-destructive"}`}
+                  className={`mt-2 text-xs px-2 py-1 rounded ${v.state === "ok" ? "bg-success/10 text-success " : "bg-destructive/10 text-destructive"}`}
                 >
                   {v.msg}
                 </p>
@@ -230,7 +227,7 @@ export function PluginsTab() {
         <div className="rounded-lg border bg-card/50 p-3 space-y-2">
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">
-              <label className="text-[10px] text-muted-foreground">
+              <label className="text-2xs text-muted-foreground">
                 {m.plugins_name()}
               </label>
               <Input
@@ -241,7 +238,7 @@ export function PluginsTab() {
               />
             </div>
             <div className="space-y-1">
-              <label className="text-[10px] text-muted-foreground">
+              <label className="text-2xs text-muted-foreground">
                 {m.plugins_transport()}
               </label>
               <Select
@@ -271,7 +268,7 @@ export function PluginsTab() {
           {form.transport === "stdio" ? (
             <>
               <div className="space-y-1">
-                <label className="text-[10px] text-muted-foreground">
+                <label className="text-2xs text-muted-foreground">
                   {m.plugins_command()}
                 </label>
                 <Input
@@ -285,7 +282,7 @@ export function PluginsTab() {
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-[10px] text-muted-foreground">
+                <label className="text-2xs text-muted-foreground">
                   {m.plugins_args()}
                 </label>
                 <textarea
@@ -298,7 +295,7 @@ export function PluginsTab() {
             </>
           ) : (
             <div className="space-y-1">
-              <label className="text-[10px] text-muted-foreground">
+              <label className="text-2xs text-muted-foreground">
                 {m.plugins_url()}
               </label>
               <Input

@@ -51,7 +51,7 @@ export function AboutPanel() {
 
       <div className="grid grid-cols-2 gap-2 max-w-xs">
         <div className="rounded-lg border bg-card p-2.5">
-          <p className="text-[10px] text-muted-foreground">
+          <p className="text-2xs text-muted-foreground">
             {m.about_panel_version_label()}
           </p>
           <p className="text-xs font-medium font-mono">
@@ -59,7 +59,7 @@ export function AboutPanel() {
           </p>
         </div>
         <div className="rounded-lg border bg-card p-2.5">
-          <p className="text-[10px] text-muted-foreground">
+          <p className="text-2xs text-muted-foreground">
             {m.about_panel_mode_label()}
           </p>
           <p className="text-xs font-medium">

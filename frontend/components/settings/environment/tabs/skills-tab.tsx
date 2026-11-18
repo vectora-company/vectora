@@ -108,10 +108,10 @@ export function SkillsTab({ onSkillsChange }: SkillsTabProps = {}) {
                     <div className="text-sm font-medium text-foreground truncate">
                       {s.name}
                     </div>
-                    <div className="text-[11px] text-muted-foreground truncate">
+                    <div className="text-xs text-muted-foreground truncate">
                       {s.description}
                     </div>
-                    <div className="text-[10px] text-muted-foreground font-mono truncate mt-0.5">
+                    <div className="text-2xs text-muted-foreground font-mono truncate mt-0.5">
                       {s.source}
                     </div>
                   </div>
@@ -126,7 +126,7 @@ export function SkillsTab({ onSkillsChange }: SkillsTabProps = {}) {
                       {v?.state === "loading" ? (
                         <Loader2 className="w-3 h-3 animate-spin" />
                       ) : v?.state === "ok" ? (
-                        <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                        <CheckCircle2 className="w-3 h-3 text-success" />
                       ) : v?.state === "error" ? (
                         <XCircle className="w-3 h-3 text-destructive" />
                       ) : (
@@ -145,8 +145,8 @@ export function SkillsTab({ onSkillsChange }: SkillsTabProps = {}) {
                 </div>
                 {v?.msg && (
                   <p
-                    className={`text-[11px] ${
-                      v.state === "ok" ? "text-emerald-500" : "text-destructive"
+                    className={`text-xs ${
+                      v.state === "ok" ? "text-success" : "text-destructive"
                     }`}
                   >
                     {v.msg}
