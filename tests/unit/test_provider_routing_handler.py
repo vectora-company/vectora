@@ -17,6 +17,7 @@ import asyncio
 import hashlib
 import json
 import os
+import tarfile
 import zipfile
 from collections.abc import Callable, Generator, Iterator
 from contextlib import contextmanager, suppress
@@ -547,6 +548,32 @@ class TestOllamaDiscovery:
         assert result.state == "running"
         assert result.phase == "ready"
         assert provider_routing._ollama_install_phase == "ready"
+
+    @pytest.mark.asyncio
+    async def test_ollama_missing_linux_runtime_uses_managed_release(
+        self, monkeypatch, tmp_path
+    ):
+        from backend.api.handlers import provider_routing
+
+        executable = tmp_path / "ollama"
+        executable.write_bytes(b"stub")
+        monkeypatch.setattr(provider_routing.platform, "system", lambda: "Linux")
+        monkeypatch.setattr(provider_routing.platform, "machine", lambda: "x86_64")
+        monkeypatch.setattr(provider_routing, "_ollama_executable", lambda: None)
+        installer = AsyncMock(return_value=executable)
+        monkeypatch.setattr(
+            provider_routing, "_install_ollama_native_release", installer
+        )
+
+        async def reachable():
+            return True, "0.1.0-test"
+
+        monkeypatch.setattr(provider_routing, "_ollama_http_status", reachable)
+        result = await provider_routing._install_ollama_runtime_impl(None)
+
+        installer.assert_awaited_once()
+        assert result.executable == str(executable)
+        assert result.state == "running"
 
     @pytest.mark.asyncio
     async def test_ollama_install_cancelled_phase_is_observable(self, monkeypatch):
@@ -1892,6 +1919,15 @@ class TestLlamaCppAndHuggingFace:
         )
         assert response.status_code == 400
 
+    def test_llamacpp_install_requires_checksum(self, client):
+        response = client.post(
+            "/provider-routing/llamacpp/install",
+            json={
+                "asset_url": "https://github.com/ggml-org/llama.cpp/releases/download/b1/llama.tar.gz"
+            },
+        )
+        assert response.status_code == 400
+
     def test_llamacpp_runtime_test_rejects_unknown_binary(self, client):
         """Verifica o comportamento de llamacpp runtime test rejects unknown binary."""
         response = client.post(
@@ -1929,6 +1965,74 @@ class TestLlamaCppAndHuggingFace:
         files = _extract_llamacpp_archive(archive, destination)
         assert (destination / "bin" / "llama-server.exe").read_bytes() == b"binary"
         assert files == [str(destination / "bin" / "llama-server.exe")]
+
+    @pytest.mark.parametrize(
+        ("system", "machine", "expected"),
+        [
+            ("Linux", "x86_64", "ollama-linux-amd64.tar.zst"),
+            ("Linux", "aarch64", "ollama-linux-arm64.tar.zst"),
+            ("Darwin", "arm64", "ollama-darwin.tgz"),
+            ("Windows", "AMD64", "OllamaSetup.exe"),
+            ("Darwin", "x86_64", None),
+            ("FreeBSD", "x86_64", None),
+        ],
+    )
+    def test_ollama_asset_matches_supported_platforms(self, system, machine, expected):
+        from backend.api.handlers.provider_routing import _ollama_asset_name
+
+        assert _ollama_asset_name(system, machine) == expected
+
+    def test_ollama_archive_extraction_rejects_path_traversal(self, tmp_path):
+        from backend.api.handlers.provider_routing import _extract_ollama_archive
+
+        archive = tmp_path / "ollama.tgz"
+        with tarfile.open(archive, "w:gz") as bundle:
+            member = tarfile.TarInfo("../escape")
+            member.size = 3
+            bundle.addfile(member, __import__("io").BytesIO(b"bad"))
+        with pytest.raises(ValueError, match="fora do diretório"):
+            _extract_ollama_archive(archive, tmp_path / "runtime")
+
+    def test_ollama_archive_extraction_handles_zstandard(self, tmp_path):
+        import io
+
+        import zstandard
+
+        from backend.api.handlers.provider_routing import _extract_ollama_archive
+
+        raw = io.BytesIO()
+        with tarfile.open(fileobj=raw, mode="w") as bundle:
+            content = b"#!/bin/sh\n"
+            member = tarfile.TarInfo("bin/ollama")
+            member.size = len(content)
+            member.mode = 0o755
+            bundle.addfile(member, io.BytesIO(content))
+        archive = tmp_path / "ollama.tar.zst"
+        archive.write_bytes(zstandard.ZstdCompressor().compress(raw.getvalue()))
+        destination = tmp_path / "runtime"
+        files = _extract_ollama_archive(archive, destination)
+
+        assert (destination / "bin" / "ollama").read_bytes() == b"#!/bin/sh\n"
+        assert (destination / "bin" / "ollama").stat().st_mode & 0o111
+        assert files == [str(destination / "bin" / "ollama")]
+
+    @pytest.mark.parametrize(
+        ("name", "system", "machine", "expected"),
+        [
+            ("llama-b12428-bin-ubuntu-x64.tar.gz", "Linux", "x86_64", True),
+            ("llama-b12428-bin-ubuntu-arm64.tar.gz", "Linux", "aarch64", True),
+            ("llama-b12428-bin-macos-arm64.tar.gz", "Darwin", "arm64", True),
+            ("llama-b12428-bin-macos-x64.tar.gz", "Darwin", "arm64", False),
+            ("llama-b12428-bin-ubuntu-cuda-12.8-x64.tar.gz", "Linux", "x86_64", False),
+            ("llama-b12428-bin-ubuntu-x64.tar.gz", "Windows", "AMD64", False),
+        ],
+    )
+    def test_llamacpp_recommends_only_supported_cpu_asset(
+        self, name, system, machine, expected
+    ):
+        from backend.api.handlers.provider_routing import _llamacpp_asset_recommended
+
+        assert _llamacpp_asset_recommended(name, system, machine) is expected
 
 
 class TestOpenRouterKey:

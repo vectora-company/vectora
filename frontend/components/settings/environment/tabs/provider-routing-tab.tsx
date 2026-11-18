@@ -52,6 +52,22 @@ interface OllamaRuntimeStatus {
   detail?: string | null;
 }
 
+async function responseError(
+  response: Response,
+  fallback: string,
+): Promise<string> {
+  const payload: unknown = await response.json().catch(() => null);
+  if (
+    payload &&
+    typeof payload === "object" &&
+    "detail" in payload &&
+    typeof payload.detail === "string"
+  ) {
+    return payload.detail;
+  }
+  return fallback;
+}
+
 interface RegisteredModel {
   id: string;
   tag: string;
@@ -200,8 +216,7 @@ async function installOllamaRuntime(): Promise<OllamaRuntimeStatus> {
     method: "POST",
   });
   if (!response.ok) {
-    const detail = await response.text();
-    throw new Error(detail || `Erro ${response.status}`);
+    throw new Error(await responseError(response, `Erro ${response.status}`));
   }
   return (await response.json()) as OllamaRuntimeStatus;
 }
@@ -244,7 +259,9 @@ async function installLlamaCppRuntime(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ asset_url: assetUrl, sha256 }),
   });
-  if (!res.ok) throw new Error(`Erro ${res.status}`);
+  if (!res.ok) {
+    throw new Error(await responseError(res, `Erro ${res.status}`));
+  }
 }
 
 async function fetchLlamaCppRuntimeStatus(): Promise<LlamaCppRuntimeStatus> {
@@ -2608,8 +2625,12 @@ function LlamaCppSection() {
       setInstalling(true);
       await installLlamaCppRuntime(preferred.url, preferred.sha256);
       setRuntime(await fetchLlamaCppRuntimeStatus());
-    } catch {
-      setError("Erro ao instalar o runtime oficial do llama.cpp");
+    } catch (installError) {
+      setError(
+        installError instanceof Error
+          ? installError.message
+          : "Erro ao instalar o runtime oficial do llama.cpp",
+      );
     } finally {
       setInstalling(false);
       setLoading(false);

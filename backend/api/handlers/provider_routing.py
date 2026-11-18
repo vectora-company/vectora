@@ -630,11 +630,14 @@ async def discover_ollama_models() -> OllamaDiscoveryResponse:
 
 
 def _ollama_executable() -> Path | None:
-    """Localiza o executável sem depender de um PATH específico do Windows."""
+    """Localiza Ollama externo ou o runtime gerenciado pelo Vectora."""
     candidates: list[Path] = []
     path_candidate = shutil.which("ollama")
     if path_candidate:
         candidates.append(Path(path_candidate).expanduser())
+    managed_root = settings.vectora_home / "tools" / "ollama" / "versions"
+    if managed_root.is_dir():
+        candidates.extend(sorted(managed_root.glob("*/**/ollama"), reverse=True))
     for variable, suffix in (
         ("LOCALAPPDATA", ("Programs", "Ollama", "ollama.exe")),
         ("PROGRAMFILES", ("Ollama", "ollama.exe")),
@@ -644,10 +647,240 @@ def _ollama_executable() -> Path | None:
             base = Path(raw_base).expanduser()
             if base.is_absolute():
                 candidates.append(base.joinpath(*suffix))
+    if platform.system() == "Darwin":
+        candidates.extend(
+            [
+                Path("/Applications/Ollama.app/Contents/Resources/ollama"),
+                Path.home() / "Applications/Ollama.app/Contents/Resources/ollama",
+            ]
+        )
     for candidate in candidates:
         if candidate.is_absolute() and candidate.is_file():
             return candidate.resolve()
     return None
+
+
+def _ollama_asset_name(system: str, machine: str) -> str | None:
+    """Resolve only official Ollama packages for supported OS/architectures."""
+    normalized_machine = machine.lower().replace("-", "_")
+    if system == "Windows" and normalized_machine in {"amd64", "x86_64"}:
+        return "OllamaSetup.exe"
+    if system == "Linux":
+        linux_arch = {
+            "amd64": "amd64",
+            "x86_64": "amd64",
+            "arm64": "arm64",
+            "aarch64": "arm64",
+        }.get(normalized_machine)
+        return f"ollama-linux-{linux_arch}.tar.zst" if linux_arch else None
+    # O suporte macOS do Vectora é restrito a Apple Silicon.
+    if system == "Darwin" and normalized_machine in {"arm64", "aarch64"}:
+        return "ollama-darwin.tgz"
+    return None
+
+
+def _extract_ollama_archive(archive: Path, destination_root: Path) -> list[str]:
+    """Extrai pacote oficial sem aceitar links ou caminhos fora do staging."""
+    import zstandard
+
+    destination_root.mkdir(parents=True, exist_ok=True)
+    root = destination_root.resolve()
+    extracted: list[str] = []
+    total_size = 0
+
+    def extract_members(bundle: tarfile.TarFile) -> None:
+        nonlocal total_size
+        for member in bundle:
+            if member.isdir():
+                continue
+            if not member.isfile():
+                raise ValueError("pacote Ollama contém entrada não suportada")
+            relative = Path(member.name)
+            if relative.is_absolute() or ".." in relative.parts:
+                raise ValueError("caminho do pacote Ollama fora do diretório permitido")
+            target = (root / relative).resolve()
+            if root not in target.parents:
+                raise ValueError("caminho do pacote Ollama fora do diretório permitido")
+            total_size += member.size
+            if total_size > 20 * 1024**3:
+                raise ValueError("pacote Ollama excede o limite de extração")
+            source = bundle.extractfile(member)
+            if source is None:
+                raise ValueError("arquivo inválido no pacote Ollama")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with source, target.open("wb") as output:
+                shutil.copyfileobj(source, output, length=1024 * 1024)
+            target.chmod(member.mode & 0o777)
+            extracted.append(str(target))
+
+    if archive.name.endswith(".tar.zst"):
+        with archive.open("rb") as compressed:
+            with zstandard.ZstdDecompressor().stream_reader(compressed) as reader:
+                with tarfile.open(fileobj=reader, mode="r|") as bundle:
+                    extract_members(bundle)
+    elif archive.name.endswith((".tgz", ".tar.gz")):
+        with tarfile.open(archive, mode="r:gz") as bundle:
+            extract_members(bundle)
+    else:
+        raise ValueError("formato de pacote Ollama não suportado")
+    return extracted
+
+
+async def _install_ollama_native_release() -> Path:
+    """Instala pacote Linux/macOS oficial no diretório privado do Vectora."""
+    system, machine = platform.system(), platform.machine()
+    asset_name = _ollama_asset_name(system, machine)
+    if asset_name is None or asset_name == "OllamaSetup.exe":
+        raise HTTPException(
+            status_code=501,
+            detail=f"instalação gerenciada do Ollama não é suportada em {system}/{machine}",
+        )
+    _set_ollama_install_phase("download")
+    tools_dir = settings.vectora_home / "tools" / "ollama"
+    staging_root = tools_dir / ".staging"
+    staging_root.mkdir(parents=True, exist_ok=True)
+    archive = staging_root / asset_name
+    partial = archive.with_suffix(archive.suffix + ".part")
+    stage = staging_root / f"runtime-{uuid.uuid4().hex}"
+    timeout = httpx.Timeout(connect=30, read=300, write=30, pool=30)
+    try:
+        async with asyncio.timeout(OLLAMA_DOWNLOAD_TIMEOUT_SECONDS):
+            async with httpx.AsyncClient(
+                follow_redirects=True, timeout=timeout
+            ) as client:
+                release = await client.get(
+                    "https://api.github.com/repos/ollama/ollama/releases/latest",
+                    headers={
+                        "Accept": "application/vnd.github+json",
+                        "User-Agent": "Vectora",
+                    },
+                )
+                release.raise_for_status()
+                release_payload = release.json()
+                tag = release_payload.get("tag_name")
+                asset = next(
+                    (
+                        item
+                        for item in release_payload.get("assets", [])
+                        if item.get("name") == asset_name
+                    ),
+                    None,
+                )
+                digest_value = asset.get("digest") if isinstance(asset, dict) else None
+                expected_digest = (
+                    digest_value.removeprefix("sha256:")
+                    if isinstance(digest_value, str)
+                    and digest_value.startswith("sha256:")
+                    else ""
+                )
+                if (
+                    not tag
+                    or not isinstance(asset, dict)
+                    or not re.fullmatch(r"[a-fA-F0-9]{64}", expected_digest)
+                ):
+                    raise ValueError(
+                        "release oficial não fornece pacote e SHA-256 verificável"
+                    )
+                url = str(asset.get("browser_download_url", ""))
+                parsed = urlparse(url)
+                if (
+                    parsed.hostname not in _GITHUB_RELEASE_HOSTS
+                    or Path(parsed.path).name != asset_name
+                ):
+                    raise ValueError(
+                        "URL do pacote Ollama não corresponde ao release oficial"
+                    )
+                expected_size = asset.get("size")
+                if (
+                    not isinstance(expected_size, int)
+                    or expected_size <= 0
+                    or expected_size > _MAX_DOWNLOAD_BYTES
+                ):
+                    raise ValueError("tamanho do pacote Ollama inválido")
+                hasher = hashlib.sha256()
+                downloaded = 0
+                partial.unlink(missing_ok=True)
+                async with client.stream("GET", url) as response:
+                    _validate_redirect_host(response, allowed=_GITHUB_RELEASE_HOSTS)
+                    response.raise_for_status()
+                    with partial.open("wb") as output:
+                        async for chunk in response.aiter_bytes(1024 * 1024):
+                            downloaded += len(chunk)
+                            if downloaded > expected_size:
+                                raise ValueError(
+                                    "pacote Ollama excedeu o tamanho publicado"
+                                )
+                            hasher.update(chunk)
+                            await asyncio.to_thread(output.write, chunk)
+                if downloaded != expected_size or not hmac.compare_digest(
+                    hasher.hexdigest(), expected_digest.lower()
+                ):
+                    raise ValueError("tamanho ou SHA-256 do pacote Ollama não confere")
+                _set_ollama_install_phase("install")
+                await asyncio.to_thread(_extract_ollama_archive, partial, stage)
+                executable = next(
+                    (
+                        Path(path)
+                        for path in stage.rglob("ollama")
+                        if Path(path).is_file() and Path(path).name == "ollama"
+                    ),
+                    None,
+                )
+                if executable is None:
+                    raise ValueError("pacote oficial não contém o executável ollama")
+                executable.chmod(executable.stat().st_mode | 0o111)
+                probe = await asyncio.create_subprocess_exec(
+                    str(executable),
+                    "--version",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                output, error = await asyncio.wait_for(probe.communicate(), timeout=30)
+                if probe.returncode != 0:
+                    raise ValueError((error or output).decode(errors="replace")[-500:])
+                version_root = tools_dir / "versions" / expected_digest[:16]
+                version_root.parent.mkdir(parents=True, exist_ok=True)
+                if version_root.exists():
+                    await asyncio.to_thread(shutil.rmtree, stage, True)
+                else:
+                    await asyncio.to_thread(stage.replace, version_root)
+                relative = executable.relative_to(stage)
+                managed_executable = version_root / relative
+                tools_dir.mkdir(parents=True, exist_ok=True)
+                (tools_dir / "release.json").write_text(
+                    json.dumps(
+                        {
+                            "tag": tag,
+                            "asset": asset_name,
+                            "sha256": expected_digest,
+                            "executable": str(managed_executable),
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                await asyncio.to_thread(partial.unlink, missing_ok=True)
+                return managed_executable
+    except asyncio.CancelledError:
+        await asyncio.to_thread(partial.unlink, missing_ok=True)
+        await asyncio.to_thread(shutil.rmtree, stage, True)
+        raise
+    except HTTPException:
+        await asyncio.to_thread(partial.unlink, missing_ok=True)
+        await asyncio.to_thread(shutil.rmtree, stage, True)
+        raise
+    except (
+        OSError,
+        ValueError,
+        TimeoutError,
+        httpx.HTTPError,
+        tarfile.TarError,
+    ) as exc:
+        await asyncio.to_thread(partial.unlink, missing_ok=True)
+        await asyncio.to_thread(shutil.rmtree, stage, True)
+        raise HTTPException(
+            status_code=502,
+            detail=f"não foi possível instalar Ollama: {str(exc)[:300]}",
+        ) from exc
 
 
 def _trusted_cli_executable(name: str) -> Path | None:
@@ -1104,13 +1337,15 @@ async def ollama_runtime_status() -> OllamaRuntimeStatus:
 async def _install_ollama_runtime_impl(_: ProviderAdmin) -> OllamaRuntimeStatus:
     """Instala e inicia Ollama sem exigir comandos manuais no terminal.
 
-    O instalador é executado pelo Vectora via winget, quando necessário. Depois
-    disso o processo ``ollama serve`` é iniciado com o diretório de modelos
-    configurado pelo usuário. O endpoint só retorna sucesso quando ``/api/version``
-    responde, evitando registrar um runtime que ainda não está utilizável.
+    Linux/macOS usam archives oficiais em diretório privado; Windows mantém
+    winget e o instalador oficial. O endpoint só retorna sucesso quando a API
+    local responde.
     """
     _set_ollama_install_phase("detect")
     executable = await asyncio.to_thread(_ollama_executable)
+    if executable is None:
+        if platform.system() != "Windows":
+            executable = await _install_ollama_native_release()
     if executable is None:
         # Um partial existente já representa uma instalação iniciada pelo
         # wizard. Não desperdice o deadline tentando winget novamente: retome
@@ -1120,7 +1355,7 @@ async def _install_ollama_runtime_impl(_: ProviderAdmin) -> OllamaRuntimeStatus:
             executable = await _install_ollama_from_official_release()
         else:
             executable = None
-    if executable is None:
+    if executable is None and platform.system() == "Windows":
         winget = await asyncio.to_thread(_trusted_cli_executable, "winget")
         if winget is None:
             raise HTTPException(
@@ -1161,9 +1396,13 @@ async def _install_ollama_runtime_impl(_: ProviderAdmin) -> OllamaRuntimeStatus:
                 executable = await _install_ollama_from_official_release()
         if executable is None:
             executable = await asyncio.to_thread(_ollama_executable)
-    if executable is None:
+    if executable is None and platform.system() == "Windows":
         raise HTTPException(
             status_code=502, detail="O instalador terminou sem localizar ollama.exe"
+        )
+    if executable is None:
+        raise HTTPException(
+            status_code=502, detail="O pacote oficial não forneceu ollama"
         )
 
     reachable, version = await _ollama_http_status()
@@ -1171,6 +1410,8 @@ async def _install_ollama_runtime_impl(_: ProviderAdmin) -> OllamaRuntimeStatus:
         _set_ollama_install_phase("start")
         env = os.environ.copy()
         env["OLLAMA_MODELS"] = str(settings.vectora_home / "models" / "ollama")
+        env["OLLAMA_HOST"] = "127.0.0.1:11434"
+        Path(env["OLLAMA_MODELS"]).mkdir(parents=True, exist_ok=True)
         server_process = await asyncio.create_subprocess_exec(
             str(executable),
             "serve",
@@ -3226,38 +3467,20 @@ async def list_llamacpp_releases() -> dict[str, list[dict[str, object]]]:
         raise HTTPException(status_code=502, detail="GitHub indisponível") from exc
     import platform
 
-    system = platform.system().lower()
-    machine = platform.machine().lower()
-    os_patterns = {
-        "windows": ("win",),
-        "darwin": ("mac", "osx", "darwin"),
-        "linux": ("ubuntu", "linux"),
-    }
-    os_tokens = os_patterns.get(system, ())
-    arch_tokens = (
-        ("arm64", "aarch64")
-        if "arm" in machine or "aarch64" in machine
-        else ("x64", "x86_64", "amd64")
-    )
-
     def asset_payload(asset: dict[str, object]) -> dict[str, object]:
         """Executa a operação asset payload."""
         name = str(asset.get("name", ""))
         lowered = name.lower()
+        digest = str(asset.get("digest", "")).removeprefix("sha256:")
         recommended = bool(
-            os_tokens
-            and any(token in lowered for token in os_tokens)
-            and any(token in lowered for token in arch_tokens)
-            and not any(
-                token in lowered
-                for token in ("cuda", "vulkan", "rocm", "hip", "sycl", "opencl")
-            )
+            _llamacpp_asset_recommended(name, platform.system(), platform.machine())
+            and re.fullmatch(r"[0-9a-fA-F]{64}", digest)
         )
         return {
             "name": name,
             "url": asset.get("browser_download_url", ""),
             "size": asset.get("size", 0),
-            "sha256": str(asset.get("digest", "")).removeprefix("sha256:"),
+            "sha256": digest,
             "recommended": recommended,
         }
 
@@ -3278,6 +3501,41 @@ async def list_llamacpp_releases() -> dict[str, list[dict[str, object]]]:
             if isinstance(item, dict) and not item.get("draft")
         ]
     }
+
+
+def _llamacpp_asset_recommended(name: str, system: str, machine: str) -> bool:
+    """Recomenda apenas o bundle CPU oficial para o SO e arquitetura atuais."""
+    lowered = name.lower()
+    normalized_machine = machine.lower().replace("-", "_")
+    accelerated = any(
+        token in lowered
+        for token in (
+            "cuda",
+            "vulkan",
+            "rocm",
+            "hip",
+            "sycl",
+            "opencl",
+            "openvino",
+            "zdnn",
+            "snapdragon",
+        )
+    )
+    arm = normalized_machine in {"arm64", "aarch64"}
+    x64 = normalized_machine in {"x86_64", "amd64"}
+    architecture = "arm" if arm else "x64" if x64 else "unsupported"
+    target_tokens = {
+        ("Darwin", "arm"): ("bin-macos-arm64",),
+        ("Linux", "arm"): ("bin-ubuntu-arm64",),
+        ("Linux", "x64"): ("bin-ubuntu-x64",),
+        ("Windows", "arm"): ("bin-win", "arm64"),
+        ("Windows", "x64"): ("bin-win", "x64"),
+    }.get((system, architecture))
+    return bool(
+        not accelerated
+        and target_tokens
+        and all(token in lowered for token in target_tokens)
+    )
 
 
 @router.post("/llamacpp/install", dependencies=[DesktopBridge])
@@ -3301,7 +3559,7 @@ async def install_llamacpp_runtime(
         )
     if not parsed.path.startswith("/ggml-org/llama.cpp/releases/download/"):
         raise HTTPException(status_code=400, detail="release do llama.cpp inválida")
-    if body.sha256 and not re.fullmatch(r"[0-9a-fA-F]{64}", body.sha256):
+    if not body.sha256 or not re.fullmatch(r"[0-9a-fA-F]{64}", body.sha256):
         raise HTTPException(status_code=400, detail="sha256 inválido")
     from backend.services.llamacpp_sidecar import llamacpp_status
 
