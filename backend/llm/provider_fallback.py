@@ -1,11 +1,8 @@
-"""Fallback automático entre providers de LLM ao esgotar quota.
+"""Detecção e classificação de erros dos providers de IA.
 
-Quando um provider devolve 429/quota, ``try_with_fallback`` percorre a cadeia
-configurada (``llm_fallback_order`` em settings.json), pulando o provider atual
-e os sem API key. Cada troca é registrada (ContextVar) para o handler de chat
-drenar e notificar o frontend, e propagada via callback ``on_switch``.
-
-Defensivo: erros que NÃO são de quota propagam imediatamente (sem fallback).
+O fallback genérico de chat foi removido. O módulo mantém classificadores e
+contratos usados por adapters específicos de capability, que reportam as
+trocas quando seu próprio contrato permitir.
 """
 
 from __future__ import annotations
@@ -57,7 +54,7 @@ _MULTIMODAL_INCOMPATIBLE_MARKERS = (
 
 
 class QuotaExhaustedError(Exception):
-    """Todos os providers da cadeia esgotaram a quota."""
+    """A quota do modelo selecionado foi esgotada."""
 
     def __init__(
         self,
@@ -144,10 +141,6 @@ def is_media_rejection_error(exc: BaseException) -> bool:
     )
 
 
-def _provider_of(model_id: str) -> str:
-    return model_id.split(":", 1)[0]
-
-
 def _provider_has_key(provider: str) -> bool:
     """True se o provider tem credencial configurada (ollama é sempre local).
 
@@ -183,47 +176,18 @@ def _provider_has_key(provider: str) -> bool:
     return bool(keymap.get(provider))
 
 
-def _fallback_order() -> list[str]:
-    """Ordem de fallback configurada pelo usuário (lista de 'provider:model')."""
-    from backend.workspace.runtime_settings import runtime_settings
+def get_fallback_chain(current_model_id: str) -> list[str]:
+    """A cadeia genérica de fallback de chat foi removida.
 
-    order = runtime_settings.get("llm_fallback_order", []) or []
-    return [str(x) for x in order] if isinstance(order, list) else []
-
-
-def _default_fallback_chain(current_provider: str) -> list[str]:
-    """Retorna a cadeia vazia quando fallback não foi configurado.
-
-    Fallback é uma decisão explícita do usuário: uma lista vazia não autoriza
-    o agente a trocar de provider por conta própria, mesmo que outras chaves
-    estejam presentes no ambiente.
+    Mantém o contrato interno para os adapters que ainda compartilham os
+    detectores de erro, mas nunca troca de modelo de forma global ou silenciosa.
     """
-    _ = current_provider
+    _ = current_model_id
     return []
 
 
-def get_fallback_chain(current_model_id: str) -> list[str]:
-    """Cadeia ordenada de modelos a tentar após o atual esgotar.
-
-    Remove o provider atual (mesma quota) e os providers sem API key. Sem
-    configuração explícita, retorna uma cadeia vazia.
-    """
-    configured = _fallback_order()
-    if not configured:
-        return []
-
-    chain: list[str] = []
-    for mid in configured:
-        # Catalog/runtime IDs use hyphens while the credential key map uses
-        # underscores (for example ``google-genai`` and ``nine-router``).
-        prov = _provider_of(mid).replace("-", "_")
-        current_prov = _provider_of(current_model_id).replace("-", "_")
-        if prov == current_prov:
-            continue
-        if not _provider_has_key(prov):
-            continue
-        chain.append(mid)
-    return chain
+def _provider_of(model_id: str) -> str:
+    return model_id.split(":", 1)[0]
 
 
 # ---------------------------------------------------------------------------
@@ -252,9 +216,7 @@ def drain_switches() -> list[dict[str, str]]:
 
 async def emit_model_switch_event(from_model: str, to_model: str) -> None:
     """Registra a troca de embeddings/rerank na mesma fila (``record_switch``/
-    ``drain_switches``) que o fallback de chat usa — o handler de chat drena
-    e notifica o frontend independente de qual camada (chat/embeddings/
-    rerank) gerou a troca.
+    ``drain_switches``); o handler de chat drena a fila e notifica o frontend.
     """
     record_switch(from_model, to_model)
 
@@ -265,36 +227,14 @@ async def try_with_fallback(  # noqa: UP047
     *,
     on_switch: Callable[[str, str], Any] | None = None,
 ) -> T:
-    """Executa ``fn(model_id)``; em quota error percorre a cadeia de fallback.
-
-    Erros não-quota propagam de imediato. Esgotada a cadeia → QuotaExhaustedError.
-    """
+    """Executa somente o modelo selecionado e preserva erro de quota tipado."""
     try:
         return await fn(model_id)
     except Exception as exc:
         if not is_quota_error(exc):
             raise
-        last_exc: BaseException = exc
-        current = model_id
-
-    for next_mid in get_fallback_chain(model_id):
-        record_switch(current, next_mid)
-        if on_switch is not None:
-            try:
-                on_switch(current, next_mid)
-            except Exception:
-                logger.debug("provider_fallback: on_switch falhou", exc_info=True)
-        logger.warning(
-            "provider_fallback: quota esgotada em %s → tentando %s", current, next_mid
-        )
-        try:
-            return await fn(next_mid)
-        except Exception as exc2:
-            last_exc = exc2
-            current = next_mid
-
-    raise QuotaExhaustedError(
-        f"Todos os providers esgotaram a quota (último: {current}).",
-        model_id=current,
-        provider=_provider_of(current),
-    ) from last_exc
+        raise QuotaExhaustedError(
+            f"A quota do modelo selecionado ({model_id}) foi esgotada.",
+            model_id=model_id,
+            provider=_provider_of(model_id),
+        ) from exc

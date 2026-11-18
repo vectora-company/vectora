@@ -118,38 +118,19 @@ async def test_completion_google_model_id_inexistente_real_levanta_erro():
 
 
 # ---------------------------------------------------------------------------
-# Fallback Google → Cohere real (backend/llm/provider_fallback.py)
+# Contrato de quota real (backend/llm/provider_fallback.py)
 # ---------------------------------------------------------------------------
 
 
 @requires_google
-@requires_cohere
-async def test_fallback_google_para_cohere_real(monkeypatch: pytest.MonkeyPatch):
-    from backend.llm import provider_fallback
-
-    monkeypatch.setenv("GOOGLE_API_KEY", "invalid-key-forced-for-live-test")
-    monkeypatch.setattr(provider_fallback, "is_quota_error", lambda exc: True)
-    monkeypatch.setattr(provider_fallback, "_fallback_order", list)
-
-    async def _call(model_id: str):
-        model = load_native_llm(model_id)
-        return await model.agenerate(
-            [text_message(MessageRole.USER, "Responda só com a palavra OK.")]
-        )
-
-    result = await provider_fallback.try_with_fallback(_call, _GOOGLE_MODEL_ID)
-    assert result.text().strip()
-
-
-@requires_google
-async def test_fallback_sem_cohere_configurado_propaga_quota_exhausted(
+async def test_quota_exhausted_is_wrapped_without_switching_provider(
     monkeypatch: pytest.MonkeyPatch,
 ):
     from backend.llm import provider_fallback
 
     monkeypatch.setenv("GOOGLE_API_KEY", "invalid-key-forced-for-live-test")
     monkeypatch.setattr(provider_fallback, "is_quota_error", lambda exc: True)
-    monkeypatch.setattr(provider_fallback, "_fallback_order", list)
+    monkeypatch.setattr(provider_fallback, "get_fallback_chain", lambda _: [])
     monkeypatch.setattr(provider_fallback, "_provider_has_key", lambda provider: False)
 
     async def _call(model_id: str):

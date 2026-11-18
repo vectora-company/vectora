@@ -31,7 +31,7 @@ async def _get_db() -> Any:
 
 async def _embed_texts(texts: list[str]) -> list[list[float]]:
     """Embeda lista de textos em batches via `_build_lc_embeddings()` — mesmo
-    fallback multi-provider (Cohere↔Voyage↔Ollama↔OpenRouter) do resto do RAG,
+    provider configurado entre Cohere, Voyage, Ollama e OpenRouter do resto do RAG,
     em vez de Cohere hardcoded."""
     from backend.storage.factory import _build_lc_embeddings
 

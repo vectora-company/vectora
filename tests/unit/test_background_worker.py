@@ -273,9 +273,10 @@ class TestGenerateEmbedding:
         monkeypatch.setattr(_storage_factory, "_build_lc_embeddings", _FakeEmb)
 
         worker = BackgroundEmbeddingWorker()
-        vetor = await worker._generate_embedding("conteúdo")
+        vetor, identity = await worker._generate_embedding("conteúdo")
 
         assert vetor == [0.1, 0.2, 0.3]
+        assert identity == "unknown:unknown"
 
     @pytest.mark.asyncio
     async def test_sem_provider_configurado_levanta_value_error(

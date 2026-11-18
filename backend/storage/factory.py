@@ -45,6 +45,28 @@ _vector_stores: dict[str, Any] = {}  # collection → lancedb.AsyncTable (raw)
 _optimize_tasks: dict[str, Any] = {}  # collection → asyncio.Task (schedule_optimize)
 _vector_store_backend: Any = None  # VectorStoreBackend nativo — 1 por processo
 
+
+class _ConfiguredEmbeddings:
+    """Adapter que associa provider/modelo à implementação de embeddings."""
+
+    def __init__(self, inner: Any, provider: str, model: str) -> None:
+        self.inner = inner
+        self.vectora_provider = provider
+        self.vectora_model = model
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return self.inner.embed_documents(texts)
+
+    def embed_query(self, text: str) -> list[float]:
+        return self.inner.embed_query(text)
+
+    async def aembed_documents(self, texts: list[str]) -> list[list[float]]:
+        return await self.inner.aembed_documents(texts)
+
+    async def aembed_query(self, text: str) -> list[float]:
+        return await self.inner.aembed_query(text)
+
+
 # ---------------------------------------------------------------------------
 # Store (memórias/skills — wrap do build_store existente)
 # ---------------------------------------------------------------------------
@@ -60,8 +82,8 @@ async def get_store(embedding_model: str | None = None) -> StoreBackend:
     conversa nativo).
 
     Returns:
-        ``VectoraStore`` com índice de embeddings opcional (fallback
-        Cohere↔Voyage↔Ollama↔OpenRouter), já inicializado (``setup()``
+        ``VectoraStore`` com índice de embeddings opcional (provider escolhido
+        entre Cohere, Voyage, Ollama e OpenRouter), já inicializado (``setup()``
         chamado).
     """
     global _store
@@ -174,7 +196,7 @@ async def get_vector_store(
     return table
 
 
-def _build_cohere_embeddings() -> Any:
+def _build_cohere_embeddings(model_override: str | None = None) -> Any:
     """``VectoraCohereEmbeddings`` (nativo) se a key Cohere estiver configurada."""
     try:
         from backend.llm.cohere.client import CohereClient
@@ -182,16 +204,61 @@ def _build_cohere_embeddings() -> Any:
         from backend.settings import settings as _s
 
         key = _s.get_cohere_api_key()
-        model = _s.embedding_model
+        model = model_override or _s.embedding_model
         if not key or not model:
             return None
 
-        return VectoraCohereEmbeddings(model=model, client=CohereClient(key))
+        embeddings = VectoraCohereEmbeddings(model=model, client=CohereClient(key))
+        return _ConfiguredEmbeddings(embeddings, "cohere", model)
     except Exception:
         return None
 
 
-def _build_voyage_embeddings() -> Any:
+def _build_openai_embeddings(model_override: str | None = None) -> Any:
+    """Embeddings via a credencial OpenAI já usada pelo provider de chat."""
+    try:
+        from backend.llm.openai.client import OpenAIClient
+        from backend.llm.openai.embeddings import VectoraOpenAIEmbeddings
+        from backend.settings import settings as _s
+
+        model = model_override or _s.openai_embedding_model
+        if not _s.openai_api_key or not model:
+            return None
+        return _ConfiguredEmbeddings(
+            VectoraOpenAIEmbeddings(model, OpenAIClient(_s.openai_api_key)),
+            "openai",
+            model,
+        )
+    except Exception:
+        logger.warning(
+            "storage/factory: falha ao montar embeddings OpenAI", exc_info=True
+        )
+        return None
+
+
+def _build_google_embeddings(model_override: str | None = None) -> Any:
+    """Embeddings via Gemini, diferenciando consultas e documentos."""
+    try:
+        from backend.llm.google.client import GoogleGenAIClient
+        from backend.llm.google.embeddings import VectoraGoogleEmbeddings
+        from backend.settings import settings as _s
+
+        model = model_override or _s.google_embedding_model
+        if not _s.google_api_key or not model:
+            return None
+        return _ConfiguredEmbeddings(
+            VectoraGoogleEmbeddings(model, GoogleGenAIClient(_s.google_api_key)),
+            "google-genai",
+            model,
+        )
+    except Exception:
+        logger.warning(
+            "storage/factory: falha ao montar embeddings Google", exc_info=True
+        )
+        return None
+
+
+def _build_voyage_embeddings(model_override: str | None = None) -> Any:
     """``VectoraVoyageEmbeddings`` (nativo) se a key VoyageAI estiver configurada."""
     try:
         from backend.llm.voyage.client import VoyageClient
@@ -199,11 +266,12 @@ def _build_voyage_embeddings() -> Any:
         from backend.settings import settings as _s
 
         key = _s.voyage_api_key
-        model = _s.voyage_embedding_model
+        model = model_override or _s.voyage_embedding_model
         if not key or not model:
             return None
 
-        return VectoraVoyageEmbeddings(model=model, client=VoyageClient(key))
+        embeddings = VectoraVoyageEmbeddings(model=model, client=VoyageClient(key))
+        return _ConfiguredEmbeddings(embeddings, "voyage", model)
     except Exception:
         return None
 
@@ -221,12 +289,13 @@ def _build_ollama_embeddings(model_override: str | None = None) -> Any:
         if not model:
             return None
 
-        return OllamaEmbeddings(
+        embeddings = OllamaEmbeddings(
             model=model,
             client=OllamaClient(
                 base_url=_s.ollama_base_url or "http://127.0.0.1:11434"
             ),
         )
+        return _ConfiguredEmbeddings(embeddings, "ollama", model)
     except Exception:
         return None
 
@@ -246,16 +315,57 @@ def _build_openrouter_embeddings(model_override: str | None = None) -> Any:
         if not key or not model:
             return None
 
-        return OpenRouterEmbeddings(
+        embeddings = OpenRouterEmbeddings(
             model=model,
             client=OpenRouterClient(api_key=key),
         )
+        return _ConfiguredEmbeddings(embeddings, "openrouter", model)
     except Exception:
         return None
 
 
+def _build_llamacpp_embeddings(model_override: str | None = None) -> Any:
+    """Usa o endpoint OpenAI-compatible de embeddings do llama.cpp."""
+    try:
+        from backend.llm.openai.client import OpenAIClient
+        from backend.llm.openai.embeddings import VectoraOpenAIEmbeddings
+        from backend.settings import settings as _s
+
+        model = model_override
+        base_url = _s.llamacpp_base_url
+        if not base_url or not model:
+            return None
+        base_url = base_url.rstrip("/")
+        if not base_url.endswith("/v1"):
+            base_url += "/v1"
+        client = OpenAIClient(_s.llamacpp_api_key or "local", base_url=base_url)
+        return _ConfiguredEmbeddings(
+            VectoraOpenAIEmbeddings(model, client), "llamacpp", model
+        )
+    except Exception:
+        logger.warning(
+            "storage/factory: falha ao montar embeddings llama.cpp", exc_info=True
+        )
+        return None
+
+
+def _build_openai_compatible_embeddings(
+    provider: str, base_url: str | None, api_key: str, model: str | None
+) -> Any:
+    """Adapter de embeddings OpenAI-compatible para routers/runtime locais."""
+    if not base_url or not model:
+        return None
+    from backend.llm.openai.client import OpenAIClient
+    from backend.llm.openai.embeddings import VectoraOpenAIEmbeddings
+
+    client = OpenAIClient(api_key or "local", base_url=base_url.rstrip("/"))
+    return _ConfiguredEmbeddings(
+        VectoraOpenAIEmbeddings(model, client), provider, model
+    )
+
+
 def _build_lc_embeddings() -> Any:
-    """Embeddings com preferência configurável + fallback Cohere↔Voyage↔local.
+    """Constrói o provider/modelo de embedding explicitamente selecionado.
 
     Ordem de resolução:
     1. ``rag_settings.embed_provider`` em runtime (aba de memória do
@@ -265,12 +375,10 @@ def _build_lc_embeddings() -> Any:
     2. ``settings.embedding_provider`` (env var ``EMBEDDING_PROVIDER``),
        se "auto"/vazio em runtime — respeita a escolha estática de quem não
        usa a UI (VPS/CLI).
-    3. Cohere + Voyage juntos → ``FallbackEmbeddings`` (troca automática em
-       quota esgotada, em runtime).
-    4. Só um dos dois → esse.
-    5. Nenhum dos dois → Ollama, depois OpenRouter (embeddings locais/gateway,
-       sem custo de API hospedada — mas sem rerank: Cohere/Voyage-only).
-    6. Nada configurado → None (modo sem embeddings).
+    3. Em modo auto, seleciona o primeiro provider configurado na ordem
+       Cohere, Voyage, OpenAI, Google, Ollama e OpenRouter. Falhas em execução
+       não trocam silenciosamente provider/modelo.
+    4. Nada configurado → None (modo sem embeddings).
     """
     from backend.settings import settings as _s
     from backend.workspace.runtime_settings import runtime_settings
@@ -280,10 +388,32 @@ def _build_lc_embeddings() -> Any:
     runtime_model = str(rag.get("embed_model") or "") or None
 
     builders: dict[str, Any] = {
-        "cohere": _build_cohere_embeddings,
-        "voyage": _build_voyage_embeddings,
+        "cohere": lambda: _build_cohere_embeddings(runtime_model),
+        "voyage": lambda: _build_voyage_embeddings(runtime_model),
+        "openai": lambda: _build_openai_embeddings(runtime_model),
+        "google-genai": lambda: _build_google_embeddings(runtime_model),
         "ollama": lambda: _build_ollama_embeddings(runtime_model),
         "openrouter": lambda: _build_openrouter_embeddings(runtime_model),
+        "llamacpp": lambda: _build_llamacpp_embeddings(runtime_model),
+        "nine_router": lambda: _build_openai_compatible_embeddings(
+            "nine_router",
+            _s.nine_router_base_url,
+            _s.nine_router_api_key or "",
+            runtime_model,
+        ),
+        "dmr": lambda: _build_openai_compatible_embeddings(
+            "dmr",
+            (
+                _s.dmr_base_url.rstrip("/")
+                if _s.dmr_base_url
+                and _s.dmr_base_url.rstrip("/").endswith("/engines/v1")
+                else f"{_s.dmr_base_url.rstrip('/')}/engines/v1"
+                if _s.dmr_base_url
+                else None
+            ),
+            "local",
+            runtime_model,
+        ),
     }
     preference = (
         runtime_pref if runtime_pref in builders else (_s.embedding_provider or "")
@@ -293,26 +423,16 @@ def _build_lc_embeddings() -> Any:
         if preferred is not None:
             return preferred
         logger.warning(
-            "storage/factory: embedding_provider=%r configurado mas sem "
-            "credencial/modelo — caindo no fallback padrão",
-            preference,
+            "storage/factory: embedding_provider=%r indisponível", preference
         )
+        return None
 
-    cohere = _build_cohere_embeddings()
-    voyage = _build_voyage_embeddings()
-    if cohere is not None and voyage is not None:
-        from backend.llm.fallback_embeddings import FallbackEmbeddings
-
-        return FallbackEmbeddings(
-            cohere,
-            voyage,
-            primary_id=f"cohere:{_s.embedding_model}",
-            secondary_id=f"voyage:{_s.voyage_embedding_model}",
-        )
-    if cohere or voyage:
-        return cohere or voyage
-
-    return _build_ollama_embeddings() or _build_openrouter_embeddings()
+    for provider, builder in builders.items():
+        embeddings = builder()
+        if embeddings is not None:
+            logger.info("storage/factory: embedding selecionado %s", provider)
+            return embeddings
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -379,12 +499,11 @@ async def _check_embedding_dimension(
         return
 
     existing_provider, existing_dimension = row
-    if existing_dimension != dimension:
+    if existing_dimension != dimension or existing_provider != provider:
         msg = (
-            f"Coleção {collection!r} foi indexada com embeddings de "
-            f"{existing_dimension} dimensões (provider {existing_provider!r}), "
-            f"mas o embedding configurado agora tem {dimension} dimensões "
-            f"(provider {provider!r}). Reindexe a coleção (apague e reconstrua) "
+            f"Coleção {collection!r} foi indexada com embeddings {existing_provider!r} "
+            f"de {existing_dimension} dimensões, mas o embedding configurado agora "
+            f"é {provider!r} de {dimension} dimensões. Reindexe a coleção (apague e reconstrua) "
             "antes de continuar, ou volte ao provider de embedding anterior."
         )
         raise EmbeddingDimensionMismatchError(msg)

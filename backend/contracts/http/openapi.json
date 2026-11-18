@@ -3412,20 +3412,6 @@
         "title": "FalkorDBPushResponse",
         "type": "object"
       },
-      "FallbackOrderBody": {
-        "properties": {
-          "order": {
-            "default": [],
-            "items": {
-              "type": "string"
-            },
-            "title": "Order",
-            "type": "array"
-          }
-        },
-        "title": "FallbackOrderBody",
-        "type": "object"
-      },
       "FeedbackContextKey": {
         "enum": [
           "app_version",
@@ -7700,6 +7686,17 @@
               }
             ],
             "title": "Ingest File Types"
+          },
+          "rerank_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rerank Model"
           },
           "rerank_provider": {
             "anyOf": [
@@ -12690,72 +12687,6 @@
           }
         },
         "summary": "Patch Media Models",
-        "tags": [
-          "admin"
-        ]
-      }
-    },
-    "/admin/model/fallback-order": {
-      "get": {
-        "description": "Lê a ordem de fallback de providers LLM (lista de 'provider:model').",
-        "operationId": "get_fallback_order_admin_model_fallback_order_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Fallback Order Admin Model Fallback Order Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Get Fallback Order",
-        "tags": [
-          "admin"
-        ]
-      },
-      "patch": {
-        "description": "Define a ordem de fallback de LLM; devolve a lista normalizada persistida.",
-        "operationId": "patch_fallback_order_admin_model_fallback_order_patch",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/FallbackOrderBody"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Patch Fallback Order Admin Model Fallback Order Patch",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Patch Fallback Order",
         "tags": [
           "admin"
         ]

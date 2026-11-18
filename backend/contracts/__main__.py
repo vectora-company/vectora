@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess  # nosec B404
 import sys
 import tempfile
@@ -718,6 +719,14 @@ def export_all(
         export_typescript(contracts_dir, target_dir=ts_target_dir)
 
 
+def _breaking_change_declared() -> bool:
+    """Return whether the pull request explicitly declares an API break."""
+    return any(
+        re.match(r"(?i)^BREAKING CHANGE:\s*\S", line.strip())
+        for line in os.environ.get("PR_BODY", "").splitlines()
+    )
+
+
 def check_all(contracts_dir: Path) -> int:
     """Verifica se há drift entre os contratos exportados e a implementação."""
     from backend.contracts.compat import check_schema_compatibility
@@ -726,6 +735,11 @@ def check_all(contracts_dir: Path) -> int:
 
     repo_root = _contracts_root().parents[1]
     baseline_ref = _contract_baseline_ref()
+    breaking_change_declared = _breaking_change_declared()
+    if breaking_change_declared:
+        print(
+            "BREAKING CHANGE declared in PR body; API compatibility breaks are accepted."
+        )
     head_sha = subprocess.run(  # nosec B603, B607
         ["git", "rev-parse", "HEAD"],  # noqa: S607
         cwd=repo_root,
@@ -857,14 +871,16 @@ def check_all(contracts_dir: Path) -> int:
                     print(
                         f"BREAKING API CHANGE in openapi.json: Removed endpoint {method_upper} {path_str}"
                     )
-                    has_diff = True
+                    if not breaking_change_declared:
+                        has_diff = True
 
                 # 2. Identificar schemas de request removidos de components.schemas
                 for s_name in _removed_request_schemas(baseline_data, expected_data):
                     print(
                         f"BREAKING SCHEMA CHANGE in openapi.json: Removed request schema components.schemas.{s_name}"
                     )
-                    has_diff = True
+                    if not breaking_change_declared:
+                        has_diff = True
 
                 # 3. Comparação de schemas existentes em ambas as versões
                 old_req_schemas, old_resp_schemas = _classify_openapi_schemas(
@@ -894,7 +910,8 @@ def check_all(contracts_dir: Path) -> int:
                                 print(
                                     f"BREAKING SCHEMA CHANGE in openapi.json ({s_name}, {direction}): {report.breaking}"
                                 )
-                                has_diff = True
+                                if not breaking_change_declared:
+                                    has_diff = True
 
             elif (
                 rel.name == "events.schema.json"
@@ -913,7 +930,8 @@ def check_all(contracts_dir: Path) -> int:
                             print(
                                 f"BREAKING SSE SCHEMA CHANGE ({d_name}): {report.breaking}"
                             )
-                            has_diff = True
+                            if not breaking_change_declared:
+                                has_diff = True
 
         # 2. Checa se há arquivos órfãos / obsoletos em contracts_dir que não foram gerados
         for target_file in contracts_dir.rglob("*.json"):

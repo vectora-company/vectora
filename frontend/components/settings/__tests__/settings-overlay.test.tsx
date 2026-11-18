@@ -45,9 +45,6 @@ function stubTab(testId: string) {
 vi.mock("../preferencias/tabs/preferencias-tab", () => ({
   PreferenciasTab: stubTab("tab-geral"),
 }));
-vi.mock("../preferencias/tabs/fallbacks-tab", () => ({
-  FallbacksTab: stubTab("tab-fallbacks"),
-}));
 vi.mock("../preferencias/tabs/memoria-tab", () => ({
   MemoriaTab: stubTab("tab-memoria"),
 }));

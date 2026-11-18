@@ -29,8 +29,8 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-def _is_cohere_quota_error(err: str) -> bool:
-    """Retorna True se o erro indica quota/rate-limit do Cohere."""
+def _is_quota_error(err: str) -> bool:
+    """Retorna True se o provider de IA recusou a chamada por quota/rate limit."""
     err_lower = err.lower()
     return (
         "429" in err
@@ -42,7 +42,7 @@ def _is_cohere_quota_error(err: str) -> bool:
     )
 
 
-def _build_cohere_reranker() -> Any:
+def _build_cohere_reranker(model_override: str | None = None) -> Any:
     """``VectoraCohereRerank`` (nativo) se a key Cohere estiver configurada."""
     try:
         from backend.llm.cohere.client import CohereClient
@@ -52,7 +52,7 @@ def _build_cohere_reranker() -> Any:
         if not key:
             return None
         return VectoraCohereRerank(
-            model=settings.reranker_model,
+            model=model_override or settings.reranker_model,
             client=CohereClient(key),
             top_n=int(_rag_runtime().get("reranker_top_k", settings.reranker_top_k)),
         )
@@ -61,7 +61,7 @@ def _build_cohere_reranker() -> Any:
         return None
 
 
-def _build_voyage_reranker() -> Any:
+def _build_voyage_reranker(model_override: str | None = None) -> Any:
     """``VectoraVoyageRerank`` (nativo) se a key Voyage estiver configurada."""
     try:
         from backend.llm.voyage.client import VoyageClient
@@ -71,7 +71,7 @@ def _build_voyage_reranker() -> Any:
         if not key:
             return None
         return VectoraVoyageRerank(
-            model=settings.voyage_rerank_model,
+            model=model_override or settings.voyage_rerank_model,
             client=VoyageClient(key),
             top_k=int(_rag_runtime().get("reranker_top_k", settings.reranker_top_k)),
         )
@@ -80,7 +80,7 @@ def _build_voyage_reranker() -> Any:
         return None
 
 
-def _build_openrouter_reranker() -> Any:
+def _build_openrouter_reranker(model_override: str | None = None) -> Any:
     """``OpenRouterRerank`` se a key e o modelo estão configurados, senão None.
 
     O modelo vem de ``configured_gateway_model`` (escolha da UI ganha do env),
@@ -89,10 +89,9 @@ def _build_openrouter_reranker() -> Any:
     try:
         from backend.llm.openrouter.client import OpenRouterClient
         from backend.llm.openrouter.rerank import OpenRouterRerank
-        from backend.settings import configured_gateway_model
 
         key = settings.openrouter_api_key
-        model = configured_gateway_model("openrouter", "rerank")
+        model = model_override or settings.openrouter_rerank_model
         if not key or not model:
             return None
         return OpenRouterRerank(
@@ -102,6 +101,34 @@ def _build_openrouter_reranker() -> Any:
         )
     except Exception:
         logger.warning("rag: falha ao montar reranker OpenRouter", exc_info=True)
+        return None
+
+
+def _build_llamacpp_reranker(model_override: str | None = None) -> Any:
+    """Consome o endpoint Jina-compatible /v1/rerank do llama-server."""
+    try:
+        from backend.llm.openrouter.client import OpenRouterClient
+        from backend.llm.openrouter.rerank import OpenRouterRerank
+
+        base_url = settings.llamacpp_base_url
+        model = model_override
+        if not base_url or not model:
+            return None
+        # llama.cpp aceita autenticação opcional; sem chave configurada, o
+        # bearer local é ignorado por servidores sem autenticação habilitada.
+        client = OpenRouterClient(
+            api_key=settings.llamacpp_api_key or "local",
+            base_url=base_url.rstrip("/").removesuffix("/v1") + "/v1",
+            require_api_key=False,
+            include_attribution=False,
+        )
+        return OpenRouterRerank(
+            model=model,
+            client=client,
+            top_n=int(_rag_runtime().get("reranker_top_k", settings.reranker_top_k)),
+        )
+    except Exception:
+        logger.warning("rag: falha ao montar reranker llama.cpp", exc_info=True)
         return None
 
 
@@ -217,62 +244,34 @@ def _rag_runtime() -> dict[str, Any]:
 
 
 def _build_reranker(workspace_id: str = "default") -> Any:
-    """Reranker com fallback Cohere↔Voyage por quota.
+    """Constrói somente o provider de rerank efetivamente selecionado.
 
     Honra os settings de runtime: ``reranker_enabled`` (off → None, sem rerank) e
-    ``rerank_provider`` ("auto" usa ``settings.reranker_type``; "cohere"/"voyage"
-    força). ``settings.reranker_type`` define o primário; o outro vira secundário.
-    Com ambos disponíveis devolve ``FallbackReranker``; com só um, esse; sem
-    nenhum, ``None`` — o caller cai para os resultados sem rerank.
+    ``rerank_provider`` ("auto" usa ``settings.reranker_type``). Uma falha não
+    troca de provider silenciosamente; o caller degrada para os resultados
+    recuperados sem rerank.
     """
     rag = _rag_runtime()
     if not rag.get("reranker_enabled", True):
         return None
     pref = str(rag.get("rerank_provider", "auto"))
+    model = str(rag.get("rerank_model") or "") or None
     rtype = (
         pref
-        if pref in ("cohere", "voyage", "openrouter", "systemone")
+        if pref in ("cohere", "voyage", "openrouter", "llamacpp", "systemone")
         else settings.reranker_type
     )
     if rtype == "systemone":
         return _build_systemone_reranker(workspace_id=workspace_id)
     if rtype == "openrouter":
-        primary = _build_openrouter_reranker()
-        if primary is None:
-            return None
-        secondary = _build_cohere_reranker()
-        from backend.settings import configured_gateway_model
-
-        primary_id = f"openrouter:{configured_gateway_model('openrouter', 'rerank')}"
-        secondary_id = f"cohere:{settings.reranker_model}"
-    elif rtype == "voyage":
-        primary = _build_voyage_reranker()
-        if primary is None:
-            return None
-        secondary = _build_cohere_reranker()
-        primary_id = f"voyage:{settings.voyage_rerank_model}"
-        secondary_id = f"cohere:{settings.reranker_model}"
-    elif rtype == "cohere":
-        primary = _build_cohere_reranker()
-        if primary is None:
-            return None
-        secondary = _build_voyage_reranker()
-        primary_id = f"cohere:{settings.reranker_model}"
-        secondary_id = f"voyage:{settings.voyage_rerank_model}"
-    else:
-        return None
-
-    if secondary is None:
-        return primary
-
-    from backend.llm.fallback_reranker import FallbackReranker
-
-    return FallbackReranker(
-        primary,
-        secondary,
-        primary_id=primary_id,
-        secondary_id=secondary_id,
-    )
+        return _build_openrouter_reranker(model)
+    if rtype == "llamacpp":
+        return _build_llamacpp_reranker(model)
+    if rtype == "voyage":
+        return _build_voyage_reranker(model)
+    if rtype == "cohere":
+        return _build_cohere_reranker(model)
+    return None
 
 
 @vtool(
@@ -353,13 +352,13 @@ async def embedding(
             )
         except Exception:
             pass
-        if _is_cohere_quota_error(err):
+        if _is_quota_error(err):
             return json.dumps(
                 {
                     "status": "quota_error",
                     "error": (
-                        "**Cohere: quota/rate limit atingido.**\n"
-                        "Aguarde alguns minutos ou verifique seu plano em dashboard.cohere.com."
+                        "O provider de IA selecionado atingiu a quota ou o limite de chamadas. "
+                        "Verifique a cota e as credenciais em Integrações, ou tente novamente mais tarde."
                     ),
                     "collection": collection,
                 }
@@ -549,15 +548,17 @@ async def vector_search(
 
         # embed_query usa input_type="search_query" (Cohere v3 é assimétrico:
         # os documentos são indexados com embed_documents → "search_document").
-        # Não trocar por embed_documents aqui. `_build_lc_embeddings()` já
-        # honra o fallback multi-provider (Cohere↔Voyage↔Ollama↔OpenRouter) —
-        # antes a busca era hardcoded pra Cohere sem fallback, diferente da
-        # indexação, que já tinha esse fallback (assimetria corrigida aqui).
+        # Não trocar por embed_documents aqui. Busca e indexação usam o mesmo
+        # provider/modelo selecionado no runtime.
         from backend.embedding.cache_embeddings import embed_query_cached
 
+        embedding_identity = (
+            f"{getattr(embeddings_model, 'vectora_provider', 'unknown')}:"
+            f"{getattr(embeddings_model, 'vectora_model', 'unknown')}"
+        )
         query_vector = await embed_query_cached(
             query,
-            settings.embedding_model,
+            embedding_identity,
             getattr(embeddings_model, "aembed_query", embeddings_model.embed_query),
         )
 
@@ -717,13 +718,13 @@ async def vector_search(
     except Exception as e:
         err = str(e)
         logger.exception("vector_search_failed", extra={"query": query})
-        if _is_cohere_quota_error(err):
+        if _is_quota_error(err):
             return json.dumps(
                 {
                     "status": "quota_error",
                     "error": (
-                        "**Cohere: quota/rate limit atingido.**\n"
-                        "Aguarde alguns minutos ou verifique seu plano em dashboard.cohere.com."
+                        "O provider de IA selecionado atingiu a quota ou o limite de chamadas. "
+                        "Verifique a cota e as credenciais em Integrações, ou tente novamente mais tarde."
                     ),
                 }
             )

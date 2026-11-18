@@ -286,7 +286,7 @@ async def embed_direct(text: str, collection: str) -> None:
     from backend.embedding.queue import EmbeddingQueueRecord
 
     worker = BackgroundEmbeddingWorker()
-    vector = await worker._generate_embedding(text)
+    vector, embedding_identity = await worker._generate_embedding(text)
 
     record = EmbeddingQueueRecord(
         queue_id=str(uuid4()),
@@ -294,4 +294,4 @@ async def embed_direct(text: str, collection: str) -> None:
         collection=collection,
         doc_metadata="{}",
     )
-    await worker._write_to_vector_store(record, vector)
+    await worker._write_to_vector_store(record, vector, provider=embedding_identity)

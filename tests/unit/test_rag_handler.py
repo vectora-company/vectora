@@ -103,6 +103,7 @@ class TestRagSettingsEndpoints:
             patch.object(type(settings), "get_cohere_api_key", lambda self: "co-key"),
             patch.object(settings, "voyage_api_key", None),
             patch.object(settings, "openrouter_api_key", None),
+            patch.object(settings, "llamacpp_base_url", None),
         ):
             out = await handler.get_rag_settings()
 
@@ -110,6 +111,7 @@ class TestRagSettingsEndpoints:
             "cohere": True,
             "voyage": False,
             "openrouter": False,
+            "llamacpp": False,
         }
 
     @pytest.mark.asyncio
@@ -126,6 +128,7 @@ class TestRagSettingsEndpoints:
             patch.object(type(settings), "get_cohere_api_key", lambda self: None),
             patch.object(settings, "voyage_api_key", None),
             patch.object(settings, "openrouter_api_key", None),
+            patch.object(settings, "llamacpp_base_url", None),
         ):
             out = await handler.get_rag_settings()
 
@@ -133,6 +136,7 @@ class TestRagSettingsEndpoints:
             "cohere": False,
             "voyage": False,
             "openrouter": False,
+            "llamacpp": False,
         }
 
     @pytest.mark.asyncio
@@ -150,6 +154,7 @@ class TestRagSettingsEndpoints:
             patch.object(type(settings), "get_cohere_api_key", lambda self: None),
             patch.object(settings, "voyage_api_key", None),
             patch.object(settings, "openrouter_api_key", "or-key"),
+            patch.object(settings, "llamacpp_base_url", None),
             patch(
                 "backend.settings.configured_gateway_model",
                 lambda provider, capability: (
@@ -164,11 +169,10 @@ class TestRagSettingsEndpoints:
         assert out["rerank_provider_available"]["openrouter"] is True
 
     @pytest.mark.asyncio
-    async def test_get_openrouter_key_sem_modelo_configurado_fica_indisponivel(
+    async def test_get_openrouter_disponivel_com_key_sem_modelo_escolhido(
         self, tmp_path
     ):
-        """Bad path: key presente mas sem modelo de rerank escolhido —
-        ainda indisponível, não é suficiente ter só a key."""
+        """A credencial permite escolher o modelo depois na configuração de IA."""
         from backend.api.handlers import rag as handler
         from backend.settings import settings
         from backend.workspace.runtime_settings import RuntimeSettings
@@ -177,14 +181,11 @@ class TestRagSettingsEndpoints:
         with (
             patch("backend.workspace.runtime_settings.runtime_settings", rs),
             patch.object(settings, "openrouter_api_key", "or-key"),
-            patch(
-                "backend.settings.configured_gateway_model",
-                lambda provider, capability: "",
-            ),
+            patch.object(settings, "llamacpp_base_url", None),
         ):
             out = await handler.get_rag_settings()
 
-        assert out["rerank_provider_available"]["openrouter"] is False
+        assert out["rerank_provider_available"]["openrouter"] is True
 
     @pytest.mark.asyncio
     async def test_patch_updates_and_returns(self, tmp_path):
