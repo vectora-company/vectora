@@ -61,6 +61,28 @@ async def _run_storage_async(args: argparse.Namespace) -> None:
             await _storage_restore(console, archive, db_path)
         elif action == "migrate":
             await _storage_migrate(console, db_path, subaction or "status", version)
+        elif action == "migrate-embedding-queue":
+            if not getattr(args, "offline", False):
+                raise ValueError(
+                    "Pare todas as instâncias do Vectora e seus workers; "
+                    "depois execute com --offline."
+                )
+            from backend.embedding.queue import resolve_embedding_queue
+            from backend.settings import settings
+            from backend.storage.factory import close_pg_pool
+
+            try:
+                await resolve_embedding_queue(
+                    settings.embedding_queue_dsn,
+                    storage_mode="complete",
+                    postgres_dsn=settings.postgres_dsn,
+                    offline_cutover=True,
+                )
+                console.print(
+                    "[green]Fila de embeddings migrada para PostgreSQL.[/green]"
+                )
+            finally:
+                await close_pg_pool()
         else:
             console.print(f"[red]Ação desconhecida: {action!r}[/red]")
             sys.exit(1)

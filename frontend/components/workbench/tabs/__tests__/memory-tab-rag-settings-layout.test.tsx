@@ -40,8 +40,12 @@ vi.mock("@/lib/stores/workspaces-store", () => ({
 }));
 
 vi.mock("@/lib/stores/rag-jobs-store", () => ({
-  useRagJobsStore: (sel: (s: { jobs: Record<string, never> }) => unknown) =>
-    sel({ jobs: {} }),
+  useRagJobsStore: (
+    sel: (s: {
+      jobs: Record<string, never>;
+      load: () => Promise<void>;
+    }) => unknown,
+  ) => sel({ jobs: {}, load: async () => {} }),
 }));
 
 beforeEach(() => {

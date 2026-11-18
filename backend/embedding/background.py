@@ -17,7 +17,12 @@ import traceback
 from datetime import datetime
 from typing import Any
 
-from backend.embedding.queue import EmbeddingQueueRecord, get_embedding_queue
+from backend.embedding.queue import (
+    EmbeddingQueueRecord,
+)
+from backend.embedding.queue import (
+    get_configured_embedding_queue as get_embedding_queue,
+)
 from backend.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -156,6 +161,8 @@ class BackgroundEmbeddingWorker:
         # arquiva a fila em vez de re-tentar cada chunk em loop (que floodava o
         # log e saturava o thread pool, travando o backend). pause_reason é
         # exibido ao usuário via status dos jobs RAG.
+        self._breaker_lock = asyncio.Lock()
+        self._resume_event = asyncio.Event()
         self.paused: bool = False
         self.pause_reason: str | None = None
         self.paused_at: datetime | None = None
@@ -182,19 +189,7 @@ class BackgroundEmbeddingWorker:
         Usa ``get_effective_storage_mode()`` (não ``self.config.storage_mode``
         cru) para respeitar a configuração efetiva escolhida pelo operador.
         """
-        if self._queue is not None:
-            return self._queue
-        from backend.services.license import get_effective_storage_mode
-
-        effective_mode = get_effective_storage_mode()
-        if effective_mode == "complete" and self.config.postgres_dsn:
-            from backend.embedding.queue import PostgresQueueDB
-
-            q = PostgresQueueDB()
-            await q._ensure_table()
-            self._queue = q
-        else:
-            self._queue = await get_embedding_queue(self.config.embedding_queue_dsn)
+        self._queue = await get_embedding_queue(self.config.embedding_queue_dsn)
         return self._queue
 
     async def start(self) -> None:
@@ -255,7 +250,11 @@ class BackgroundEmbeddingWorker:
                 # Não busca novos pendentes (evita re-storm); fica idle até o
                 # processo reiniciar ou alguém retomar via /rag.
                 if self.paused:
-                    await asyncio.sleep(POLL_INTERVAL_MAX)
+                    with contextlib.suppress(TimeoutError):
+                        await asyncio.wait_for(
+                            self._resume_event.wait(), timeout=POLL_INTERVAL_MAX
+                        )
+                    self._resume_event.clear()
                     continue
 
                 # Obter queue (lazy-loaded do singleton) — chegar aqui sem
@@ -351,8 +350,20 @@ class BackgroundEmbeddingWorker:
                 return
             try:
                 async with self.semaphore:
+                    if self.paused:
+                        return
                     # Marcar como processing
-                    await queue.mark_processing(queue_id)
+                    try:
+                        if attempt == 0:
+                            await queue.mark_processing(queue_id)
+                        else:
+                            await queue.mark_retry(queue_id)
+                    except Exception:
+                        logger.exception(
+                            "embedding_queue_claim_failed",
+                            extra={"queue_id": queue_id},
+                        )
+                        return
 
                     # Gerar embedding com o provider/modelo configurado.
                     (
@@ -366,7 +377,14 @@ class BackgroundEmbeddingWorker:
                     )
 
                     # Marcar como success
-                    await queue.mark_success(queue_id)
+                    try:
+                        await queue.mark_success(queue_id)
+                    except Exception:
+                        logger.exception(
+                            "embedding_queue_ack_failed",
+                            extra={"queue_id": queue_id},
+                        )
+                        return
                     self.processed_count += 1
                     # Embedding bem-sucedido: limpa flag de rate limit
                     self.rate_limit_active = False
@@ -454,27 +472,43 @@ class BackgroundEmbeddingWorker:
         para a DLQ com um motivo único (não re-tentada no próximo start),
         recuperável via ``retry_failed`` quando a chave estiver normalizada.
         """
-        self.rate_limit_active = True
-        self.rate_limit_count += 1
-        self.last_rate_limit_at = datetime.now()
+        async with self._breaker_lock:
+            self.rate_limit_active = True
+            self.rate_limit_count += 1
+            self.last_rate_limit_at = datetime.now()
 
-        if self.paused:
-            return
+            if self.paused:
+                return
 
-        self.paused = True
-        self.paused_at = datetime.now()
-        self.pause_reason = (
-            "Indexação RAG pausada: o provider de embedding selecionado retornou "
-            "rate limit/quota (429). Verifique a cota e a configuração do provider, "
-            "aguarde a renovação ou reprocesse a fila."
-        )
+            self.paused = True
+            self.paused_at = datetime.now()
+            self.pause_reason = (
+                "Indexação RAG pausada: o provider de embedding selecionado retornou "
+                "rate limit/quota (429). Verifique a cota e a configuração do provider, "
+                "aguarde a renovação ou reprocesse a fila."
+            )
 
-        archived = await queue.archive_pending(self.pause_reason)
-        logger.warning(
-            "embedding_worker_paused_rate_limit: %d chunks arquivados",
-            archived,
-            extra={"reason": self.pause_reason, "archived": archived},
-        )
+            archived = await queue.archive_pending(self.pause_reason)
+            logger.warning(
+                "embedding_worker_paused_rate_limit: %d chunks arquivados",
+                archived,
+                extra={"reason": self.pause_reason, "archived": archived},
+            )
+
+    async def retry_job(self, job_id: str) -> int:
+        """Retoma apenas o job pedido após uma falha de indexação."""
+        async with self._breaker_lock:
+            if not self.running:
+                raise RuntimeError("Worker de indexação não está ativo")
+            queue = await self._get_queue()
+            count = await queue.retry_job(job_id)
+            if count:
+                self.paused = False
+                self.pause_reason = None
+                self.paused_at = None
+                self.rate_limit_active = False
+                self._resume_event.set()
+            return count
 
     async def _generate_embedding(self, text: str) -> tuple[list[float], str]:
         """Gera embedding com o modelo configurado e retorna sua identidade.

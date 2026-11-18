@@ -518,6 +518,11 @@ export function MemoryTab({ threadId }: MemoryTabProps) {
   const [messages] = useThreadMessages(threadId);
   const activeWorkspaceId = useWorkspacesStore((s) => s.getActive()?.id);
   const jobs = useRagJobsStore((s) => s.jobs);
+  const retryJob = useRagJobsStore((s) => s.retry);
+  const loadJobs = useRagJobsStore((s) => s.load);
+  useEffect(() => {
+    if (activeWorkspaceId) void loadJobs(activeWorkspaceId);
+  }, [activeWorkspaceId, loadJobs]);
   const workspaceSummary = useWorkspaceRagSummary(activeWorkspaceId);
   const search = useRagSearch(activeWorkspaceId);
   const ragSettings = useRagSettings();
@@ -534,7 +539,8 @@ export function MemoryTab({ threadId }: MemoryTabProps) {
   const ragJobs = useMemo(
     () =>
       Object.values(jobs).filter(
-        (j) => !activeWorkspaceId || j.workspaceId === activeWorkspaceId,
+        (j) =>
+          Boolean(activeWorkspaceId) && j.workspaceId === activeWorkspaceId,
       ),
     [jobs, activeWorkspaceId],
   );
@@ -785,7 +791,9 @@ export function MemoryTab({ threadId }: MemoryTabProps) {
                     ? 100
                     : 5;
               const stalled =
-                job.status === "paused" || job.status === "failed";
+                job.status === "paused" ||
+                job.status === "failed" ||
+                job.status === "unknown";
               return (
                 <div
                   key={job.jobId}
@@ -817,6 +825,24 @@ export function MemoryTab({ threadId }: MemoryTabProps) {
                         style={{ width: `${pct}%` }}
                       />
                     </div>
+                  )}
+                  {(job.status === "paused" || job.status === "failed") &&
+                    job.failed > 0 && (
+                      <button
+                        type="button"
+                        disabled={job.retrying}
+                        onClick={() => void retryJob(job.jobId)}
+                        className="mt-1.5 rounded border border-border/60 px-2 py-1 text-xs text-foreground disabled:opacity-50"
+                      >
+                        {job.retrying
+                          ? m.error_banner_retrying()
+                          : m.error_banner_retry()}
+                      </button>
+                    )}
+                  {job.retryError && (
+                    <p role="alert" className="mt-1 text-xs text-destructive">
+                      {m.workbench_memory_retry_failed()}
+                    </p>
                   )}
                 </div>
               );
