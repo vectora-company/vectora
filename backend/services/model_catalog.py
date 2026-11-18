@@ -12,7 +12,14 @@ import httpx
 from backend.settings import settings
 
 logger = logging.getLogger(__name__)
-_CATALOG_CACHE_TTL_S = 600.0
+# A agregação é barata porque cada fonte tem cache próprio: o resultado que
+# respondeu vale por 10 minutos e o que falhou só por 15 s, então um provider
+# que sobe depois (roteador, Ollama, llama.cpp) aparece quase de imediato sem
+# reconsultar a cada acesso os que já responderam.
+_CATALOG_CACHE_TTL_S = 15.0
+_SOURCE_OK_TTL_S = 600.0
+_SOURCE_FAILURE_TTL_S = 15.0
+_source_cache: dict[tuple[Any, ...], tuple[float, dict[str, Any] | None]] = {}
 _catalog_cache: dict[str, Any] = {"updated": 0.0, "entries": []}
 _catalog_lock = asyncio.Lock()
 
@@ -199,14 +206,32 @@ async def _get_json(
     headers: dict[str, str] | None = None,
     params: dict[str, str] | None = None,
 ) -> dict[str, Any] | None:
+    key = (
+        url,
+        tuple(sorted((params or {}).items())),
+        hash(tuple(sorted((headers or {}).items()))),
+    )
+    now = time.monotonic()
+    cached = _source_cache.get(key)
+    if cached is not None:
+        stored_at, payload = cached
+        ttl = _SOURCE_OK_TTL_S if payload is not None else _SOURCE_FAILURE_TTL_S
+        if now - stored_at < ttl:
+            return payload
     try:
         response = await client.get(url, headers=headers, params=params)
         response.raise_for_status()
-        payload = response.json()
-        return payload if isinstance(payload, dict) else None
-    except Exception:
-        logger.info("model catalog: provider endpoint unavailable (%s)", url)
-        return None
+        body = response.json()
+        result = body if isinstance(body, dict) else None
+    except Exception as exc:
+        logger.info(
+            "model catalog: provider endpoint unavailable (%s: %s)",
+            url,
+            type(exc).__name__,
+        )
+        result = None
+    _source_cache[key] = (time.monotonic(), result)
+    return result
 
 
 async def _direct_provider_catalogs(client: httpx.AsyncClient) -> list[dict[str, Any]]:
@@ -547,3 +572,4 @@ async def list_model_catalog() -> list[dict[str, Any]]:
 def invalidate_model_catalog() -> None:
     """Força nova descoberta no próximo acesso do catálogo."""
     _catalog_cache["updated"] = 0.0
+    _source_cache.clear()

@@ -4687,6 +4687,8 @@ class NineRouterModelInfo(BaseModel):
     id: str
     name: str
     input_modalities: list[str] = []
+    #: Provider de origem informado pelo roteador (`owned_by`), quando houver.
+    provider: str = ""
 
 
 class NineRouterCatalogResponse(BaseModel):
@@ -4764,15 +4766,20 @@ async def discover_nine_router_models(
         return NineRouterCatalogResponse(reachable=False, models=[])
 
     try:
+        # `kind=chat` é um filtro do OmniRoute; roteadores que o ignoram
+        # devolvem tudo e o filtro por `type` abaixo cobre esse caso.
         resp = await client.get(
             f"{base_url.rstrip('/')}/models",
             headers={"Authorization": f"Bearer {api_key}"},
+            params={"kind": "chat"},
         )
         resp.raise_for_status()
         data = resp.json()
-    except Exception:
+    except Exception as exc:
         logger.info(
-            "provider_routing: 9Router em %s inacessível", base_url, exc_info=True
+            "provider_routing: 9Router em %s inacessível (%s)",
+            base_url,
+            type(exc).__name__,
         )
         return NineRouterCatalogResponse(reachable=False, models=[])
 
@@ -4785,9 +4792,12 @@ async def discover_nine_router_models(
                 or m.get("input_modalities")
                 or []
             ),
+            provider=str(m.get("owned_by") or ""),
         )
         for m in data.get("data", [])
-        if m.get("id")
+        # Sem `type` o modelo é de chat; imagem, áudio, embedding, rerank,
+        # moderação, vídeo e música não entram na lista de modelos de chat.
+        if m.get("id") and (m.get("type") or "chat") == "chat"
     ]
     return NineRouterCatalogResponse(reachable=True, models=models)
 
