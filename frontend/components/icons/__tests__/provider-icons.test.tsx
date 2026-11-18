@@ -2,6 +2,14 @@
 import { describe, expect, it } from "vitest";
 import { render } from "@testing-library/react";
 import { ProviderIcon } from "@/components/icons/provider-icons";
+import { useSettingsStore } from "@/lib/stores/settings-store";
+import huggingface from "@/assets/provider-logos/huggingface.svg";
+import llamacppOnDark from "@/assets/provider-logos/llamacpp-on-dark.svg";
+import llamacppOnLight from "@/assets/provider-logos/llamacpp-on-light.svg";
+import ninerouter from "@/assets/provider-logos/ninerouter.svg";
+import ollamaOnDark from "@/assets/provider-logos/ollama-on-dark.svg";
+import ollamaOnLight from "@/assets/provider-logos/ollama-on-light.svg";
+import omniroute from "@/assets/provider-logos/omniroute.svg";
 
 describe("ProviderIcon", () => {
   it("seleciona o SVG específico de cada provider reconhecido", () => {
@@ -36,7 +44,57 @@ describe("ProviderIcon", () => {
 
     const icons = container.querySelectorAll("[data-provider-icon]");
     expect(icons[0]).toHaveAttribute("data-provider-icon", "nine-router");
-    expect(icons[0].querySelector("svg path")).toBeInTheDocument();
+    expect(icons[0].querySelector("img")?.getAttribute("src")).toBe(ninerouter);
     expect(icons[1].querySelector("svg rect")).toBeInTheDocument();
+  });
+
+  it("usa o logo oficial de cada provider que tem arquivo de origem", () => {
+    useSettingsStore.getState().setTheme("dark");
+    const { container } = render(
+      <>
+        <ProviderIcon provider="ollama" />
+        <ProviderIcon provider="llamacpp" />
+        <ProviderIcon provider="huggingface" />
+        <ProviderIcon provider="nine_router" />
+        <ProviderIcon provider="omniroute" />
+      </>,
+    );
+
+    const sources = [
+      ...container.querySelectorAll("[data-provider-icon] img"),
+    ].map((img) => img.getAttribute("src") ?? "");
+    expect(sources).toHaveLength(5);
+    expect(sources).toEqual([
+      ollamaOnDark,
+      llamacppOnDark,
+      huggingface,
+      ninerouter,
+      omniroute,
+    ]);
+  });
+
+  it("troca a variante do glifo de uma cor conforme o tema", () => {
+    useSettingsStore.getState().setTheme("light");
+    const { container } = render(
+      <>
+        <ProviderIcon provider="ollama" />
+        <ProviderIcon provider="llamacpp" />
+      </>,
+    );
+
+    const sources = [...container.querySelectorAll("img")].map(
+      (img) => img.getAttribute("src") ?? "",
+    );
+    expect(sources).toEqual([ollamaOnLight, llamacppOnLight]);
+    // As duas variantes são arquivos diferentes (glifo claro x escuro).
+    expect(ollamaOnLight).not.toBe(ollamaOnDark);
+    expect(llamacppOnLight).not.toBe(llamacppOnDark);
+    useSettingsStore.getState().setTheme("dark");
+  });
+
+  it("não deixa ícone feito à mão onde há logo oficial", () => {
+    const { container } = render(<ProviderIcon provider="llamacpp" />);
+
+    expect(container.querySelector("svg")).toBeNull();
   });
 });
