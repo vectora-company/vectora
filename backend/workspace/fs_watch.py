@@ -21,9 +21,11 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+#: ``.git`` fica de fora de propósito: HEAD, index e refs avisam o workbench Git
+#: de commits, checkouts e stages feitos por fora. Só o conteúdo pesado do
+#: ``.git`` é podado (ver ``IGNORED_RELATIVE_PREFIXES``).
 IGNORED_DIR_NAMES: frozenset[str] = frozenset(
     {
-        ".git",
         "node_modules",
         "__pycache__",
         ".pytest_cache",
@@ -42,8 +44,15 @@ IGNORED_DIR_NAMES: frozenset[str] = frozenset(
         "build",
         "target",
         "coverage",
-        ".vectora",
     }
+)
+
+#: Subdiretórios do ``.git`` que só geram ruído (objetos, logs, módulos).
+IGNORED_RELATIVE_PREFIXES: tuple[str, ...] = (
+    ".git/objects",
+    ".git/logs",
+    ".git/lfs",
+    ".git/modules",
 )
 
 
@@ -63,7 +72,14 @@ def is_ignored_path(
             text = os.path.relpath(text, base)
         if text.startswith(".."):
             return False
-    return any(part in IGNORED_DIR_NAMES for part in Path(text).parts)
+    parts = Path(text).parts
+    if any(part in IGNORED_DIR_NAMES for part in parts):
+        return True
+    relative = "/".join(parts)
+    return any(
+        relative == prefix or relative.startswith(prefix + "/")
+        for prefix in IGNORED_RELATIVE_PREFIXES
+    )
 
 
 class _OverflowWarningThrottle(logging.Filter):
@@ -112,7 +128,11 @@ def _build_pruned_observer() -> Any | None:
                 return
             for root, dirnames, _ in os.walk(path, followlinks=self.follow_symlink):
                 dirnames[:] = [
-                    d for d in dirnames if os.fsdecode(d) not in IGNORED_DIR_NAMES
+                    d
+                    for d in dirnames
+                    if not is_ignored_path(
+                        Path(os.fsdecode(root)) / os.fsdecode(d), os.fsdecode(path)
+                    )
                 ]
                 for dirname in dirnames:
                     full_path = os.fsencode(
