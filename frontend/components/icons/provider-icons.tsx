@@ -1,11 +1,12 @@
 /**
  * Ícones dos provedores de LLM, usados no seletor de modelo e nas configurações.
- * Ollama, llama.cpp, Hugging Face, 9Router e OmniRoute usam o logo oficial em
+ * Ollama, llama.cpp, Hugging Face, Laya, 9Router e OmniRoute usam o logo oficial em
  * arquivo SVG; os demais seguem como ícones simplificados até haver arquivo de
  * origem (ver `assets/provider-logos/CREDITS.md`).
  */
 
 import huggingfaceLogo from "@/assets/provider-logos/huggingface.svg";
+import layaLogo from "@/assets/provider-logos/laya.svg";
 import llamacppOnDark from "@/assets/provider-logos/llamacpp-on-dark.svg";
 import llamacppOnLight from "@/assets/provider-logos/llamacpp-on-light.svg";
 import ninerouterLogo from "@/assets/provider-logos/ninerouter.svg";
@@ -66,6 +67,10 @@ export function HuggingFaceIcon({ className }: { className?: string }) {
 
 export function NineRouterIcon({ className }: { className?: string }) {
   return <LogoImage onDark={ninerouterLogo} className={className} />;
+}
+
+export function LayaIcon({ className }: { className?: string }) {
+  return <LogoImage onDark={layaLogo} className={className} />;
 }
 
 export function OmniRouteIcon({ className }: { className?: string }) {
@@ -248,21 +253,6 @@ export function ClefIcon({ className }: { className?: string }) {
         fill="currentColor"
       />
       <circle cx="8" cy="18.5" r="2" fill="currentColor" />
-    </svg>
-  );
-}
-
-export function LayaIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      className={className}
-      aria-hidden="true"
-    >
-      <path d="M5 3h3v15h11v3H5V3Z" fill="currentColor" />
-      <path d="M12 6h7v3h-7z" fill="currentColor" />
     </svg>
   );
 }

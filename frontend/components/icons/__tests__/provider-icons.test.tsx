@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { render } from "@testing-library/react";
 import { ProviderIcon } from "@/components/icons/provider-icons";
 import { useSettingsStore } from "@/lib/stores/settings-store";
+import laya from "@/assets/provider-logos/laya.svg";
 import huggingface from "@/assets/provider-logos/huggingface.svg";
 import llamacppOnDark from "@/assets/provider-logos/llamacpp-on-dark.svg";
 import llamacppOnLight from "@/assets/provider-logos/llamacpp-on-light.svg";
@@ -57,19 +58,21 @@ describe("ProviderIcon", () => {
         <ProviderIcon provider="huggingface" />
         <ProviderIcon provider="nine_router" />
         <ProviderIcon provider="omniroute" />
+        <ProviderIcon provider="laya-local" />
       </>,
     );
 
     const sources = [
       ...container.querySelectorAll("[data-provider-icon] img"),
     ].map((img) => img.getAttribute("src") ?? "");
-    expect(sources).toHaveLength(5);
+    expect(sources).toHaveLength(6);
     expect(sources).toEqual([
       ollamaOnDark,
       llamacppOnDark,
       huggingface,
       ninerouter,
       omniroute,
+      laya,
     ]);
   });
 
