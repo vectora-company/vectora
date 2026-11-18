@@ -562,18 +562,6 @@ jobs:
         with:
           path: resources/nats-server*
           key: nats-server-${{ matrix.target }}-${{ matrix.arch }}
-      - name: Fetch nats-server binary
-        # build-hybrid.py falha rápido se resources/nats-server
-        # (ou .exe) não existir — o sidecar de fila/KV precisa vir embutido
-        # no build standalone, não só no desktop Electron. `scons nats`
-        # baixa o binário certo pra plataforma do runner atual. `scons` só
-        # existe dentro do venv que o `uv sync` cria em vectora/ (setup-uv
-        # roda com working-directory: vectora) — nunca vai pro PATH do
-        # shell. `uv run --project vectora` resolve esse venv mantendo o
-        # cwd na raiz do monorepo, onde o SConstruct está.
-        working-directory: .
-        run: uv run scons nats
-        shell: bash
       - name: Cache ffmpeg/ffprobe binaries
         uses: actions/cache@v6
         with:
@@ -581,19 +569,14 @@ jobs:
             resources/ffmpeg*
             resources/ffprobe*
           key: ffmpeg-${{ matrix.target }}-${{ matrix.arch }}
-      - name: Fetch ffmpeg/ffprobe binaries
-        # Mesmo motivo/padrão do nats acima — build-hybrid.py também falha
-        # rápido sem resources/ffmpeg(.exe)/ffprobe(.exe)
-        # (transcrição/análise de mídia local precisa deles embutidos).
+      - name: Install build components (scons install)
+        # build-hybrid.py falha rápido sem resources/nats-server, sem
+        # resources/ffmpeg e ffprobe e, no macOS, sem resources/vectora-speech.
+        # `scons install` prepara tudo isso pelas mesmas funções usadas
+        # localmente; binários já presentes (cache acima) são pulados. `scons`
+        # só existe no venv que o `uv sync` cria, por isso `uv run`.
         working-directory: .
-        run: uv run scons ffmpeg
-        shell: bash
-      - name: Build macOS speech helper
-        # Helper de reconhecimento de fala nativo (framework Speech), exigido
-        # pelo build-hybrid.py no macOS.
-        if: runner.os == 'macOS'
-        working-directory: .
-        run: uv run scons macos-speech
+        run: uv run scons install
         shell: bash
       - name: Speech helper check (macOS)
         # Exercita o helper compilado: gera uma fala com `say`, consulta a

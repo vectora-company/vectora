@@ -32,7 +32,7 @@ _ASSETS = Path(__file__).resolve().parents[1] / "assets"
 
 requires_ffmpeg = pytest.mark.skipif(
     resolve_ffmpeg() is None,
-    reason="ffmpeg não disponível neste ambiente (instale ou rode `scons ffmpeg`)",
+    reason="ffmpeg não disponível neste ambiente (instale ou rode `scons install`)",
 )
 
 

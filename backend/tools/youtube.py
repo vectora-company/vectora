@@ -304,7 +304,7 @@ async def youtube_frame_at(ctx: ToolContext, url: str, timestamp_s: float) -> st
     ffmpeg = resolve_ffmpeg()
     if not ffmpeg:
         return json.dumps(
-            {"error": "ffmpeg não disponível — instale ffmpeg ou rode `scons ffmpeg`"}
+            {"error": "ffmpeg não disponível — instale ffmpeg ou rode `scons install`"}
         )
 
     try:

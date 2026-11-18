@@ -330,6 +330,13 @@ class TestContratoDoSConstruct:
         ):
             assert step in text
 
+    def test_sidecars_nao_tem_alvo_avulso(self) -> None:
+        """NATS, FFmpeg e o helper de fala só são preparados pelo ``install``."""
+        text = self._text()
+        for alvo in ("nats", "ffmpeg", "macos-speech"):
+            assert f'_cmd("{alvo}"' not in text
+            assert f"scons {alvo}" not in text
+
     def test_helper_de_fala_so_roda_no_macos_no_install(self) -> None:
         text = self._text()
         match = re.search(r"if host\.is_macos:\s+step\(\s+7,", text)

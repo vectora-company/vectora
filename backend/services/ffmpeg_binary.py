@@ -3,7 +3,7 @@
 ``backend/scheduling/nats_sidecar.py::_resolve_binary`` já usa pro
 ``nats-server``: bundle congelado (PyInstaller) → PATH do
 sistema → árvore-fonte (``resources/``, baixado por
-``scons ffmpeg``). Sem override explícito por env var (diferente do NATS)
+``scons install``). Sem override explícito por env var (diferente do NATS)
 porque nenhum empacotador externo — só o próprio build do Vectora —
 precisa apontar pra um caminho não-padrão.
 
@@ -39,8 +39,8 @@ def _frozen_bundle_bases() -> list[Path]:
 
 
 def _resources_dir() -> Path:
-    """``<repo>/vectora/resources`` — onde `scons ffmpeg` baixa o binário
-    da árvore-fonte (mesmo destino de `scons nats`). Função própria (não
+    """``<repo>/vectora/resources`` — onde `scons install` baixa o binário
+    da árvore-fonte (mesmo destino de `scons install`). Função própria (não
     inline) só pra ficar mockável em teste sem depender de `__file__`."""
     return Path(__file__).resolve().parent.parent.parent / "resources"
 
@@ -51,7 +51,7 @@ def _resolve(base_name: str) -> str | None:
     Ordem: bundle congelado (pasta ``ffmpeg/`` embutida pelo build) → PATH
     (dev, ex.: ``winget``/``choco``/``brew install ffmpeg``, ou distro com
     ffmpeg no repositório) → árvore-fonte (``resources/``, baixado
-    por ``scons ffmpeg``)."""
+    por ``scons install``)."""
     exe_name = _exe_name(base_name)
 
     for base in _frozen_bundle_bases():
@@ -75,7 +75,7 @@ def resolve_ffmpeg() -> str | None:
     if path is None:
         logger.warning(
             "ffmpeg_binary: ffmpeg não encontrado (bundle/PATH/vectora/resources) "
-            "— rode `scons ffmpeg` ou instale ffmpeg no sistema"
+            "— rode `scons install` ou instale ffmpeg no sistema"
         )
     return path
 
@@ -85,6 +85,6 @@ def resolve_ffprobe() -> str | None:
     if path is None:
         logger.warning(
             "ffmpeg_binary: ffprobe não encontrado (bundle/PATH/vectora/resources) "
-            "— rode `scons ffmpeg` ou instale ffmpeg no sistema"
+            "— rode `scons install` ou instale ffmpeg no sistema"
         )
     return path

@@ -310,7 +310,7 @@ extraResources:
     to: vectora-core/CHANGELOG.md
   - from: ../dist/vectora
     to: vectora-core
-  # Sidecar nats-server (fila/KV persistente): baixado por `scons nats` (dep do
+  # Sidecar nats-server (fila/KV persistente): baixado por `scons install` (dep do
   # release). O backend recebe o caminho via VECTORA_NATS_BINARY no spawn
   # (electron/src/main.ts). Glob cobre nats-server e nats-server.exe.
   - from: ../resources
