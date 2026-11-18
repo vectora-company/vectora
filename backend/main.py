@@ -369,6 +369,13 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Chave privada TLS correspondente. Também via env SSL_KEYFILE.",
     )
 
+    for launch_parser in (start_p, web_p):
+        launch_parser.add_argument(
+            "--no-services",
+            action="store_true",
+            help="Inicia sem integrações com Vectora Services nesta execução.",
+        )
+
     # ── config — settings + keys/docker/qdrant/redis ──────────────────────────
     config_p = sub.add_parser(
         "config",
@@ -589,6 +596,9 @@ def _run_start(args: argparse.Namespace, *, force_web: bool = False) -> None:
     o Electron como sidecar quando o binário e um display estiverem disponíveis.
     O servidor continua em TCP para uso pelo browser e por clientes externos.
     """
+    if getattr(args, "no_services", False):
+        os.environ["VECTORA_NO_SERVICES"] = "1"
+
     import uvicorn
 
     if force_web:

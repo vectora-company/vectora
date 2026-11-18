@@ -13,6 +13,7 @@ from pathlib import Path
 import aiohttp
 from fastapi import APIRouter, HTTPException, Request
 
+from backend.services.availability import require_services, services_enabled
 from backend.services.gateway.token import load_token
 from backend.settings import settings
 
@@ -42,6 +43,8 @@ async def gateway_status(request: Request) -> dict:
     precisava agir ou se era só o estado inicial esperado.
     """
     _require_auth(request)
+    if not services_enabled():
+        return {"connected": False, "state": "disabled", "detail": "--no-services"}
     token = _gateway_token()
     if not token:
         return {
@@ -85,6 +88,7 @@ async def gateway_status(request: Request) -> dict:
 @router.post("/revoke")
 async def gateway_revoke(request: Request) -> dict:
     _require_auth(request)
+    require_services()
     token = _gateway_token()
     if not token:
         raise HTTPException(status_code=404, detail="Nenhum token de gateway ativo")

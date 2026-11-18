@@ -298,6 +298,8 @@ function assertTrustedRenderer(event: Electron.IpcMainInvokeEvent): void {
 }
 
 function startUpdateDownload(): Promise<void> {
+  if (servicesDisabled())
+    return Promise.reject(new Error("Services disabled (--no-services)"));
   if (updateDownloadPromise) return updateDownloadPromise;
   const pending = startUpdateDownloadAfterBackup(
     pendingBackupPromise,
@@ -1142,7 +1144,14 @@ async function fetchPackagedChangelog(
  * listeners pra a UI mostrar o resultado.
  */
 /** Register updater events and expose their merged status to the renderer. */
+function servicesDisabled(): boolean {
+  return ["1", "true", "yes", "on"].includes(
+    (process.env.VECTORA_NO_SERVICES ?? "").trim().toLowerCase(),
+  );
+}
+
 function setupAutoUpdater(): void {
+  if (servicesDisabled()) return;
   // O binário npm do Electron usado em desenvolvimento informa a versão
   // `0.0`; electron-updater exige semver válida e aborta o boot ao inicializar.
   // Atualizações automáticas só fazem sentido no pacote instalado.
@@ -1213,6 +1222,7 @@ function setupAutoUpdater(): void {
 }
 
 async function safeCheckForUpdates(): Promise<void> {
+  if (servicesDisabled()) return;
   // The npm Electron binary reports version 0.0 in development; the updater
   // is meaningful only for a packaged build with a release semver.
   if (!app.isPackaged) return;
@@ -1230,6 +1240,7 @@ async function safeCheckForUpdates(): Promise<void> {
  * disponível independente disso, ver `registerIpc()`.
  */
 function scheduleAutoUpdateChecks(): void {
+  if (servicesDisabled()) return;
   setTimeout(() => {
     void safeCheckForUpdates();
   }, 30_000);

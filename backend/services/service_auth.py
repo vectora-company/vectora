@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from urllib.parse import urlsplit
 
+from backend.services.availability import require_services
 from backend.services.license import get_license_token
 
 _SERVICES_HOST = "services.vectora.company"
@@ -14,6 +15,7 @@ def services_auth_headers(url: str) -> dict[str, str]:
     parsed = urlsplit(url)
     if parsed.scheme != "https" or parsed.hostname != _SERVICES_HOST:
         return {}
+    require_services()
     token = get_license_token()
     if not token:
         return {}
