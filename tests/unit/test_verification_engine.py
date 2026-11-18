@@ -625,3 +625,13 @@ async def test_run_verification_sem_arquivo_tocado_nao_varre_o_workspace(
     assert (res.status, res.outcome) == ("degraded", "not_run")
     assert len(res.snapshot_sha256) == 64
     assert res.file_hashes == {}
+
+
+def test_snapshot_do_workspace_nao_inclui_o_git(tmp_path: Path) -> None:
+    (tmp_path / ".git").mkdir()
+    (tmp_path / ".git" / "HEAD").write_text("ref")
+    (tmp_path / "a.py").write_text("x")
+
+    _digest, hashes = compute_files_snapshot(tmp_path)
+
+    assert list(hashes) == ["a.py"]
