@@ -1269,7 +1269,10 @@ describe("ProviderRoutingTab — 9Router / OmniRoute", () => {
     const card = (
       await screen.findByRole("heading", { name: /9router/i })
     ).closest(".rounded-lg.border") as HTMLElement;
-    fireEvent.click(within(card).getByRole("button", { name: /detectar/i }));
+    // O botão só aparece depois que o status do roteador carrega.
+    fireEvent.click(
+      await within(card).findByRole("button", { name: /detectar/i }),
+    );
     await waitFor(() => within(card).getByText("claude/modelo-0"));
     return card;
   }
