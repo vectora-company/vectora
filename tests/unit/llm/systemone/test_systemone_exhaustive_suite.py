@@ -450,7 +450,7 @@ async def test_jev_api_http_errors(
     """Verifica o comportamento de jev api http errors."""
     jev = JevApiAdapter(api_key="test_token")
     req = SystemOneRequest(
-        model="jev-fast",
+        model="jev-1.14.0",
         state="State",
         questions={"q": NoulQuestion(criterion="c")},
     )
@@ -857,7 +857,7 @@ async def test_update_decision_models_jev_key(
     [
         "clef-flash",
         "@cf/cloudflare/clef-flash",
-        "jev-fast",
+        "jev-1.14.0",
         "custom-decision-v1",
     ],
 )

@@ -8,6 +8,11 @@ from typing import Any
 
 import httpx
 
+from backend.llm.systemone.endpoints import (
+    CLEF_CLOUDFLARE_MODELS,
+    JEV_API_BASE_URL,
+    JEV_MODELS,
+)
 from backend.llm.systemone.errors import (
     SystemOneAuthenticationError,
     SystemOneCapabilityError,
@@ -287,7 +292,7 @@ class ClefApiAdapter(BaseSystemOneApiAdapter):
             supports_score=True,
             supports_image=True,
             supports_video=False,
-            supported_models=["@cf/cloudflare/clef", "@cf/cloudflare/clef-flash"],
+            supported_models=list(CLEF_CLOUDFLARE_MODELS),
             evidence="documented",
         )
 
@@ -298,7 +303,7 @@ class JevApiAdapter(BaseSystemOneApiAdapter):
     def __init__(
         self,
         api_key: str,
-        base_url: str = "https://api.jev.ai",
+        base_url: str = JEV_API_BASE_URL,
         timeout: float = _DEFAULT_TIMEOUT_SECONDS,
         *,
         client: httpx.AsyncClient | None = None,
@@ -320,6 +325,6 @@ class JevApiAdapter(BaseSystemOneApiAdapter):
             supports_score=True,
             supports_image=True,
             supports_video=False,
-            supported_models=["jev-1", "jev-fast"],
+            supported_models=list(JEV_MODELS),
             evidence="documented",
         )
