@@ -1382,14 +1382,22 @@ export const MessageItem = memo(
                 {showToolCalls &&
                   message.toolCalls &&
                   message.toolCalls.length > 0 && (
-                    <details className="mt-3 group" open={!!message.isThinking}>
+                    <details
+                      className="mt-3 group"
+                      open={
+                        !!message.isThinking ||
+                        message.toolCalls.some((tool) => tool.isError)
+                      }
+                    >
                       <summary className="cursor-pointer list-none flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors select-none">
                         <span className="group-open:hidden">▶</span>
                         <span className="hidden group-open:inline">▾</span>
                         <span>
                           {message.toolCalls.length === 1
-                            ? "1 ação"
-                            : `${message.toolCalls.length} ações`}
+                            ? m.chat_tool_calls_one()
+                            : m.chat_tool_calls_many({
+                                count: message.toolCalls.length,
+                              })}
                         </span>
                       </summary>
                       <div className="mt-2 space-y-2">

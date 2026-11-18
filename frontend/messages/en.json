@@ -385,6 +385,8 @@
   "chat_subagent_running": "Running…",
   "chat_subagent_waiting": "Waiting for output…",
   "chat_thinking_seconds": "{seconds}s",
+  "chat_tool_calls_many": "{count} actions",
+  "chat_tool_calls_one": "1 action",
   "chat_url_preview_loading": "Loading link preview…",
   "chat_url_preview_remove": "Remove link preview",
   "chat_url_preview_unavailable": "Link preview unavailable or blocked",

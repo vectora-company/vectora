@@ -69,10 +69,10 @@ describe("useSettingsStore — valores padrão", () => {
     vi.resetModules();
   });
 
-  it("showToolCalls deve ser false por padrão", async () => {
+  it("showToolCalls deve ser true por padrão", async () => {
     const { useSettingsStore } = await getStore();
     const state = useSettingsStore.getState();
-    expect(state.showToolCalls).toBe(false);
+    expect(state.showToolCalls).toBe(true);
   });
 
   it("permissionMode deve ser 'ask' por padrão (R2)", async () => {
@@ -305,7 +305,7 @@ describe("useSettingsStore — reset", () => {
     const s = useSettingsStore.getState();
 
     // Modifica vários campos
-    s.setShowToolCalls(true);
+    s.setShowToolCalls(false);
     s.setTheme("dark");
     s.setCustomSystemPrompt("Seja breve.");
     s.setPermissionMode("bypass");
@@ -315,7 +315,7 @@ describe("useSettingsStore — reset", () => {
     useSettingsStore.getState().resetSettings();
 
     const after = useSettingsStore.getState();
-    expect(after.showToolCalls).toBe(false);
+    expect(after.showToolCalls).toBe(true);
     expect(after.theme).toBe("system");
     expect(after.customSystemPrompt).toBe("");
     expect(after.permissionMode).toBe("ask");
@@ -344,5 +344,27 @@ describe("useSettingsStore — STORAGE_KEY", () => {
     const { getStorageKey } = await getStore();
     expect(getStorageKey()).toBe("vectora-settings-local");
     expect(getStorageKey(undefined)).toBe("vectora-settings-local");
+  });
+});
+
+async function migrateSettings(
+  state: Record<string, unknown>,
+  version: number,
+) {
+  const { useSettingsStore } = await getStore();
+  const run = useSettingsStore.persist.getOptions().migrate;
+  expect(run).toBeDefined();
+  return (await run?.(state, version)) as Record<string, unknown>;
+}
+
+describe("useSettingsStore — migração de showToolCalls", () => {
+  it("valor salvo antes da v8 volta a true", async () => {
+    const migrated = await migrateSettings({ showToolCalls: false }, 7);
+    expect(migrated.showToolCalls).toBe(true);
+  });
+
+  it("escolha salva na v8 é preservada", async () => {
+    const migrated = await migrateSettings({ showToolCalls: false }, 8);
+    expect(migrated.showToolCalls).toBe(false);
   });
 });
