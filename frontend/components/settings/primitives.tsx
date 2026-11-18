@@ -15,6 +15,7 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
+import { m } from "@/lib/paraglide/messages";
 
 /** Item de lista com borda própria (integração, plugin, memória), sem padding. */
 export const settingsItemClass = "rounded-lg border border-border bg-card";
@@ -99,7 +100,10 @@ export function SettingsSectionHeader({
 }: SettingsSectionHeaderProps) {
   if (!title && !actions) return null;
   return (
-    <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+    <div
+      data-slot="settings-section-header"
+      className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2"
+    >
       <div className="min-w-0 space-y-1">
         <h3
           id={titleId}
@@ -122,6 +126,81 @@ export function SettingsSectionHeader({
         </div>
       ) : null}
     </div>
+  );
+}
+
+interface SettingsNavItem {
+  id: string;
+  label: string;
+}
+
+/**
+ * Menu "Nesta página": lista os cards da aba (filhos diretos do mesmo
+ * container, com cabeçalho de seção) e rola até o escolhido. Aparece só quando
+ * há mais de um card.
+ */
+export function SettingsPageNav({ className }: { className?: string }) {
+  const navRef = React.useRef<HTMLElement>(null);
+  const [items, setItems] = React.useState<SettingsNavItem[]>([]);
+
+  React.useEffect(() => {
+    const container = navRef.current?.parentElement;
+    if (!container) return;
+    const scan = () => {
+      const next: SettingsNavItem[] = [];
+      container
+        .querySelectorAll<HTMLElement>('[data-slot="settings-section-header"]')
+        .forEach((header, index) => {
+          const card = header.parentElement;
+          if (!card || card.parentElement !== container) return;
+          const label = header.querySelector("h3")?.textContent?.trim();
+          if (!label) return;
+          if (!card.id) card.id = `settings-nav-${index}`;
+          card.classList.add("scroll-mt-4");
+          next.push({ id: card.id, label });
+        });
+      setItems((prev) =>
+        prev.length === next.length &&
+        prev.every(
+          (item, i) => item.id === next[i].id && item.label === next[i].label,
+        )
+          ? prev
+          : next,
+      );
+    };
+    scan();
+    const observer = new MutationObserver(scan);
+    observer.observe(container, { childList: true });
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <nav
+      ref={navRef}
+      aria-label={m.workbench_settings_page_aria()}
+      hidden={items.length < 2}
+      className={cn("min-w-0", className)}
+    >
+      <p className="mb-2 text-xs font-medium text-muted-foreground">
+        {m.workbench_settings_page_index()}
+      </p>
+      <div className="flex min-w-0 flex-wrap gap-x-4 gap-y-1 text-sm">
+        {items.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() =>
+              document
+                .getElementById(item.id)
+                ?.scrollIntoView({ behavior: "smooth", block: "start" })
+            }
+            className="break-words text-left text-primary hover:underline"
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+    </nav>
   );
 }
 

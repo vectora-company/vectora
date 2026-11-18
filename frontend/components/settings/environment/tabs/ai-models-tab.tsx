@@ -18,6 +18,7 @@ import {
 } from "@/lib/config/deployment-config";
 import { Button } from "@/components/ui/button";
 import {
+  SettingsPageNav,
   SettingsSection,
   SettingsStack,
   SettingsTabHeader,
@@ -1120,6 +1121,7 @@ export function AiModelsTab() {
         title={m.settings_category_ai_models()}
         description={m.ai_models_description()}
       />
+      <SettingsPageNav />
       <ChatModelSettings />
       <DecisionModelsSection />
       <SettingsSection
