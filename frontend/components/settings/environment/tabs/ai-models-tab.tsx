@@ -17,6 +17,16 @@ import {
   getModelProvider,
 } from "@/lib/config/deployment-config";
 import { Button } from "@/components/ui/button";
+import {
+  SettingsSection,
+  SettingsStack,
+  SettingsTabHeader,
+  settingsInputClass,
+  settingsLabelClass,
+  settingsOptionClass,
+  settingsRowClass,
+} from "@/components/settings/primitives";
+import { cn } from "@/lib/utils";
 import { useRagSettings } from "@/components/workbench/rag-settings-panel";
 
 function RetrievalModelSettings() {
@@ -102,11 +112,7 @@ function CapabilityModelList({
   const current = models.find((model) => model.id === selected);
   const options = models.filter((model) => model.id !== selected);
   return (
-    <section className="space-y-3 rounded-lg border bg-[#1f1f1f] p-3">
-      <div>
-        <h4 className="text-sm font-medium">{title}</h4>
-        <p className="text-xs text-muted-foreground">{description}</p>
-      </div>
+    <SettingsSection title={title} description={description}>
       {onToggle && (
         <div className="flex items-center justify-between gap-2">
           <span className="text-sm text-muted-foreground">
@@ -121,7 +127,7 @@ function CapabilityModelList({
         </div>
       )}
       {selected && (
-        <div className="flex items-center justify-between rounded-lg border bg-[#1a1a1a] px-3 py-2">
+        <div className={settingsRowClass}>
           <span className="flex min-w-0 items-center gap-2 truncate text-sm">
             <ProviderIcon
               provider={current?.provider ?? providerFromModelId(selected)}
@@ -143,17 +149,14 @@ function CapabilityModelList({
           className={`grid gap-2 md:grid-cols-2 xl:grid-cols-3 ${options.length > 6 ? "max-h-[26rem] overflow-y-auto pr-1" : ""}`}
         >
           {options.map((model) => (
-            <div
-              key={model.id}
-              className="flex min-w-0 items-center justify-between gap-2 rounded-lg border bg-[#1a1a1a] px-3 py-2"
-            >
+            <div key={model.id} className={cn(settingsRowClass, "min-w-0")}>
               <span className="flex min-w-0 items-center gap-2 truncate text-sm">
                 <ProviderIcon
                   provider={model.provider}
                   className="size-4 shrink-0"
                 />
                 <span className="truncate">{model.name}</span>
-                <span className="shrink-0 text-[10px] text-muted-foreground">
+                <span className="shrink-0 text-2xs text-muted-foreground">
                   {model.provider}
                 </span>
               </span>
@@ -172,7 +175,7 @@ function CapabilityModelList({
           {mDyn("ai_models_no_models_for_capability")}
         </p>
       )}
-    </section>
+    </SettingsSection>
   );
 }
 
@@ -274,12 +277,14 @@ export function SystemOneConfiguration() {
 
   if (!config)
     return (
-      <section
-        className="rounded-lg border p-3 text-xs text-muted-foreground"
+      <SettingsSection
         aria-label={mDyn("ai_models_systemone_configuration")}
+        title={mDyn("ai_models_systemone_configuration")}
       >
-        {message || mDyn("ai_models_systemone_loading")}
-      </section>
+        <p className="text-xs text-muted-foreground">
+          {message || mDyn("ai_models_systemone_loading")}
+        </p>
+      </SettingsSection>
     );
 
   const baseUrlKey =
@@ -320,19 +325,12 @@ export function SystemOneConfiguration() {
   const model = config[modelKey as keyof SystemOneConfig] as string;
 
   return (
-    <section
-      className="space-y-3 rounded-lg border p-3"
+    <SettingsSection
       aria-label={mDyn("ai_models_systemone_provider_configuration")}
+      title={mDyn("ai_models_systemone_runtime_credentials")}
+      description={mDyn("ai_models_systemone_config_description")}
     >
-      <div>
-        <h4 className="text-sm font-medium">
-          {mDyn("ai_models_systemone_runtime_credentials")}
-        </h4>
-        <p className="text-xs text-muted-foreground">
-          {mDyn("ai_models_systemone_config_description")}
-        </p>
-      </div>
-      <label className="flex items-center gap-2 text-sm">
+      <label className={settingsOptionClass}>
         <input
           type="checkbox"
           checked={config.enabled}
@@ -340,7 +338,7 @@ export function SystemOneConfiguration() {
         />
         {mDyn("ai_models_systemone_enable_runtime")}
       </label>
-      <label className="grid gap-1 text-xs">
+      <label className={settingsLabelClass}>
         {mDyn("ai_models_systemone_default_provider")}
         <div className="flex items-center gap-2">
           <ProviderIcon
@@ -348,7 +346,7 @@ export function SystemOneConfiguration() {
             className="size-4 shrink-0 text-muted-foreground"
           />
           <select
-            className="h-8 min-w-0 flex-1 rounded-md border bg-background px-2 text-sm"
+            className={cn(settingsInputClass, "min-w-0 flex-1")}
             value={config.provider}
             onChange={(event) => void save({ provider: event.target.value })}
           >
@@ -360,20 +358,20 @@ export function SystemOneConfiguration() {
           </select>
         </div>
       </label>
-      <label className="grid gap-1 text-xs">
+      <label className={settingsLabelClass}>
         {mDyn("ai_models_base_url")}
         <input
-          className="h-8 rounded-md border bg-background px-2 text-sm"
+          className={cn(settingsInputClass)}
           value={baseUrl}
           onChange={(event) =>
             setConfig({ ...config, [baseUrlKey]: event.target.value })
           }
         />
       </label>
-      <label className="grid gap-1 text-xs">
+      <label className={settingsLabelClass}>
         {mDyn("ai_models_model")}
         <input
-          className="h-8 rounded-md border bg-background px-2 text-sm"
+          className={cn(settingsInputClass)}
           value={model}
           onChange={(event) =>
             setConfig({ ...config, [modelKey]: event.target.value })
@@ -381,10 +379,10 @@ export function SystemOneConfiguration() {
         />
       </label>
       {accountKey && (
-        <label className="grid gap-1 text-xs">
+        <label className={settingsLabelClass}>
           {mDyn("ai_models_cloudflare_account_id")}
           <input
-            className="h-8 rounded-md border bg-background px-2 text-sm"
+            className={cn(settingsInputClass)}
             value={accountValue}
             onChange={(event) =>
               setConfig({ ...config, clef_account_id: event.target.value })
@@ -393,11 +391,11 @@ export function SystemOneConfiguration() {
         </label>
       )}
       {credentialKey && (
-        <label className="grid gap-1 text-xs">
+        <label className={settingsLabelClass}>
           {mDyn("ai_models_credential")}{" "}
           {credentialConfigured ? mDyn("ai_models_credential_keep_hint") : ""}
           <input
-            className="h-8 rounded-md border bg-background px-2 text-sm"
+            className={cn(settingsInputClass)}
             type="password"
             autoComplete="new-password"
             value={secret}
@@ -405,7 +403,7 @@ export function SystemOneConfiguration() {
           />
         </label>
       )}
-      <label className="grid gap-1 text-xs">
+      <label className={settingsLabelClass}>
         {mDyn("ai_models_minimum_autonomous_confidence")}{" "}
         {config.confidence_threshold_hitl.toFixed(2)}
         <input
@@ -422,7 +420,7 @@ export function SystemOneConfiguration() {
           }
         />
       </label>
-      <label className="grid gap-1 text-xs">
+      <label className={settingsLabelClass}>
         {mDyn("ai_models_risk_assessment_timeout")}{" "}
         {config.risk_assessment_timeout_s}
         <input
@@ -439,7 +437,7 @@ export function SystemOneConfiguration() {
           }
         />
       </label>
-      <label className="flex items-center gap-2 text-xs">
+      <label className={settingsOptionClass}>
         <input
           type="checkbox"
           checked={config.allow_remote_fallback}
@@ -452,9 +450,10 @@ export function SystemOneConfiguration() {
         />
         {mDyn("ai_models_allow_remote_fallback")}
       </label>
-      <button
+      <Button
+        variant="outline"
+        size="sm"
         type="button"
-        className="rounded-md border px-3 py-1.5 text-xs disabled:opacity-50"
         disabled={
           saving ||
           !Number.isFinite(config.risk_assessment_timeout_s) ||
@@ -474,13 +473,13 @@ export function SystemOneConfiguration() {
         }
       >
         {mDyn("ai_models_save_provider_configuration")}
-      </button>
+      </Button>
       {message && (
         <p role="status" className="text-xs text-muted-foreground">
           {message}
         </p>
       )}
-    </section>
+    </SettingsSection>
   );
 }
 
@@ -539,18 +538,11 @@ function DecisionModelsSection() {
           : m.decision_models_readiness_unconfigured();
 
   return (
-    <section
-      className="space-y-3 rounded-lg border bg-[#1f1f1f] p-3"
+    <SettingsSection
       aria-label={mDyn("ai_models_decision_models")}
+      title={mDyn("ai_models_decision_models")}
+      description={mDyn("ai_models_decision_models_description")}
     >
-      <div>
-        <h4 className="text-sm font-medium">
-          {mDyn("ai_models_decision_models")}
-        </h4>
-        <p className="text-xs text-muted-foreground">
-          {mDyn("ai_models_decision_models_description")}
-        </p>
-      </div>
       <div className="flex items-center justify-between gap-2">
         <span className="text-sm text-muted-foreground">
           {mDyn("ai_models_decision_models")}:{" "}
@@ -566,7 +558,7 @@ function DecisionModelsSection() {
             : mDyn("ai_models_enable_decision_models")}
         </Button>
       </div>
-      <div className="flex items-center justify-between rounded-lg border bg-[#1a1a1a] px-3 py-2">
+      <div className={settingsRowClass}>
         <span className="flex min-w-0 items-center gap-2 truncate text-sm">
           <ProviderIcon provider={provider} className="size-4 shrink-0" />
           {status?.model ||
@@ -579,10 +571,7 @@ function DecisionModelsSection() {
       <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
         {DECISION_PROVIDERS.filter((item) => item.id !== provider).map(
           (item) => (
-            <div
-              key={item.id}
-              className="flex min-w-0 items-center justify-between gap-2 rounded-lg border bg-[#1a1a1a] px-3 py-2"
-            >
+            <div key={item.id} className={cn(settingsRowClass, "min-w-0")}>
               <span className="flex min-w-0 items-center gap-2 truncate text-sm">
                 <ProviderIcon provider={item.id} className="size-4 shrink-0" />
                 {mDyn(item.label)}
@@ -607,7 +596,7 @@ function DecisionModelsSection() {
         </legend>
         <div className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
           {DECISION_SURFACES.map(([id, label]) => (
-            <label key={id} className="flex items-center gap-2 text-xs">
+            <label key={id} className={settingsOptionClass}>
               <input
                 type="checkbox"
                 checked={surfaces[id] === true}
@@ -621,7 +610,7 @@ function DecisionModelsSection() {
         </div>
       </fieldset>
       <SystemOneConfiguration />
-    </section>
+    </SettingsSection>
   );
 }
 
@@ -689,19 +678,12 @@ export function TranscriptionSettings() {
     }
   };
   return (
-    <section
-      className="space-y-3 rounded-lg border bg-[#1f1f1f] p-3"
+    <SettingsSection
       aria-label={mDyn("ai_models_transcription")}
+      title={mDyn("ai_models_audio_transcription")}
+      description={mDyn("ai_models_transcription_description")}
     >
-      <div>
-        <h4 className="text-sm font-medium">
-          {mDyn("ai_models_audio_transcription")}
-        </h4>
-        <p className="text-xs text-muted-foreground">
-          {mDyn("ai_models_transcription_description")}
-        </p>
-      </div>
-      <div className="flex items-center justify-between rounded-lg border bg-[#1a1a1a] px-3 py-2">
+      <div className={settingsRowClass}>
         <span className="flex min-w-0 items-center gap-2 truncate text-sm">
           <ProviderIcon
             provider={
@@ -725,10 +707,7 @@ export function TranscriptionSettings() {
         {(["remote", "local"] as const)
           .filter((mode) => mode !== transcriptionMode)
           .map((mode) => (
-            <div
-              key={mode}
-              className="flex items-center justify-between gap-2 rounded-lg border bg-[#1a1a1a] px-3 py-2"
-            >
+            <div key={mode} className={cn(settingsRowClass, "min-w-0")}>
               <span className="flex min-w-0 items-center gap-2 truncate text-sm">
                 <ProviderIcon
                   provider={
@@ -772,18 +751,19 @@ export function TranscriptionSettings() {
         </p>
       )}
       {transcriptionMode === "local" && localReadiness?.model_cached && (
-        <button
+        <Button
+          variant="outline"
+          size="sm"
           type="button"
-          className="h-8 rounded-md border px-3 text-xs"
           onClick={() => void probeLocalRuntime()}
           disabled={probingLocalRuntime || localReadiness.probe_in_progress}
         >
           {probingLocalRuntime
             ? mDyn("ai_models_transcription_probe_running")
             : mDyn("ai_models_transcription_probe_button")}
-        </button>
+        </Button>
       )}
-    </section>
+    </SettingsSection>
   );
 }
 
@@ -894,15 +874,14 @@ export function LocalSpeechSettings() {
 
   if (unavailable) {
     return (
-      <section
-        className="space-y-2 rounded-lg border p-3"
+      <SettingsSection
         aria-label={mDyn("ai_models_stt_title")}
+        title={mDyn("ai_models_stt_title")}
       >
-        <h4 className="text-sm font-medium">{mDyn("ai_models_stt_title")}</h4>
         <p role="status" className="text-xs text-muted-foreground">
           {mDyn("ai_models_stt_unavailable")}
         </p>
-      </section>
+      </SettingsSection>
     );
   }
   if (!data) return null;
@@ -932,16 +911,11 @@ export function LocalSpeechSettings() {
   ];
 
   return (
-    <section
-      className="space-y-3 rounded-lg border p-3"
+    <SettingsSection
       aria-label={mDyn("ai_models_stt_title")}
+      title={mDyn("ai_models_stt_title")}
+      description={mDyn("ai_models_stt_description")}
     >
-      <div>
-        <h4 className="text-sm font-medium">{mDyn("ai_models_stt_title")}</h4>
-        <p className="text-xs text-muted-foreground">
-          {mDyn("ai_models_stt_description")}
-        </p>
-      </div>
       <ul
         className="space-y-1 text-xs"
         aria-label={mDyn("ai_models_stt_engines")}
@@ -955,11 +929,11 @@ export function LocalSpeechSettings() {
           </li>
         ))}
       </ul>
-      <label className="grid gap-1 text-xs text-muted-foreground">
+      <label className={settingsLabelClass}>
         {mDyn("ai_models_stt_model_label")}
         <select
           aria-label={mDyn("ai_models_stt_model_label")}
-          className="h-9 rounded-md border bg-background px-2 text-sm text-foreground"
+          className={cn(settingsInputClass)}
           value={data.model}
           onChange={(event) => void save({ model: event.target.value })}
         >
@@ -973,11 +947,11 @@ export function LocalSpeechSettings() {
           ))}
         </select>
       </label>
-      <label className="grid gap-1 text-xs text-muted-foreground">
+      <label className={settingsLabelClass}>
         {mDyn("ai_models_stt_language_label")}
         <select
           aria-label={mDyn("ai_models_stt_language_label")}
-          className="h-9 rounded-md border bg-background px-2 text-sm text-foreground"
+          className={cn(settingsInputClass)}
           value={data.language}
           onChange={(event) => void save({ language: event.target.value })}
         >
@@ -993,29 +967,30 @@ export function LocalSpeechSettings() {
         <summary className="cursor-pointer text-muted-foreground">
           {mDyn("ai_models_stt_advanced")}
         </summary>
-        <label className="grid gap-1 text-muted-foreground">
+        <label className={settingsLabelClass}>
           {mDyn("ai_models_stt_system_command")}
           <input
             aria-label={mDyn("ai_models_stt_system_command")}
-            className="h-8 rounded-md border bg-background px-2 text-sm text-foreground"
+            className={cn(settingsInputClass)}
             placeholder={mDyn("ai_models_stt_system_command_placeholder")}
             value={systemCommand}
             onChange={(event) => setSystemCommand(event.target.value)}
           />
         </label>
-        <label className="grid gap-1 text-muted-foreground">
+        <label className={settingsLabelClass}>
           {mDyn("ai_models_stt_system_model")}
           <input
             aria-label={mDyn("ai_models_stt_system_model")}
-            className="h-8 rounded-md border bg-background px-2 text-sm text-foreground"
+            className={cn(settingsInputClass)}
             placeholder={mDyn("ai_models_stt_system_model_placeholder")}
             value={systemModel}
             onChange={(event) => setSystemModel(event.target.value)}
           />
         </label>
-        <button
+        <Button
+          variant="outline"
+          size="sm"
           type="button"
-          className="h-8 rounded-md border px-3 text-xs"
           onClick={() =>
             void save({
               system_command: systemCommand,
@@ -1024,7 +999,7 @@ export function LocalSpeechSettings() {
           }
         >
           {mDyn("ai_models_stt_save")}
-        </button>
+        </Button>
       </details>
       {status === "saved" && (
         <p role="status" className="text-xs text-muted-foreground">
@@ -1036,7 +1011,7 @@ export function LocalSpeechSettings() {
           {mDyn("ai_models_stt_error")} {errorText}
         </p>
       )}
-    </section>
+    </SettingsSection>
   );
 }
 
@@ -1098,19 +1073,12 @@ export function ChatModelSettings() {
     dynamicModels.find((model) => model.id === modelId)?.provider ??
     providerFromModelId(modelId);
   return (
-    <section
-      className="space-y-3 rounded-lg border bg-[#1f1f1f] p-3"
+    <SettingsSection
       aria-label={mDyn("ai_models_chat_primary")}
+      title={mDyn("ai_models_chat_primary")}
+      description={mDyn("ai_models_chat_primary_help")}
     >
-      <div>
-        <h4 className="text-sm font-medium">
-          {mDyn("ai_models_chat_primary")}
-        </h4>
-        <p className="text-xs text-muted-foreground">
-          {mDyn("ai_models_chat_primary_help")}
-        </p>
-      </div>
-      <div className="flex items-center justify-between rounded-lg border bg-[#1a1a1a] px-3 py-2">
+      <div className={settingsRowClass}>
         <span className="flex min-w-0 items-center gap-2 truncate text-sm">
           <ProviderIcon
             provider={providerFor(selected)}
@@ -1126,10 +1094,7 @@ export function ChatModelSettings() {
         className={`grid gap-2 md:grid-cols-2 xl:grid-cols-3 ${registerable.length > 6 ? "max-h-[26rem] overflow-y-auto pr-1" : ""}`}
       >
         {registerable.map((model) => (
-          <div
-            key={model}
-            className="flex min-w-0 items-center justify-between gap-2 rounded-lg border bg-[#1a1a1a] px-3 py-2"
-          >
+          <div key={model} className={cn(settingsRowClass, "min-w-0")}>
             <span className="flex min-w-0 items-center gap-2 truncate text-sm">
               <ProviderIcon
                 provider={providerFor(model)}
@@ -1143,37 +1108,28 @@ export function ChatModelSettings() {
           </div>
         ))}
       </div>
-    </section>
+    </SettingsSection>
   );
 }
 
 export function AiModelsTab() {
   return (
-    <div className="space-y-6">
-      <div>
-        <h3 className="text-sm font-medium text-foreground">
-          {m.settings_category_ai_models()}
-        </h3>
-        <p className="pt-1 text-xs leading-5 text-muted-foreground">
-          {m.ai_models_description()}
-        </p>
-      </div>
+    <SettingsStack>
+      <SettingsTabHeader
+        title={m.settings_category_ai_models()}
+        description={m.ai_models_description()}
+      />
       <ChatModelSettings />
       <DecisionModelsSection />
-      <section
-        className="space-y-3 rounded-lg border bg-[#1f1f1f] p-3"
+      <SettingsSection
         aria-label={mDyn("ai_models_vision_input")}
+        title={mDyn("ai_models_vision_input")}
       >
-        <h4 className="text-sm font-medium">
-          {mDyn("ai_models_vision_input")}
-        </h4>
         <ImageFallbackModelSection />
-      </section>
+      </SettingsSection>
       <RetrievalModelSettings />
-      <section className="space-y-3 rounded-lg border bg-[#1f1f1f] p-3">
-        <TranscriptionSettings />
-        <LocalSpeechSettings />
-      </section>
-    </div>
+      <TranscriptionSettings />
+      <LocalSpeechSettings />
+    </SettingsStack>
   );
 }
