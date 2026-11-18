@@ -28,7 +28,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ToolPolicyPanel } from "./tool-policy-panel";
 import { m } from "@/lib/paraglide/messages";
 
 interface McpServer {
@@ -350,11 +349,6 @@ export function PluginsTab() {
           {m.plugins_add()}
         </Button>
       )}
-
-      {/* Política de tools (self-service) */}
-      <div className="border-t border-border/60 pt-3">
-        <ToolPolicyPanel />
-      </div>
     </div>
   );
 }

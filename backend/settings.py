@@ -1220,12 +1220,9 @@ AVAILABLE_MODELS: dict[str, list[str]] = {
     ],
 }
 
-# Providers cujo modelo aceita imagem na mensagem (Cohere e Ollama não
-# suportam multimodal nos clients nativos, independente do modelo
-# específico escolhido dentro do provider). Usado por
-# `api/handlers/chat.py::stream_chat` para recusar attachments de imagem
-# cedo, com um erro claro, em vez de deixar a API do provider estourar com
-# uma mensagem crua (ex.: Cohere "image content is not supported").
+# Providers cujo catálogo estático inteiro aceita imagem. Providers com
+# capacidade variável por modelo (Cohere, Ollama, OpenRouter e 9Router) são
+# resolvidos por `backend.llm.capabilities.model_vision_state`.
 VISION_CAPABLE_PROVIDERS: set[str] = {"google-genai", "openai", "anthropic"}
 
 

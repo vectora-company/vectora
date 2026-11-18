@@ -876,6 +876,79 @@
         "title": "BrowseResponse",
         "type": "object"
       },
+      "BrowserInput": {
+        "properties": {
+          "delta_x": {
+            "default": 0,
+            "title": "Delta X",
+            "type": "number"
+          },
+          "delta_y": {
+            "default": 0,
+            "title": "Delta Y",
+            "type": "number"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "maxLength": 20000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "x": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "X"
+          },
+          "y": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Y"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "BrowserInput",
+        "type": "object"
+      },
       "BrowserLogsResponse": {
         "properties": {
           "lines": {
@@ -890,6 +963,33 @@
           "lines"
         ],
         "title": "BrowserLogsResponse",
+        "type": "object"
+      },
+      "BrowserNavigation": {
+        "properties": {
+          "url": {
+            "maxLength": 4096,
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "BrowserNavigation",
+        "type": "object"
+      },
+      "BrowserOpen": {
+        "properties": {
+          "profile_id": {
+            "default": "default",
+            "maxLength": 256,
+            "pattern": "^(?:default|session-[A-Za-z0-9_-]+)$",
+            "title": "Profile Id",
+            "type": "string"
+          }
+        },
+        "title": "BrowserOpen",
         "type": "object"
       },
       "BrowserServerStatus": {
@@ -966,6 +1066,28 @@
           "name"
         ],
         "title": "BrowserStopRequest",
+        "type": "object"
+      },
+      "BrowserViewport": {
+        "properties": {
+          "height": {
+            "maximum": 2160.0,
+            "minimum": 240.0,
+            "title": "Height",
+            "type": "integer"
+          },
+          "width": {
+            "maximum": 3840.0,
+            "minimum": 320.0,
+            "title": "Width",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "width",
+          "height"
+        ],
+        "title": "BrowserViewport",
         "type": "object"
       },
       "BuildRequest": {
@@ -15677,6 +15799,416 @@
         "summary": "Get Board View",
         "tags": [
           "boards"
+        ]
+      }
+    },
+    "/browser-workbench/{tab_id}": {
+      "delete": {
+        "operationId": "close_tab_browser_workbench__tab_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tab_id",
+            "required": true,
+            "schema": {
+              "title": "Tab Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response Close Tab Browser Workbench  Tab Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Close Tab",
+        "tags": [
+          "browser-workbench"
+        ]
+      }
+    },
+    "/browser-workbench/{tab_id}/frame": {
+      "get": {
+        "operationId": "get_frame_browser_workbench__tab_id__frame_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tab_id",
+            "required": true,
+            "schema": {
+              "title": "Tab Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Frame",
+        "tags": [
+          "browser-workbench"
+        ]
+      }
+    },
+    "/browser-workbench/{tab_id}/history/{direction}": {
+      "post": {
+        "operationId": "history_browser_workbench__tab_id__history__direction__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tab_id",
+            "required": true,
+            "schema": {
+              "title": "Tab Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "direction",
+            "required": true,
+            "schema": {
+              "title": "Direction",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response History Browser Workbench  Tab Id  History  Direction  Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "History",
+        "tags": [
+          "browser-workbench"
+        ]
+      }
+    },
+    "/browser-workbench/{tab_id}/input": {
+      "post": {
+        "operationId": "send_input_browser_workbench__tab_id__input_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tab_id",
+            "required": true,
+            "schema": {
+              "title": "Tab Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BrowserInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response Send Input Browser Workbench  Tab Id  Input Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Send Input",
+        "tags": [
+          "browser-workbench"
+        ]
+      }
+    },
+    "/browser-workbench/{tab_id}/navigate": {
+      "post": {
+        "operationId": "navigate_browser_workbench__tab_id__navigate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tab_id",
+            "required": true,
+            "schema": {
+              "title": "Tab Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BrowserNavigation"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Navigate Browser Workbench  Tab Id  Navigate Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Navigate",
+        "tags": [
+          "browser-workbench"
+        ]
+      }
+    },
+    "/browser-workbench/{tab_id}/open": {
+      "post": {
+        "operationId": "open_tab_browser_workbench__tab_id__open_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tab_id",
+            "required": true,
+            "schema": {
+              "title": "Tab Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/BrowserOpen"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Open Tab Browser Workbench  Tab Id  Open Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Open Tab",
+        "tags": [
+          "browser-workbench"
+        ]
+      }
+    },
+    "/browser-workbench/{tab_id}/state": {
+      "get": {
+        "operationId": "get_state_browser_workbench__tab_id__state_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tab_id",
+            "required": true,
+            "schema": {
+              "title": "Tab Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get State Browser Workbench  Tab Id  State Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get State",
+        "tags": [
+          "browser-workbench"
+        ]
+      }
+    },
+    "/browser-workbench/{tab_id}/viewport": {
+      "post": {
+        "operationId": "set_viewport_browser_workbench__tab_id__viewport_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tab_id",
+            "required": true,
+            "schema": {
+              "title": "Tab Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BrowserViewport"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response Set Viewport Browser Workbench  Tab Id  Viewport Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Viewport",
+        "tags": [
+          "browser-workbench"
         ]
       }
     },

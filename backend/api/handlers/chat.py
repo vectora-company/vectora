@@ -56,7 +56,6 @@ from backend.llm.fallback_chat_client import FallbackChatClient
 from backend.services import agent_factory
 from backend.settings import (
     TOOL_CALLING_INCOMPATIBLE_MODELS,
-    VISION_CAPABLE_PROVIDERS,
     CapabilityState,
 )
 from backend.tools.subagent_delegate import SubagentDeps
@@ -231,45 +230,11 @@ def _mime_to_lang(filename: str) -> str:
     return _EXT_TO_LANG.get(ext, "")
 
 
-def _resolve_provider(model_spec: str) -> str:
-    """Extrai o provider (``google_genai``, ``cohere`` etc.) do valor já
-    normalizado em ``configurable["model"]``. Sem escolha explícita de
-    modelo na request, espelha o fallback de
-    ``backend/services/utils.py::load_llm`` (provider ativo do runtime/env).
-    """
-    if model_spec:
-        provider, _, _ = model_spec.partition(":")
-        return provider
-
-    from backend.workspace.runtime_settings import runtime_settings
-
-    return (os.getenv("LLM_PROVIDER") or runtime_settings.active_provider).replace(
-        "-", "_"
-    )
-
-
 async def _model_supports_vision(model_spec: str) -> CapabilityState:
-    """Return the tri-state vision capability for a concrete model."""
-    provider = _resolve_provider(model_spec)
-    if provider in VISION_CAPABLE_PROVIDERS:
-        return CapabilityState.SUPPORTED
-    if provider == "openrouter":
-        from backend.api.handlers.provider_routing import (
-            openrouter_model_image_state,
-        )
+    """Return tri-state vision support for the concrete configured model."""
+    from backend.llm.capabilities import model_vision_state
 
-        _, _, model_id = model_spec.partition(":")
-        return await openrouter_model_image_state(model_id or model_spec)
-    if provider == "nine_router":
-        from backend.api.handlers.provider_routing import (
-            nine_router_model_supports_image,
-        )
-
-        _, _, model_id = model_spec.partition(":")
-        return await nine_router_model_supports_image(model_id or model_spec)
-    from backend.settings import provider_capability_state
-
-    return provider_capability_state(provider, "vision")
+    return await model_vision_state(model_spec)
 
 
 def _coerce_capability_state(value: CapabilityState | bool) -> CapabilityState:
@@ -866,12 +831,8 @@ async def stream_chat(
     if planning_mode:
         configurable["planning_mode"] = True
 
-    # Usa o model spec BRUTO (pré-normalização de `_build_configurable`) —
-    # `configurable["model"]` já converteu o provider pra underscore
-    # (`_normalize_model_spec`, formato que o `init_chat_model` exige), mas
-    # `VISION_CAPABLE_PROVIDERS`/`AVAILABLE_MODELS` usam a convenção com
-    # hífen do resto de settings.py; comparar contra a forma normalizada
-    # bloqueava até modelos com suporte real a visão (ex.: Gemini).
+    # Usa o spec bruto do modelo para consultar capacidades por provider,
+    # catálogo e runtime local antes da normalização interna do client.
     has_image = any(att.kind == AttachmentKind.IMAGE for att in request.attachments)
     if has_image and (
         _coerce_capability_state(await _model_supports_vision(request.config.model))

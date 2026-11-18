@@ -531,6 +531,62 @@
   },
   {
     "methods": [
+      "DELETE"
+    ],
+    "name": "close_tab_browser_workbench__tab_id__delete",
+    "path": "/browser-workbench/{tab_id}"
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "name": "get_frame_browser_workbench__tab_id__frame_get",
+    "path": "/browser-workbench/{tab_id}/frame"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "name": "history_browser_workbench__tab_id__history__direction__post",
+    "path": "/browser-workbench/{tab_id}/history/{direction}"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "name": "send_input_browser_workbench__tab_id__input_post",
+    "path": "/browser-workbench/{tab_id}/input"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "name": "navigate_browser_workbench__tab_id__navigate_post",
+    "path": "/browser-workbench/{tab_id}/navigate"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "name": "open_tab_browser_workbench__tab_id__open_post",
+    "path": "/browser-workbench/{tab_id}/open"
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "name": "get_state_browser_workbench__tab_id__state_get",
+    "path": "/browser-workbench/{tab_id}/state"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "name": "set_viewport_browser_workbench__tab_id__viewport_post",
+    "path": "/browser-workbench/{tab_id}/viewport"
+  },
+  {
+    "methods": [
       "GET"
     ],
     "name": "get_status_connect_status_get",

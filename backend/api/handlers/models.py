@@ -31,7 +31,6 @@ async def get_configured_providers() -> dict:
     from backend.settings import (
         AVAILABLE_MODELS,
         TOOL_CALLING_INCOMPATIBLE_MODELS,
-        provider_capability_state,
         settings,
     )
 
@@ -92,8 +91,8 @@ async def get_configured_providers() -> dict:
     models = []
     for provider, provider_models in AVAILABLE_MODELS.items():
         available = provider in settings.configured_llm_providers()
-        state = provider_capability_state(provider, "vision")
         for model in provider_models:
+            state = await _model_supports_vision(f"{provider}:{model}")
             models.append(
                 {
                     "id": f"{provider}:{model}",

@@ -28,7 +28,7 @@ from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any
 
 from backend.llm.cohere.client import CohereClient, CohereResponseError
-from backend.llm.media_parts import prepare_content
+from backend.llm.media_parts import AcceptedMedia, prepare_content, resolve_native_media
 from backend.vtypes.contracts import UsageSnapshot
 from backend.vtypes.message import (
     ContentBlock,
@@ -52,12 +52,14 @@ _ROLE_POR_TIPO = {
 }
 
 
-def _to_cohere_content(content: list[ContentBlock]) -> str | list[dict]:
+def _to_cohere_content(
+    content: list[ContentBlock], accepted: AcceptedMedia | None = None
+) -> str | list[dict]:
     """Bloco `text` vira string simples (caso comum); qualquer bloco
     `image_url` presente força o formato de lista de partes de conteúdo —
     nunca descarta o bloco de imagem só porque concatenar texto perderia."""
-    content = prepare_content(content, "cohere")
-    if not any(b.kind == "image_url" for b in content):
+    content = prepare_content(content, accepted or {})
+    if not any(b.kind in {"image_url", "media"} for b in content):
         return "".join(b.text or "" for b in content if b.kind == "text")
     partes: list[dict] = []
     for bloco in content:
@@ -65,6 +67,13 @@ def _to_cohere_content(content: list[ContentBlock]) -> str | list[dict]:
             partes.append({"type": "text", "text": bloco.text})
         elif bloco.kind == "image_url" and bloco.image_url:
             partes.append({"type": "image_url", "image_url": {"url": bloco.image_url}})
+        elif bloco.kind == "media" and bloco.media_data_url:
+            partes.append(
+                {
+                    "type": "image_url",
+                    "image_url": {"url": bloco.media_data_url},
+                }
+            )
     return partes
 
 
@@ -82,7 +91,9 @@ def _assistant_tool_calls(tool_calls: list[ToolCall]) -> list[dict]:
     ]
 
 
-def _to_cohere_messages(messages: list[VMessage]) -> list[dict]:
+def _to_cohere_messages(
+    messages: list[VMessage], accepted: AcceptedMedia | None = None
+) -> list[dict]:
     """Traduz ``VMessage`` pro formato `messages` da Chat API v2. Tool
     result (role TOOL) vira mensagem `tool` com `content` em lista de
     blocos `document` — o v2 não aceita string solta nesse campo."""
@@ -120,7 +131,9 @@ def _to_cohere_messages(messages: list[VMessage]) -> list[dict]:
             traduzidas.append(entrada)
             continue
 
-        traduzidas.append({"role": role, "content": _to_cohere_content(msg.content)})
+        traduzidas.append(
+            {"role": role, "content": _to_cohere_content(msg.content, accepted)}
+        )
 
     return traduzidas
 
@@ -172,10 +185,11 @@ class CohereChatClient:
         tools: list[ToolSpec] | None,
         temperature: float | None,
         max_tokens: int | None,
+        accepted: AcceptedMedia | None = None,
     ) -> dict:
         corpo: dict[str, Any] = {
             "model": self.model,
-            "messages": _to_cohere_messages(messages),
+            "messages": _to_cohere_messages(messages, accepted),
         }
         if temperature is not None:
             corpo["temperature"] = temperature
@@ -185,6 +199,15 @@ class CohereChatClient:
             corpo["tools"] = [t.openai_schema() for t in tools]
         return corpo
 
+    async def _accepted_media(self, messages: list[VMessage]) -> AcceptedMedia:
+        if not any(
+            block.kind == "media" and (block.media_data_url or block.media_preview_urls)
+            for message in messages
+            for block in message.content
+        ):
+            return {}
+        return await resolve_native_media(f"cohere:{self.model}")
+
     async def agenerate(
         self,
         messages: list[VMessage],
@@ -193,8 +216,13 @@ class CohereChatClient:
         temperature: float | None = None,
         max_tokens: int | None = None,
     ) -> VMessage:
+        accepted = await self._accepted_media(messages)
         corpo = self._payload(
-            messages, tools=tools, temperature=temperature, max_tokens=max_tokens
+            messages,
+            tools=tools,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            accepted=accepted,
         )
         resposta = await self.client.chat(corpo)
         mensagem = resposta.get("message")
@@ -224,8 +252,13 @@ class CohereChatClient:
         temperature: float | None = None,
         max_tokens: int | None = None,
     ) -> AsyncIterator[VMessageChunk]:
+        accepted = await self._accepted_media(messages)
         corpo = self._payload(
-            messages, tools=tools, temperature=temperature, max_tokens=max_tokens
+            messages,
+            tools=tools,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            accepted=accepted,
         )
 
         # `tool-call-start`/`tool-call-delta` trazem `index` explícito no
