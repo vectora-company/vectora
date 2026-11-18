@@ -30,6 +30,8 @@ import { mDyn } from "@/lib/i18n-dyn";
 // ---------------------------------------------------------------------------
 // Tipos
 // ---------------------------------------------------------------------------
+import { settingsItemClass } from "@/components/settings/primitives";
+import { cn } from "@/lib/utils";
 
 interface MemoryItem {
   key: string;
@@ -279,10 +281,7 @@ export function MemoriaTab() {
       {/* Lista de memórias */}
       <div className="space-y-2">
         {memories.map((mem) => (
-          <div
-            key={mem.key}
-            className="rounded-lg border bg-card p-3 space-y-2"
-          >
+          <div key={mem.key} className={cn(settingsItemClass, "space-y-2 p-3")}>
             {/* Key + data */}
             <div className="flex items-start justify-between gap-2">
               <span className="text-xs font-mono text-muted-foreground truncate">

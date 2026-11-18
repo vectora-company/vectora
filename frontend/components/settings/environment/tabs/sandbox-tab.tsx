@@ -32,10 +32,10 @@ const LEVEL_LABEL: Record<IsolationLevel, () => string> = {
 };
 
 const LEVEL_STYLE: Record<IsolationLevel, string> = {
-  effective: "bg-success/15 text-success ",
-  partial: "bg-warning/15 text-warning ",
-  soft: "bg-warning/15 text-warning ",
-  off: "bg-destructive/15 text-destructive ",
+  effective: "bg-success/15 text-success",
+  partial: "bg-warning/15 text-warning",
+  soft: "bg-warning/15 text-warning",
+  off: "bg-destructive/15 text-destructive",
 };
 
 const STATE_LABEL: Record<IsolationState, () => string> = {
@@ -364,7 +364,7 @@ export function SandboxTab() {
         </div>
 
         {!workspace.trusted && (
-          <p className="text-xs text-warning ">{m.sandbox_untrusted()}</p>
+          <p className="text-xs text-warning">{m.sandbox_untrusted()}</p>
         )}
 
         <fieldset
