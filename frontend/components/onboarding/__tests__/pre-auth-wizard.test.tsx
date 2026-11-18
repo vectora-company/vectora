@@ -6,6 +6,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { useSettingsStore } from "@/lib/stores/settings-store";
 import { useOnboardingDraftStore } from "@/lib/stores/onboarding-draft-store";
@@ -29,9 +30,19 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+/** As telas leem o status de licença pelo cache de queries. */
+function renderWithQuery(ui: React.ReactElement) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={client}>{ui}</QueryClientProvider>,
+  );
+}
+
 describe("PreAuthWizard — seletores de idioma e tema", () => {
   it("clicar em 'Dark' aplica o tema no settings-store imediatamente", () => {
-    render(<PreAuthWizard />);
+    renderWithQuery(<PreAuthWizard />);
 
     fireEvent.click(screen.getByTitle("Dark"));
 
@@ -39,7 +50,7 @@ describe("PreAuthWizard — seletores de idioma e tema", () => {
   });
 
   it("clicar em 'Light' depois de 'Dark' troca o tema (não acumula estado antigo)", () => {
-    render(<PreAuthWizard />);
+    renderWithQuery(<PreAuthWizard />);
 
     fireEvent.click(screen.getByTitle("Dark"));
     fireEvent.click(screen.getByTitle("Light"));
@@ -49,7 +60,7 @@ describe("PreAuthWizard — seletores de idioma e tema", () => {
 
   it("o botão do tema atual reflete aria-pressed=true", () => {
     useSettingsStore.setState({ theme: "dark" });
-    render(<PreAuthWizard />);
+    renderWithQuery(<PreAuthWizard />);
 
     expect(screen.getByTitle("Dark")).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByTitle("System")).toHaveAttribute(
@@ -61,7 +72,7 @@ describe("PreAuthWizard — seletores de idioma e tema", () => {
 
 describe("PreAuthWizard — username: autocomplete a partir do nome + obrigatório", () => {
   it("digitar o nome preenche o username automaticamente (slug) até edição manual", () => {
-    render(<PreAuthWizard />);
+    renderWithQuery(<PreAuthWizard />);
 
     fireEvent.change(screen.getByLabelText("Your name"), {
       target: { value: "Bruno Soares" },
@@ -75,7 +86,7 @@ describe("PreAuthWizard — username: autocomplete a partir do nome + obrigatór
       .spyOn(console, "error")
       .mockImplementation(() => {});
 
-    render(<PreAuthWizard />);
+    renderWithQuery(<PreAuthWizard />);
     fireEvent.change(screen.getByLabelText("Your name"), {
       target: { value: "Bruno Soares" },
     });
@@ -88,7 +99,7 @@ describe("PreAuthWizard — username: autocomplete a partir do nome + obrigatór
   });
 
   it("editar o username manualmente para de seguir o nome (par de erro: mudar o nome depois não sobrescreve)", () => {
-    render(<PreAuthWizard />);
+    renderWithQuery(<PreAuthWizard />);
 
     fireEvent.change(screen.getByLabelText("Your name"), {
       target: { value: "Bruno" },
@@ -104,7 +115,7 @@ describe("PreAuthWizard — username: autocomplete a partir do nome + obrigatór
   });
 
   it("clicar em Next sem username bloqueia o avanço com erro (par de erro: nome preenchido não basta)", () => {
-    render(<PreAuthWizard />);
+    renderWithQuery(<PreAuthWizard />);
 
     fireEvent.change(screen.getByLabelText("Your name"), {
       target: { value: "Bruno" },

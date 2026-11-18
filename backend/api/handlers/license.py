@@ -30,7 +30,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
-from backend.services.availability import require_services
+from backend.services.availability import require_services, services_enabled
 from backend.services.license import (
     LicenseError,
     clear_license_cache,
@@ -70,6 +70,10 @@ def _require_root(request: Request) -> Any:
 async def license_status() -> dict:
     """Devolve o status atual da licença (lido do cache local)."""
     info = read_cached_status()
+    # `services_enabled` diz à interface se esta execução fala com o Services
+    # (`--no-services` desliga): sem ele, um 503 de conta, OAuth ou portal
+    # pareceria falha de rede em vez de uma escolha do usuário.
+    services = services_enabled()
     if info is None:
         return {
             "configured": False,
@@ -78,8 +82,9 @@ async def license_status() -> dict:
             "days_remaining": 0,
             "expires_at": "",
             "cached": False,
+            "services_enabled": services,
         }
-    return {"configured": True, **info.to_dict()}
+    return {"configured": True, **info.to_dict(), "services_enabled": services}
 
 
 @router.post("/validate")
