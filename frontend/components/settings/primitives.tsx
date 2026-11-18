@@ -30,6 +30,10 @@ export const settingsLabelClass = "grid gap-1 text-xs text-foreground";
 export const settingsOptionClass =
   "flex items-center gap-2 text-xs text-foreground";
 
+/** Área de texto ou campo largo, com um pouco mais de respiro que o campo. */
+export const settingsTextareaClass =
+  "w-full rounded-md border border-input bg-background p-2 text-sm text-foreground";
+
 /** Campo nativo de texto, número ou seleção. */
 export const settingsInputClass =
   "h-8 rounded-md border border-input bg-background px-2 text-sm text-foreground";
@@ -67,7 +71,10 @@ export const settingsSectionClass =
   "space-y-3 rounded-lg border border-border p-4";
 
 interface SettingsSectionHeaderProps {
-  title: React.ReactNode;
+  /** Sem título nem ações, o cabeçalho não é renderizado. */
+  title?: React.ReactNode;
+  /** `id` do título, para `aria-labelledby` na seção. */
+  titleId?: string;
   description?: React.ReactNode;
   /** Ícone já renderizado (Lucide ou ícone de provider), 16px. */
   icon?: React.ReactNode;
@@ -78,14 +85,19 @@ interface SettingsSectionHeaderProps {
 /** Cabeçalho de uma seção: ícone, título, descrição e ações. */
 export function SettingsSectionHeader({
   title,
+  titleId,
   description,
   icon,
   actions,
 }: SettingsSectionHeaderProps) {
+  if (!title && !actions) return null;
   return (
     <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
       <div className="min-w-0 space-y-1">
-        <h3 className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+        <h3
+          id={titleId}
+          className="flex items-center gap-1.5 text-sm font-medium text-foreground"
+        >
           {icon ? (
             <span className="inline-flex size-4 shrink-0 items-center justify-center text-muted-foreground">
               {icon}
@@ -114,6 +126,7 @@ interface SettingsSectionProps
 /** Card de uma seção: borda do tema, raio 8px, `p-4`, 12px entre grupos. */
 export function SettingsSection({
   title,
+  titleId,
   description,
   icon,
   actions,
@@ -129,6 +142,7 @@ export function SettingsSection({
     >
       <SettingsSectionHeader
         title={title}
+        titleId={titleId}
         description={description}
         icon={icon}
         actions={actions}

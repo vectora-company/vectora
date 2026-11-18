@@ -61,6 +61,11 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { m } from "@/lib/paraglide/messages";
+import {
+  SettingsStatus,
+  settingsItemClass,
+} from "@/components/settings/primitives";
+import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
 // Tipos
@@ -254,7 +259,7 @@ function InvitesSection() {
   };
 
   return (
-    <div className="rounded-lg border bg-card/50 p-3 space-y-3">
+    <div className={cn(settingsItemClass, "p-3 space-y-3")}>
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium flex items-center gap-1.5">
           <UserPlus className="w-3.5 h-3.5 text-muted-foreground" />
@@ -454,8 +459,8 @@ function UserToolsRow({ userId }: { userId: string }) {
   }
 
   return (
-    <div className="rounded-lg border bg-card/50 -mt-1 p-3 space-y-2">
-      <div className="max-h-48 overflow-y-auto divide-y divide-border/60 rounded-md border">
+    <div className={cn(settingsItemClass, "-mt-1 p-3 space-y-2")}>
+      <div className="max-h-48 overflow-y-auto divide-y divide-border rounded-md border">
         {available.map((name) => (
           <div
             key={name}
@@ -543,7 +548,7 @@ export function UsersPanel() {
       </p>
       {users.map((u) => (
         <div key={u.id} className="space-y-1">
-          <div className="flex items-center gap-3 p-2.5 rounded-lg border bg-card">
+          <div className={cn(settingsItemClass, "flex items-center gap-3 p-3")}>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium truncate">{u.email}</p>
               <p className="text-2xs text-muted-foreground">
@@ -676,7 +681,9 @@ export function ToolsPanel() {
               }}
               className="pb-1.5"
             >
-              <div className="flex items-center gap-3 p-2.5 rounded-lg border bg-card">
+              <div
+                className={cn(settingsItemClass, "flex items-center gap-3 p-3")}
+              >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
                     <span className="text-xs font-mono font-medium">
@@ -761,14 +768,14 @@ export function SystemPanel() {
           [m.admin_system_label_python(), info.python_version.split(" ")[0]],
           [m.admin_system_label_spans(), String(info.recent_spans_count)],
         ].map(([label, value]) => (
-          <div key={label} className="rounded-lg border bg-card p-2.5">
+          <div key={label} className={cn(settingsItemClass, "p-3")}>
             <p className="text-2xs text-muted-foreground">{label}</p>
             <p className="text-xs font-medium truncate">{value}</p>
           </div>
         ))}
       </div>
 
-      <div className="space-y-2 rounded-lg border bg-card p-3">
+      <div className={cn(settingsItemClass, "space-y-2 p-3")}>
         <div className="flex items-center justify-between gap-2">
           <p className="text-xs font-medium">{m.admin_system_label_spans()}</p>
           <Button
@@ -874,13 +881,13 @@ function ConfigSection() {
         <div className="flex items-center gap-2">
           <p className="text-sm font-medium">{TOKEN_ENV_NAME}</p>
           {config.vectora_token_configured ? (
-            <span className="text-2xs uppercase tracking-wider px-1.5 py-0.5 rounded bg-success/15 text-success border border-success/30">
+            <SettingsStatus tone="success">
               {m.admin_config_token_configured()}
-            </span>
+            </SettingsStatus>
           ) : (
-            <span className="text-2xs uppercase tracking-wider px-1.5 py-0.5 rounded bg-warning/15 text-warning border border-warning/30">
+            <SettingsStatus tone="warning">
               {m.admin_config_token_absent()}
-            </span>
+            </SettingsStatus>
           )}
         </div>
         <p className="text-xs text-muted-foreground">
@@ -1101,7 +1108,7 @@ export function SafeRootsPanel() {
       </div>
 
       {/* Adicionar nova */}
-      <div className="rounded-md border border-border/60 p-3 space-y-2">
+      <div className={cn(settingsItemClass, "p-3 space-y-2")}>
         <div className="text-xs font-medium text-foreground">
           {m.admin_saferoots_add_title()}
         </div>
@@ -1162,7 +1169,7 @@ export function SafeRootsPanel() {
           {m.admin_saferoots_empty()}
         </div>
       ) : (
-        <div className="rounded-md border border-border/60 divide-y divide-border/60">
+        <div className={cn(settingsItemClass, "divide-y divide-border")}>
           {roots.map((r) => (
             <div
               key={r.id}
@@ -1435,7 +1442,7 @@ function BackendConfigCard({
   };
 
   return (
-    <div className="space-y-2 rounded border px-3 py-2">
+    <div className={cn(settingsItemClass, "space-y-2 px-3 py-2")}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Database className="w-3.5 h-3.5 text-muted-foreground" />
@@ -1564,7 +1571,7 @@ export function StoragePanel() {
       </div>
 
       {/* Modo de armazenamento */}
-      <div className="space-y-1.5 rounded border px-3 py-2">
+      <div className={cn(settingsItemClass, "space-y-1.5 px-3 py-2")}>
         <span className="text-xs font-medium">
           {m.admin_storage_mode_title()}
         </span>
@@ -1601,7 +1608,10 @@ export function StoragePanel() {
           {liteBackends.map(({ key, label }) => (
             <div
               key={key}
-              className="flex items-center justify-between rounded border px-3 py-2"
+              className={cn(
+                settingsItemClass,
+                "flex items-center justify-between px-3 py-2",
+              )}
             >
               <div className="flex items-center gap-2">
                 <Database className="w-3.5 h-3.5 text-muted-foreground" />

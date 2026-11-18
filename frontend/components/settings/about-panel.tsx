@@ -17,6 +17,8 @@ import { Loader2 } from "lucide-react";
 
 import { useIsDesktop } from "@/lib/hooks/use-is-desktop";
 import { m } from "@/lib/paraglide/messages";
+import { settingsItemClass } from "@/components/settings/primitives";
+import { cn } from "@/lib/utils";
 
 export function AboutPanel() {
   const [version, setVersion] = useState<string | null>(null);
@@ -50,7 +52,7 @@ export function AboutPanel() {
       </div>
 
       <div className="grid grid-cols-2 gap-2 max-w-xs">
-        <div className="rounded-lg border bg-card p-2.5">
+        <div className={cn(settingsItemClass, "p-3")}>
           <p className="text-2xs text-muted-foreground">
             {m.about_panel_version_label()}
           </p>
@@ -58,7 +60,7 @@ export function AboutPanel() {
             {version ?? <Loader2 className="w-3 h-3 animate-spin" />}
           </p>
         </div>
-        <div className="rounded-lg border bg-card p-2.5">
+        <div className={cn(settingsItemClass, "p-3")}>
           <p className="text-2xs text-muted-foreground">
             {m.about_panel_mode_label()}
           </p>
