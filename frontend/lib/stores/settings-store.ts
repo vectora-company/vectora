@@ -50,6 +50,20 @@ function activeDecisionWorkspaceId(): string | null {
   return useWorkspacesStore.getState().active_id ?? null;
 }
 
+/**
+ * Modelo escolhido pelo usuário cujo PATCH ainda não foi confirmado pelo
+ * backend. Enquanto existir, a hidratação não o sobrescreve com o valor antigo
+ * do servidor, e o envio é repetido.
+ */
+let pendingSelectedModel: string | null = null;
+
+export function persistSelectedModel(model: string): void {
+  pendingSelectedModel = model;
+  void pushPrefs({ selectedModel: model }).then((ok) => {
+    if (ok && pendingSelectedModel === model) pendingSelectedModel = null;
+  });
+}
+
 let settingsUserEpoch = 0;
 const decisionSaves = new Map<string, Promise<boolean>>();
 
@@ -697,7 +711,7 @@ export const useSettingsStore = create<SettingsState>()(
         }),
       setSelectedModel: (v) => {
         set({ selectedModel: v });
-        void pushPrefs({ selectedModel: v });
+        persistSelectedModel(v);
       },
       setAutoUpdateEnabled: (v) => {
         set({ autoUpdateEnabled: v });
@@ -900,7 +914,13 @@ export async function hydrateFromBackend(): Promise<void> {
     return;
   confirmedDecisionValues.clear();
   const update: Partial<SettingsState> = {};
-  if (prefs.selectedModel) update.selectedModel = prefs.selectedModel;
+  if (pendingSelectedModel !== null) {
+    // A escolha local ainda não chegou ao backend: ela vale mais que o valor
+    // antigo do servidor, e o envio é tentado de novo.
+    persistSelectedModel(pendingSelectedModel);
+  } else if (prefs.selectedModel) {
+    update.selectedModel = prefs.selectedModel;
+  }
   if (typeof prefs.decisionModelsEnabled === "boolean")
     update.decisionModelsEnabled = prefs.decisionModelsEnabled;
   if (
