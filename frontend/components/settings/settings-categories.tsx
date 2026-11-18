@@ -158,39 +158,7 @@ const StoragePanel = lazyWithRetry(
     })),
   "settings-admin-storage",
 );
-const BillingPanelLazy = lazyWithRetry(
-  () =>
-    import("./billing-panel").then((mod) => ({ default: mod.BillingPanel })),
-  "settings-billing-tab",
-);
-const AboutPanelLazy = lazyWithRetry(
-  () => import("./about-panel").then((mod) => ({ default: mod.AboutPanel })),
-  "settings-about-tab",
-);
-
-/** Cobrança + Sobre empilhados numa categoria só — telas pequenas demais
- * (poucos campos cada) pra justificar 2 entradas separadas no rail. */
-function BillingAndAboutPanel() {
-  return (
-    <div className="space-y-8">
-      <div>
-        <h3 className="text-sm font-medium mb-3">
-          {m.settings_category_billing()}
-        </h3>
-        <BillingPanelLazy />
-      </div>
-      <div>
-        <h3 className="text-sm font-medium mb-3">
-          {m.settings_category_about()}
-        </h3>
-        <AboutPanelLazy />
-      </div>
-    </div>
-  );
-}
-
-export type SettingsGroupId =
-  "preferencias" | "ambiente" | "administracao" | "geral_grupo";
+export type SettingsGroupId = "preferencias" | "ambiente" | "administracao";
 
 export interface SettingsCategory {
   id: SettingsCategoryId;
@@ -344,15 +312,6 @@ export function buildSettingsCategoryGroups({
       ]
     : [];
 
-  const geralGrupo: SettingsCategory[] = [
-    {
-      id: "billing",
-      group: "geral_grupo",
-      label: m.settings_category_billing(),
-      Component: BillingAndAboutPanel,
-    },
-  ];
-
   const groups: SettingsCategoryGroup[] = [
     {
       id: "preferencias",
@@ -372,18 +331,18 @@ export function buildSettingsCategoryGroups({
       categories: administracao,
     });
   }
-  groups.push({ id: "geral_grupo", label: "", categories: geralGrupo });
 
   return groups;
 }
 
-/** "about" foi mesclado dentro da categoria "billing" (Cobrança + Sobre
- * empilhados) — mantido como alias pra não quebrar deep-links antigos que
- * ainda abrem `openCategory("about")` diretamente. */
+/** Cobrança e Sobre agora são seções da aba Conta, e Git faz parte de
+ * Workbenches: os ids antigos ficam como alias para não quebrar deep-links
+ * que ainda abrem `openCategory("billing")`, `("about")` ou `("git")`. */
 const CATEGORY_ALIASES: Partial<
   Record<SettingsCategoryId, SettingsCategoryId>
 > = {
-  about: "billing",
+  about: "conta",
+  billing: "conta",
   git: "workbenches",
 };
 
