@@ -14,7 +14,11 @@ vi.mock("@/lib/paraglide/messages", () => ({
   },
 }));
 
-function renderDialog(storageKey?: string) {
+function renderDialog(
+  storageKey?: string,
+  maxWidth?: number,
+  maxHeight?: number,
+) {
   return render(
     <Dialog open>
       <ResizableDialogContent
@@ -23,6 +27,8 @@ function renderDialog(storageKey?: string) {
         defaultHeight={400}
         minWidth={300}
         minHeight={200}
+        maxWidth={maxWidth}
+        maxHeight={maxHeight}
         aria-describedby={undefined}
       >
         <DialogTitle>Título</DialogTitle>
@@ -81,6 +87,13 @@ describe("ResizableDialogContent", () => {
 
     expect(content().style.width).toBe("300px");
     expect(content().style.height).toBe("200px");
+  });
+
+  it("não cresce além dos limites configurados", () => {
+    renderDialog(undefined, 640, 480);
+    drag(500, 500);
+    expect(content().style.width).toBe("640px");
+    expect(content().style.height).toBe("480px");
   });
 
   it("com storageKey o tamanho fica salvo e volta na próxima abertura", () => {

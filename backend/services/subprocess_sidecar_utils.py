@@ -10,7 +10,9 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import os
 import shutil
+import signal
 import subprocess  # nosec B404 - only used for CREATE_NEW_PROCESS_GROUP
 import sys
 from typing import Any
@@ -19,10 +21,10 @@ from typing import Any
 def sidecar_process_options() -> dict[str, Any]:
     """Keep console signals on the backend process owner.
 
-    Windows console control events are delivered to every process in the
-    console group. Sidecars use their own group so Ctrl+C reaches the backend
-    first; the lifespan then terminates each child explicitly. POSIX uses a
-    new session for the same isolation.
+    Sidecars stay direct children of Vectora. Windows isolates console
+    control events and tracks the process tree with a Job Object; POSIX gives
+    each sidecar its own process group, which Vectora terminates as a unit
+    during lifespan shutdown.
     """
     if sys.platform == "win32":
         # Python exposes this constant on Windows. The fallback preserves
@@ -115,7 +117,13 @@ async def terminate_gracefully(
     """
     # No Windows, encerra a árvore enquanto o PID raiz ainda existe; depois
     # aguardamos o mesmo objeto asyncio para manter o contrato comum.
-    await _terminate_windows_tree(proc.pid, logger, log_prefix, timeout_seconds)
+    if sys.platform == "win32":
+        await _terminate_windows_tree(proc.pid, logger, log_prefix, timeout_seconds)
+    else:
+        await _terminate_posix_group(
+            proc, timeout_seconds=timeout_seconds, logger=logger, log_prefix=log_prefix
+        )
+        return
     try:
         proc.terminate()
         await asyncio.wait_for(proc.wait(), timeout=timeout_seconds)
@@ -127,3 +135,62 @@ async def terminate_gracefully(
         logger.warning("%s: erro ao encerrar", log_prefix, exc_info=True)
     with contextlib.suppress(Exception):
         await asyncio.wait_for(proc.wait(), timeout=timeout_seconds)
+
+
+def _signal_posix_group(
+    pgid: int, sig: int, logger: logging.Logger, prefix: str
+) -> None:
+    try:
+        os.killpg(pgid, sig)
+    except ProcessLookupError:
+        logger.debug("%s: grupo de processos %s já havia encerrado", prefix, pgid)
+    except OSError:
+        logger.warning("%s: falha ao sinalizar grupo %s", prefix, pgid, exc_info=True)
+
+
+async def _wait_posix_group_exit(pgid: int, timeout_seconds: float) -> None:
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout_seconds
+    while True:
+        try:
+            os.killpg(pgid, 0)
+        except ProcessLookupError:
+            return
+        remaining = deadline - loop.time()
+        if remaining <= 0:
+            raise TimeoutError
+        await asyncio.sleep(min(0.05, remaining))
+
+
+async def _terminate_posix_group(
+    proc: asyncio.subprocess.Process,
+    *,
+    timeout_seconds: float,
+    logger: logging.Logger,
+    log_prefix: str,
+) -> None:
+    """Encerra o sidecar e todos os descendentes do grupo POSIX isolado."""
+    pgid = proc.pid  # start_new_session=True faz PID == PGID.
+    deadline = asyncio.get_running_loop().time() + timeout_seconds
+    _signal_posix_group(pgid, signal.SIGTERM, logger, log_prefix)
+    try:
+        await asyncio.wait_for(proc.wait(), timeout=timeout_seconds)
+        remaining = max(0.0, deadline - asyncio.get_running_loop().time())
+        await asyncio.wait_for(
+            _wait_posix_group_exit(pgid, remaining), timeout=remaining
+        )
+        return
+    except TimeoutError:
+        logger.warning(
+            "%s: grupo %s não encerrou no prazo; forçando encerramento",
+            log_prefix,
+            pgid,
+        )
+
+    _signal_posix_group(pgid, signal.SIGKILL, logger, log_prefix)
+    with contextlib.suppress(Exception):
+        await asyncio.wait_for(proc.wait(), timeout=timeout_seconds)
+    with contextlib.suppress(Exception):
+        await asyncio.wait_for(
+            _wait_posix_group_exit(pgid, timeout_seconds), timeout=timeout_seconds
+        )

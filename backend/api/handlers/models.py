@@ -1,4 +1,4 @@
-"""Informações de modelos LLM para o frontend (model selector).
+"""Catálogo de modelos e provedores configurados para o frontend.
 
 Endpoint (exige auth via middleware):
     GET /models/providers — providers de LLM com credencial configurada +
@@ -17,6 +17,29 @@ from fastapi import APIRouter
 router = APIRouter(prefix="/models", tags=["models"])
 
 
+@router.get("/catalog")
+async def get_model_catalog(
+    capability: str | None = None, refresh: bool = False
+) -> dict:
+    """Catálogo multi-provider com capabilities e proveniência da detecção."""
+    from backend.services.model_catalog import (
+        MODEL_CAPABILITIES,
+        invalidate_model_catalog,
+        list_model_catalog,
+    )
+
+    if refresh:
+        invalidate_model_catalog()
+    if capability and capability not in MODEL_CAPABILITIES:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=422, detail="Capability desconhecida")
+    models = await list_model_catalog()
+    if capability:
+        models = [item for item in models if capability in item["capabilities"]]
+    return {"capabilities": list(MODEL_CAPABILITIES), "models": models}
+
+
 @router.get("/providers")
 async def get_configured_providers() -> dict:
     """Providers de LLM com credencial configurada + modelos dinâmicos."""
@@ -31,7 +54,6 @@ async def get_configured_providers() -> dict:
     from backend.settings import (
         AVAILABLE_MODELS,
         TOOL_CALLING_INCOMPATIBLE_MODELS,
-        provider_capability_state,
         settings,
     )
 
@@ -92,8 +114,8 @@ async def get_configured_providers() -> dict:
     models = []
     for provider, provider_models in AVAILABLE_MODELS.items():
         available = provider in settings.configured_llm_providers()
-        state = provider_capability_state(provider, "vision")
         for model in provider_models:
+            state = await _model_supports_vision(f"{provider}:{model}")
             models.append(
                 {
                     "id": f"{provider}:{model}",

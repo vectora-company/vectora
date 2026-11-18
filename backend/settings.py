@@ -91,10 +91,10 @@ class Settings(BaseSettings):
     ollama_base_url: str | None = None
 
     ollama_api_key: str | None = None
-    """Chave do Ollama Cloud (ollama.com), não do servidor local.
+    """Bearer key do Ollama Cloud ou de um endpoint Ollama protegido.
 
-    Só é necessária pros recursos de nuvem — `web_search`/`web_fetch` e os
-    modelos hospedados. O servidor local ignora o header de auth."""
+    É usada em chamadas ao endpoint configurado e nos recursos de nuvem
+    `web_search`/`web_fetch`. O servidor local padrão ignora o header."""
     ollama_model: str = "llama2"
 
     ollama_num_ctx: int = 32768
@@ -354,7 +354,7 @@ class Settings(BaseSettings):
     """API key for Cohere embeddings and reranking service."""
 
     voyage_api_key: str | None = None
-    """API key da VoyageAI — alternativa/fallback ao Cohere (embeddings + rerank)."""
+    """API key da VoyageAI para embeddings e reranking."""
 
     voyage_embedding_model: str = "voyage-3"
     """Modelo de embedding da VoyageAI (hosted, quality-first)."""
@@ -373,11 +373,21 @@ class Settings(BaseSettings):
     embedding_dims: int = 1024
     """Cohere v3 retorna vetores de 1024 dimensões."""
 
-    embedding_provider: Literal["cohere", "voyage", "ollama", "openrouter"] | None = (
-        None
-    )
-    """Preferência explícita de provider de embedding. None = fallback padrão
-    (Cohere↔Voyage se alguma key configurada; senão Ollama/OpenRouter local)."""
+    embedding_provider: (
+        Literal[
+            "cohere",
+            "voyage",
+            "openai",
+            "google-genai",
+            "ollama",
+            "openrouter",
+            "llamacpp",
+            "nine_router",
+            "dmr",
+        ]
+        | None
+    ) = None
+    """Provider padrão de embeddings quando o runtime está em modo automático."""
 
     ollama_embedding_model: str | None = None
     """Modelo de embedding no host Ollama (ex.: "qwen3-embedding:0.6b"). None
@@ -387,6 +397,12 @@ class Settings(BaseSettings):
     openrouter_embedding_model: str | None = None
     """Modelo de embedding via OpenRouter (ex.: "qwen/qwen3-embedding-0.6b").
     None desabilita embeddings via OpenRouter, mesmo com key configurada."""
+
+    openai_embedding_model: str = "text-embedding-3-small"
+    """Modelo de embeddings da API OpenAI; pode ser sobrescrito no RAG."""
+
+    google_embedding_model: str = "gemini-embedding-001"
+    """Modelo de embeddings Gemini; pode ser sobrescrito no RAG."""
 
     # Ollama/OpenRouter são gateways pra qualquer modelo: a capacidade não
     # vem do provider, vem do modelo que o usuário escolheu pra ela. Mesma
@@ -507,8 +523,10 @@ class Settings(BaseSettings):
     search_min_score: float = 0.5
     """Minimum similarity score threshold for search results."""
 
-    reranker_type: Literal["cohere", "voyage", "openrouter", "none"] = "cohere"
-    """Provider de rerank primário; o outro vira secundário no fallback.
+    reranker_type: Literal["cohere", "voyage", "openrouter", "llamacpp", "none"] = (
+        "cohere"
+    )
+    """Provider padrão de rerank quando o runtime está em modo automático.
 
     Ollama **não** entra: não expõe endpoint de rerank algum. `Literal` em
     vez de `str` para que um valor fora da lista seja rejeitado na
@@ -1049,7 +1067,7 @@ class Settings(BaseSettings):
             "google-genai": self.google_api_key,
             "openai": self.openai_api_key,
             "anthropic": self.anthropic_api_key,
-            "ollama": None,  # Ollama doesn't require API key
+            "ollama": self.ollama_api_key,
             "cohere": self.cohere_api_key,
             "openrouter": self.openrouter_api_key,
             "nine_router": self.nine_router_api_key,
@@ -1061,8 +1079,8 @@ class Settings(BaseSettings):
     def configured_llm_providers(self) -> list[str]:
         """Providers de LLM com credencial configurada (para o model selector).
 
-        Ollama não exige key — é incluído só quando ``ollama_base_url`` aponta para
-        um host. Cohere usa a precedência de ``get_cohere_api_key`` (env inclusa).
+        Ollama aceita endpoint sem key e envia Bearer quando ``ollama_api_key``
+        está configurada. Cohere usa a precedência de ``get_cohere_api_key``.
         """
         providers: list[str] = []
         if self.google_api_key:
@@ -1220,12 +1238,9 @@ AVAILABLE_MODELS: dict[str, list[str]] = {
     ],
 }
 
-# Providers cujo modelo aceita imagem na mensagem (Cohere e Ollama não
-# suportam multimodal nos clients nativos, independente do modelo
-# específico escolhido dentro do provider). Usado por
-# `api/handlers/chat.py::stream_chat` para recusar attachments de imagem
-# cedo, com um erro claro, em vez de deixar a API do provider estourar com
-# uma mensagem crua (ex.: Cohere "image content is not supported").
+# Providers cujo catálogo estático inteiro aceita imagem. Providers com
+# capacidade variável por modelo (Cohere, Ollama, OpenRouter e 9Router) são
+# resolvidos por `backend.llm.capabilities.model_vision_state`.
 VISION_CAPABLE_PROVIDERS: set[str] = {"google-genai", "openai", "anthropic"}
 
 

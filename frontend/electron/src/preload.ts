@@ -158,6 +158,7 @@ export interface VectoraDesktopBridge {
   /** Operações locais do Docker Model Runner executadas no processo principal. */
   dmr: {
     detect: () => Promise<DmrDetection>;
+    ensureRunner: () => Promise<DmrOperation>;
     list: () => Promise<{
       version: 1;
       models: Record<string, DmrManifestModel>;
@@ -277,6 +278,7 @@ const bridge: VectoraDesktopBridge = {
   },
   dmr: {
     detect: () => ipcRenderer.invoke("vectora:dmr-detect"),
+    ensureRunner: () => ipcRenderer.invoke("vectora:dmr-install-runner"),
     list: () => ipcRenderer.invoke("vectora:dmr-list"),
     prepare: (reference) =>
       ipcRenderer.invoke("vectora:dmr-prepare", reference),

@@ -45,9 +45,6 @@ function stubTab(testId: string) {
 vi.mock("../preferencias/tabs/preferencias-tab", () => ({
   PreferenciasTab: stubTab("tab-geral"),
 }));
-vi.mock("../preferencias/tabs/fallbacks-tab", () => ({
-  FallbacksTab: stubTab("tab-fallbacks"),
-}));
 vi.mock("../preferencias/tabs/memoria-tab", () => ({
   MemoriaTab: stubTab("tab-memoria"),
 }));
@@ -119,7 +116,7 @@ describe("SettingsOverlay — navegação sem flicker", () => {
 
     expect(await screen.findByTestId("tab-geral")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByText("IA e Decision Models"));
+    fireEvent.click(screen.getByText("IA Models"));
     await act(async () => {});
 
     // Mesmo elemento de Dialog — nunca desmontou/remontou.

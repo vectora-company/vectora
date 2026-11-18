@@ -129,31 +129,292 @@ export function OpenRouterIcon({ className }: { className?: string }) {
   );
 }
 
-import type { ModelConfig } from "@/lib/config/deployment-config";
+export function VoyageIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      aria-hidden="true"
+    >
+      <path
+        d="M3 5.5 9.4 18h5.2L21 5.5h-4.2L12 14.7 7.2 5.5H3Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+export function MistralIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      aria-hidden="true"
+    >
+      <path
+        d="M3 5h4v4H3V5Zm7 0h4v4h-4V5Zm7 0h4v4h-4V5ZM3 10h4v4H3v-4Zm7 0h4v4h-4v-4Zm7 0h4v4h-4v-4ZM3 15h4v4H3v-4Zm7 0h4v4h-4v-4Zm7 0h4v4h-4v-4Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+export function DeepSeekIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      aria-hidden="true"
+    >
+      <path
+        d="M5 7.5c2.2-2.4 5.2-2.4 7.2 0l1.5 1.8 1.4-1.5c1.2-1.3 3.1-1.4 4.4-.2l1.5 1.4-1.8 1.9-1.5-1.4-2.1 2.3 2.1 2.5c1 1.2.8 3-.4 4-.6.5-1.3.7-2.1.7H7.8C4.6 19 2 16.4 2 13.2c0-2.1 1.1-4.2 3-5.7Zm2 2c-1.1.9-1.7 2.2-1.7 3.7 0 1.8 1.4 3.2 3.2 3.2h6.7l-3-3.6-2 1.8-1.8-2 2-1.8-1.3-1.5c-.6-.7-1.4-.7-2.1.2Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+export function GroqIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      aria-hidden="true"
+    >
+      <path
+        d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7L12 2.5Zm0 3.1L6.4 8.5v7l5.6 2.9 5.6-2.9v-4.2H12v2.8h2.6v.1L12 15.6l-2.8-1.5v-3.2L12 9.4l1.5.8 2.5-1.4L12 5.6Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+export function HuggingFaceIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      aria-hidden="true"
+    >
+      <path
+        d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm-4 8a1.25 1.25 0 1 1 0 2.5A1.25 1.25 0 0 1 8 10Zm8 0a1.25 1.25 0 1 1 0 2.5A1.25 1.25 0 0 1 16 10Zm-8.2 4.1 1.5-.7a3 3 0 0 0 5.4 0l1.5.7a4.65 4.65 0 0 1-8.4 0Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+export function ClefIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      aria-hidden="true"
+    >
+      <path
+        d="M14.5 3.5a7.5 7.5 0 1 0 5.3 12.8l-2.1-2.1a4.5 4.5 0 1 1 0-6.4l2.1-2.1a7.47 7.47 0 0 0-5.3-2.2Z"
+        fill="currentColor"
+      />
+      <circle cx="8" cy="18.5" r="2" fill="currentColor" />
+    </svg>
+  );
+}
+
+export function LayaIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M5 3h3v15h11v3H5V3Z" fill="currentColor" />
+      <path d="M12 6h7v3h-7z" fill="currentColor" />
+    </svg>
+  );
+}
+
+export function JevIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      aria-hidden="true"
+    >
+      <path
+        d="M15.5 3H20v3h-1v10.5a4.5 4.5 0 0 1-9 0v-1h3v1a1.5 1.5 0 0 0 3 0V6h-3.5V3Z"
+        fill="currentColor"
+      />
+      <circle cx="6.5" cy="16.5" r="3.5" fill="currentColor" />
+      <circle cx="6.5" cy="16.5" r="1.3" fill="var(--background, #1f1f1f)" />
+    </svg>
+  );
+}
+
+export function WhisperIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      aria-hidden="true"
+    >
+      <path
+        d="M12 3v18M8 7v10m8-10v10M4 10v4m16-4v4"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+export function DockerIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      aria-hidden="true"
+    >
+      <path
+        d="M3 10h3v3H3v-3Zm4 0h3v3H7v-3Zm4 0h3v3h-3v-3Zm4 0h3v3h-3v-3Zm-8-4h3v3H7V6Zm4 0h3v3h-3V6Zm4 0h3v3h-3V6Zm4 4.5c1.2-.5 2.2-.3 3 .5-.5 1.5-1.5 2.4-3 2.7-.6 3.6-3.7 6.3-7.5 6.3H8c-3.5 0-6-2.3-6-5.5h14.5c1.4 0 2.4-1.3 2.5-4Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+export function LlamaCppIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      aria-hidden="true"
+    >
+      <path
+        d="M5 4h3v8.5c0 3 1.5 4.5 4.5 4.5H20v3h-7.5C7.7 20 5 17.3 5 12.5V4Zm8 1h3v5h5v3h-5v5h-3v-5H8v-3h5V5Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+export function NineRouterIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      aria-hidden="true"
+    >
+      <path
+        d="M12 2.5a7 7 0 1 0 0 14h3.8c-.7 1.4-2.1 2.4-3.8 2.4v2.6c4.1 0 7.5-3.3 7.5-7.5V9.5c0-3.9-3.2-7-7.5-7Zm0 3a4 4 0 1 1 0 8 4 4 0 0 1 0-8Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+function GenericProviderIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      aria-hidden="true"
+    >
+      <rect
+        x="3.5"
+        y="4.5"
+        width="17"
+        height="15"
+        rx="3"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      />
+      <path
+        d="M7 9h10M7 12h10M7 15h6"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
 
 const PROVIDER_ICONS: Record<
-  ModelConfig["provider"],
+  string,
   React.ComponentType<{ className?: string }>
 > = {
   "google-genai": GeminiIcon,
+  google: GeminiIcon,
+  gemini: GeminiIcon,
   openai: OpenAiIcon,
   anthropic: AnthropicIcon,
   cohere: CohereIcon,
+  voyage: VoyageIcon,
+  "voyage-ai": VoyageIcon,
+  mistral: MistralIcon,
+  deepseek: DeepSeekIcon,
+  groq: GroqIcon,
+  huggingface: HuggingFaceIcon,
+  "hugging-face": HuggingFaceIcon,
+  "clef-local": ClefIcon,
+  "clef-api": ClefIcon,
+  "laya-local": LayaIcon,
+  "jev-api": JevIcon,
+  whisper: WhisperIcon,
+  "whisper-local": WhisperIcon,
+  dmr: DockerIcon,
+  llamacpp: LlamaCppIcon,
+  nine_router: NineRouterIcon,
   ollama: OllamaIcon,
   openrouter: OpenRouterIcon,
-  nine_router: OpenRouterIcon,
-  llamacpp: OllamaIcon,
-  dmr: OllamaIcon,
+  auto: OpenRouterIcon,
 };
 
-/** Ícone do provedor para um dado provider — usado no seletor de modelo. */
+/** Ícone do provider compartilhado pelo seletor de modelo e pelas configurações. */
 export function ProviderIcon({
   provider,
   className,
 }: {
-  provider: ModelConfig["provider"];
+  provider: string;
   className?: string;
 }) {
-  const Icon = PROVIDER_ICONS[provider] ?? GeminiIcon;
-  return <Icon className={className} />;
+  const normalized = provider.toLowerCase().replaceAll("_", "-");
+  const Icon =
+    PROVIDER_ICONS[provider] ??
+    PROVIDER_ICONS[normalized] ??
+    GenericProviderIcon;
+  return (
+    <span
+      data-provider-icon={normalized}
+      aria-hidden="true"
+      className={`inline-flex ${className ?? ""}`}
+    >
+      <Icon className="size-full" />
+    </span>
+  );
 }

@@ -1,8 +1,4 @@
-"""Rerank nativo da Voyage AI — ``POST /rerank``.
-
-Mesma interface dos rerankers já usados (``compress_documents``), pra encaixar
-no ``FallbackReranker`` que alterna Cohere↔Voyage sem mudança.
-"""
+"""Rerank nativo da Voyage AI — ``POST /rerank``."""
 
 from __future__ import annotations
 

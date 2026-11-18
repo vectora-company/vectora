@@ -34,8 +34,40 @@ _OLLAMA_URL: Final[str | None] = os.environ.get("VECTORA_OLLAMA_BASE_URL")
 _OLLAMA_MODEL: Final[str] = os.environ.get("VECTORA_OLLAMA_MODEL", "qwen2.5:0.5b")
 _OLLAMA_TOOLS_MODEL: Final[str | None] = os.environ.get("VECTORA_OLLAMA_TOOLS_MODEL")
 _LAYA_URL: Final[str | None] = os.environ.get("VECTORA_LAYA_BASE_URL")
-_LAYA_MODEL: Final[str] = os.environ.get("VECTORA_LAYA_MODEL", "multilingual")
 _TIMEOUT: Final[httpx.Timeout] = httpx.Timeout(60.0, connect=10.0)
+
+
+def _laya_model() -> str:
+    """Usa o modelo explicitamente solicitado ou o configurado no Vectora."""
+    configured = os.environ.get("VECTORA_LAYA_MODEL")
+    if configured:
+        return configured
+
+    from backend.settings import settings
+
+    return settings.systemone_laya_model or "multilingual"
+
+
+def _laya_api_key() -> str | None:
+    """Lê credencial de teste sem expô-la em argumentos, logs ou fixtures."""
+    from backend.settings import settings
+
+    return (
+        os.environ.get("VECTORA_LAYA_API_KEY")
+        or settings.systemone_laya_api_key
+        or os.environ.get("LAYA_API_KEY")
+    )
+
+
+def _laya_adapter() -> LayaLocalAdapter:
+    """Monta o adapter live com o endpoint e a credencial configurados."""
+    assert _LAYA_URL is not None
+    return LayaLocalAdapter(
+        base_url=_LAYA_URL,
+        model=_laya_model(),
+        api_key=_laya_api_key(),
+        timeout=300.0,
+    )
 
 
 class _ToolArgs(BaseModel):
@@ -188,7 +220,7 @@ async def test_laya_local_systemone_contract() -> None:
 
     assert _LAYA_URL is not None
     request = SystemOneRequest(
-        model=_LAYA_MODEL,
+        model=_laya_model(),
         state="A API está indisponível e o cliente pede reembolso.",
         questions={
             "queue": ChoiceQuestion(
@@ -201,7 +233,7 @@ async def test_laya_local_systemone_contract() -> None:
             )
         },
     )
-    adapter = LayaLocalAdapter(base_url=_LAYA_URL, model=_LAYA_MODEL, timeout=300.0)
+    adapter = _laya_adapter()
     assert await adapter.health() is True
     response = await adapter.decide(request)
     answer = response.answers["queue"]
@@ -252,7 +284,7 @@ async def test_laya_returns_all_typed_decision_kinds() -> None:
     """Exercita Noul, Choice e Score em uma chamada."""
     assert _LAYA_URL is not None
     request = SystemOneRequest(
-        model=_LAYA_MODEL,
+        model=_laya_model(),
         state="API indisponível; cobrança duplicada; cliente ameaça cancelar.",
         questions={
             "queue": ChoiceQuestion(
@@ -272,9 +304,7 @@ async def test_laya_returns_all_typed_decision_kinds() -> None:
             "cancel": NoulQuestion(criterion="O cliente ameaça cancelar?"),
         },
     )
-    response = await LayaLocalAdapter(
-        base_url=_LAYA_URL, model=_LAYA_MODEL, timeout=300.0
-    ).decide(request)
+    response = await _laya_adapter().decide(request)
     assert set(response.answers) == set(request.questions)
     assert response.answers["queue"].type == "choice"
     assert response.answers["severity"].type == "score"
@@ -317,6 +347,11 @@ async def test_selected_decision_adapter_live_contract(
         monkeypatch.setattr(
             settings, "systemone_laya_base_url", os.environ["VECTORA_LAYA_BASE_URL"]
         )
+        monkeypatch.setattr(settings, "systemone_laya_model", _laya_model())
+        api_key = _laya_api_key()
+        if not api_key:
+            pytest.skip("laya-local: credencial não configurada para validação live")
+        monkeypatch.setattr(settings, "systemone_laya_api_key", api_key)
     harness = _build_default_harness(provider)
     assert await harness.is_ready(), "configured adapter must be healthy"
     harness.set_mode(

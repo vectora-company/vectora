@@ -12,6 +12,7 @@
 
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import {
+  act,
   render,
   screen,
   cleanup,
@@ -25,10 +26,18 @@ import { overwriteGetLocale, baseLocale } from "@/lib/paraglide/runtime";
 
 afterEach(cleanup);
 afterEach(() => overwriteGetLocale(() => baseLocale));
+const initialDesktopBridge = window.vectora;
+afterEach(() => {
+  Object.defineProperty(window, "vectora", {
+    configurable: true,
+    value: initialDesktopBridge,
+  });
+});
 
 function mockFetch(
   handlers: Partial<{
     registered: object[];
+    ollamaInstallError: string;
     discover: { reachable: boolean; models: object[] };
     registerOk: boolean;
     removeOk: boolean;
@@ -58,9 +67,12 @@ function mockFetch(
       runtimes: Array<{ id: string; asset: string }>;
     };
     llamacppRuntimeRemoveOk: boolean;
+    llamacppRegistered: object[];
+    llamacppModels: { reachable: boolean; models: object[] };
     hfModels?: object[];
     hfMetadata?: object;
     dmrJob?: { id: string; status: string; error?: string | null };
+    dmrHttpStatus?: object;
   }>,
 ) {
   global.fetch = vi
@@ -74,11 +86,58 @@ function mockFetch(
           json: async () => handlers.registered ?? [],
         } as Response);
       }
+      if (url === "/provider-routing/ollama/config" && !method) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            configured: false,
+            base_url: "http://127.0.0.1:11434",
+          }),
+        } as Response);
+      }
+      if (url === "/provider-routing/ollama/config" && method === "POST") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            configured: true,
+            base_url: "https://ollama.example/v1",
+            api_key_configured: true,
+            api_key_masked: "sk-test•••1234",
+          }),
+        } as Response);
+      }
+      if (url === "/provider-routing/ollama/test" && method === "POST") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ status: "ok", models: [] }),
+        } as Response);
+      }
       if (url === "/provider-routing/ollama/models") {
         return Promise.resolve({
           ok: true,
           json: async () =>
             handlers.discover ?? { reachable: false, models: [] },
+        } as Response);
+      }
+      if (url === "/provider-routing/ollama/runtime/status") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            installed: false,
+            reachable: false,
+            state: "missing",
+          }),
+        } as Response);
+      }
+      if (
+        url === "/provider-routing/ollama/runtime/install" &&
+        method === "POST"
+      ) {
+        const detail = handlers.ollamaInstallError ?? "instalação falhou";
+        return Promise.resolve({
+          ok: false,
+          status: 501,
+          json: async () => ({ detail }),
         } as Response);
       }
       if (url === "/provider-routing/ollama/registered" && method === "POST") {
@@ -190,6 +249,31 @@ function mockFetch(
           }),
         } as Response);
       }
+      if (url === "/provider-routing/llamacpp/registered" && !method) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => handlers.llamacppRegistered ?? [],
+        } as Response);
+      }
+      if (
+        url === "/provider-routing/llamacpp/registered" &&
+        method === "POST"
+      ) {
+        return Promise.resolve({ ok: true, status: 200 } as Response);
+      }
+      if (
+        typeof url === "string" &&
+        url.startsWith("/provider-routing/llamacpp/registered/")
+      ) {
+        return Promise.resolve({ ok: true, status: 200 } as Response);
+      }
+      if (url === "/provider-routing/llamacpp/models") {
+        return Promise.resolve({
+          ok: true,
+          json: async () =>
+            handlers.llamacppModels ?? { reachable: false, models: [] },
+        } as Response);
+      }
       if (url === "/provider-routing/nine-router/config" && method === "POST") {
         const ok = handlers.nineRouterConfigSaveOk ?? true;
         return Promise.resolve({
@@ -290,6 +374,38 @@ function mockFetch(
           ok: true,
           json: async () =>
             handlers.dmrJob ?? { id: "a".repeat(32), status: "completed" },
+        } as Response);
+      }
+      if (url === "/provider-routing/dmr/models/jobs" && !method) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => [],
+        } as Response);
+      }
+      if (url === "/provider-routing/dmr/http-status") {
+        return Promise.resolve({
+          ok: true,
+          json: async () =>
+            handlers.dmrHttpStatus ?? {
+              configured: false,
+              base_url: "http://127.0.0.1:12434",
+              model: "",
+              reachable: false,
+              contract: null,
+              models: [],
+              managed_models: [],
+              state: "stopped",
+              platform: "linux",
+              architecture: "x64",
+              backend: null,
+              capabilities: {
+                cpus: null,
+                memory_bytes: null,
+                runtimes: [],
+                gpu_backends: [],
+                warnings: [],
+              },
+            },
         } as Response);
       }
       if (
@@ -442,6 +558,98 @@ describe("ProviderRoutingTab - Hugging Face", () => {
   });
 });
 
+describe("ProviderRoutingTab — Docker Model Runner runtime", () => {
+  beforeEach(() => {
+    overwriteGetLocale(() => "pt");
+    mockFetch({ registered: [] });
+  });
+
+  it("expõe instalação do runner Engine e a executa pelo bridge desktop", async () => {
+    const ensureRunner = vi.fn(async () => ({
+      id: "dmr-install",
+      operation: "install_runner" as const,
+      reference: "",
+      status: "completed" as const,
+      phase: "completed" as const,
+      progress: 100,
+    }));
+    const bridge = {
+      detect: vi.fn(async () => ({
+        status: "stopped" as const,
+        docker: true,
+        plugin: true,
+        runner: false,
+        desktop: false,
+      })),
+      list: vi.fn(async () => ({ version: 1 as const, models: {} })),
+      ensureRunner,
+      getOperation: vi.fn(),
+      cancel: vi.fn(async () => true),
+      prepare: vi.fn(),
+      start: vi.fn(),
+      stop: vi.fn(),
+      remove: vi.fn(),
+      listOperations: vi.fn(async () => []),
+    };
+    Object.defineProperty(window, "vectora", {
+      configurable: true,
+      value: { dmr: bridge },
+    });
+
+    render(<ProviderRoutingTab />);
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Instalar Docker Model Runner",
+      }),
+    );
+
+    await waitFor(() => expect(ensureRunner).toHaveBeenCalledTimes(1));
+  });
+
+  it("expõe a instalação do plugin oficial quando o host Linux a suporta", async () => {
+    const ensureRunner = vi.fn(async () => ({
+      id: "dmr-plugin-install",
+      operation: "install_plugin" as const,
+      reference: "",
+      status: "completed" as const,
+      phase: "completed" as const,
+      progress: 100,
+    }));
+    Object.defineProperty(window, "vectora", {
+      configurable: true,
+      value: {
+        dmr: {
+          detect: vi.fn(async () => ({
+            status: "plugin_unavailable" as const,
+            docker: true,
+            plugin: false,
+            runner: false,
+            pluginInstallSupported: true,
+          })),
+          list: vi.fn(async () => ({ version: 1 as const, models: {} })),
+          ensureRunner,
+          getOperation: vi.fn(),
+          cancel: vi.fn(async () => true),
+          prepare: vi.fn(),
+          start: vi.fn(),
+          stop: vi.fn(),
+          remove: vi.fn(),
+          listOperations: vi.fn(async () => []),
+        },
+      },
+    });
+
+    render(<ProviderRoutingTab />);
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Instalar Docker Model Runner",
+      }),
+    );
+
+    await waitFor(() => expect(ensureRunner).toHaveBeenCalledTimes(1));
+  });
+});
+
 describe("ProviderRoutingTab — Ollama", () => {
   beforeEach(() => {
     overwriteGetLocale(() => "pt");
@@ -451,7 +659,7 @@ describe("ProviderRoutingTab — Ollama", () => {
   it("mostra estado vazio quando nenhum modelo está registrado", async () => {
     render(<ProviderRoutingTab />);
     await waitFor(() => {
-      // 3 seções: Ollama, OpenRouter, 9Router
+      // Ollama, OpenRouter e 9Router exibem esta mensagem de estado vazio.
       expect(screen.getAllByText(/nenhum modelo registrado/i).length).toBe(3);
     });
   });
@@ -466,14 +674,63 @@ describe("ProviderRoutingTab — Ollama", () => {
     });
   });
 
+  it("salva endpoint e chave Bearer no provider Ollama", async () => {
+    mockFetch({ registered: [] });
+    render(<ProviderRoutingTab />);
+    const card = screen
+      .getByRole("heading", { name: /ollama/i })
+      .closest(".rounded-lg.border") as HTMLElement;
+    fireEvent.change(within(card).getByLabelText(/endpoint do ollama/i), {
+      target: { value: "https://ollama.example/v1" },
+    });
+    fireEvent.change(within(card).getByLabelText(/chave bearer/i), {
+      target: { value: "sk-test-secret" },
+    });
+    fireEvent.click(
+      within(card).getByRole("button", { name: /salvar configuração/i }),
+    );
+    await waitFor(() => {
+      const calls = vi.mocked(fetch).mock.calls;
+      const saveCall = calls.find(
+        ([url, init]) =>
+          url === "/provider-routing/ollama/config" && init?.method === "POST",
+      );
+      expect(saveCall).toBeTruthy();
+      expect(JSON.parse(String(saveCall?.[1]?.body))).toMatchObject({
+        base_url: "https://ollama.example/v1",
+        api_key: "sk-test-secret",
+      });
+    });
+  });
+
   it("descoberta com host inacessível exibe aviso, sem crashar", async () => {
     mockFetch({ registered: [], discover: { reachable: false, models: [] } });
     render(<ProviderRoutingTab />);
-    await waitFor(() => screen.getByRole("button", { name: /detectar/i }));
-    fireEvent.click(screen.getByRole("button", { name: /detectar/i }));
+    const ollamaCard = screen
+      .getByRole("heading", { name: /ollama/i })
+      .closest(".rounded-lg.border");
+    if (!ollamaCard) throw new Error("Ollama card not found");
+    fireEvent.click(
+      within(ollamaCard as HTMLElement).getByRole("button", {
+        name: /detectar/i,
+      }),
+    );
     await waitFor(() => {
       expect(screen.getByText(/n[ãa]o consegui alcan[çc]ar/i)).toBeTruthy();
     });
+  });
+
+  it("mostra o detalhe da API quando a instalação gerenciada falha", async () => {
+    mockFetch({
+      registered: [],
+      ollamaInstallError: "pacote Linux incompatível",
+    });
+    render(<ProviderRoutingTab />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: /instalar ollama/i }),
+    );
+    expect(await screen.findByText("pacote Linux incompatível")).toBeTruthy();
   });
 
   it("descoberta com host acessível lista modelos e permite registrar", async () => {
@@ -486,7 +743,15 @@ describe("ProviderRoutingTab — Ollama", () => {
       registerOk: true,
     });
     render(<ProviderRoutingTab />);
-    fireEvent.click(await screen.findByRole("button", { name: /detectar/i }));
+    const ollamaCard = screen
+      .getByRole("heading", { name: /ollama/i })
+      .closest(".rounded-lg.border");
+    if (!ollamaCard) throw new Error("Ollama card not found");
+    fireEvent.click(
+      within(ollamaCard as HTMLElement).getByRole("button", {
+        name: /detectar/i,
+      }),
+    );
     await waitFor(() => screen.getByText("qwen3:8b"));
 
     fireEvent.click(screen.getByRole("button", { name: /registrar/i }));
@@ -505,7 +770,15 @@ describe("ProviderRoutingTab — Ollama", () => {
       registerOk: false,
     });
     render(<ProviderRoutingTab />);
-    fireEvent.click(await screen.findByRole("button", { name: /detectar/i }));
+    const ollamaCard = screen
+      .getByRole("heading", { name: /ollama/i })
+      .closest(".rounded-lg.border");
+    if (!ollamaCard) throw new Error("Ollama card not found");
+    fireEvent.click(
+      within(ollamaCard as HTMLElement).getByRole("button", {
+        name: /detectar/i,
+      }),
+    );
     await waitFor(() => screen.getByText("qwen3:8b"));
 
     fireEvent.click(screen.getByRole("button", { name: /registrar/i }));
@@ -716,7 +989,9 @@ describe("ProviderRoutingTab — 9Router", () => {
     // Ollama também tem um botão "Detectar modelos" — escopa pela seção
     // 9Router (via o título) pra não clicar no botão errado.
     const nineRouterHeading = await screen.findByText(/^9router/i);
-    const nineRouterSection = nineRouterHeading.closest("div.space-y-4")!;
+    const nineRouterSection = nineRouterHeading.closest(
+      "div.rounded-lg.border",
+    )!;
     fireEvent.click(
       within(nineRouterSection as HTMLElement).getByRole("button", {
         name: /detectar/i,
@@ -791,7 +1066,9 @@ describe("ProviderRoutingTab — 9Router", () => {
     });
     render(<ProviderRoutingTab />);
     const nineRouterHeading = await screen.findByText(/^9router/i);
-    const nineRouterSection = nineRouterHeading.closest("div.space-y-4")!;
+    const nineRouterSection = nineRouterHeading.closest(
+      "div.rounded-lg.border",
+    )!;
     fireEvent.click(
       within(nineRouterSection as HTMLElement).getByRole("button", {
         name: /detectar/i,
@@ -831,7 +1108,9 @@ describe("ProviderRoutingTab — 9Router", () => {
     });
     render(<ProviderRoutingTab />);
     const nineRouterHeading = await screen.findByText(/^9router/i);
-    const nineRouterSection = nineRouterHeading.closest("div.space-y-4")!;
+    const nineRouterSection = nineRouterHeading.closest(
+      "div.rounded-lg.border",
+    )!;
     fireEvent.click(
       within(nineRouterSection as HTMLElement).getByRole("button", {
         name: /detectar/i,
@@ -852,35 +1131,6 @@ describe("ProviderRoutingTab — 9Router", () => {
     });
   });
 
-  it("com poucos modelos (5 ou menos), não mostra a busca", async () => {
-    mockFetch({
-      nineRouterStatus: {
-        configured: true,
-        base_url: "http://localhost:20128/v1",
-        masked: "9r-•••cdef",
-      },
-      nineRouterDiscover: {
-        reachable: true,
-        models: [{ id: "cc/claude-opus-4-7", name: "Claude Opus 4.7" }],
-      },
-    });
-    render(<ProviderRoutingTab />);
-    const nineRouterHeading = await screen.findByText(/^9router/i);
-    const nineRouterSection = nineRouterHeading.closest("div.space-y-4")!;
-    fireEvent.click(
-      within(nineRouterSection as HTMLElement).getByRole("button", {
-        name: /detectar/i,
-      }),
-    );
-    await waitFor(() => screen.getByText("cc/claude-opus-4-7"));
-
-    expect(
-      within(nineRouterSection as HTMLElement).queryByPlaceholderText(
-        /filtrar modelos/i,
-      ),
-    ).toBeNull();
-  });
-
   it("proxy inacessível na descoberta exibe aviso, sem crashar", async () => {
     mockFetch({
       nineRouterStatus: {
@@ -892,7 +1142,9 @@ describe("ProviderRoutingTab — 9Router", () => {
     });
     render(<ProviderRoutingTab />);
     const nineRouterHeading = await screen.findByText(/^9router/i);
-    const nineRouterSection = nineRouterHeading.closest("div.space-y-4")!;
+    const nineRouterSection = nineRouterHeading.closest(
+      "div.rounded-lg.border",
+    )!;
     fireEvent.click(
       within(nineRouterSection as HTMLElement).getByRole("button", {
         name: /detectar/i,
@@ -924,117 +1176,63 @@ describe("ProviderRoutingTab — 9Router", () => {
   });
 });
 
-describe("MediaModelsSection", () => {
-  // Config por gateway (Ollama/OpenRouter), não preferência genérica de
-  // usuário — ver provider-routing-tab.tsx para o racional completo.
-  it("repinta com o valor efetivo devolvido pelo backend ao limpar o campo", async () => {
-    // Cenário do invariante: o usuário limpa o campo, mas existe env var —
-    // o que passa a valer é a env. Mostrar o campo vazio faria parecer que a
-    // capacidade ficou desligada.
-    mockFetch({
-      mediaModelsGet: { models: { ollama_image_model: "escolha-da-ui" } },
-      mediaModelsPatch: { models: { ollama_image_model: "modelo-da-env" } },
-    });
-
-    render(<AiModelsTab />);
-
-    const campo = (await screen.findByLabelText(
-      "Ollama — image",
-    )) as HTMLInputElement;
-    expect(campo.value).toBe("escolha-da-ui");
-
-    fireEvent.change(campo, { target: { value: "" } });
-    fireEvent.blur(campo);
-
-    // Erro/borda: o campo NÃO fica vazio — mostra o que de fato vale agora.
-    await waitFor(() => expect(campo.value).toBe("modelo-da-env"));
-  });
-
-  it("edita os modelos de vídeo retornados pelo backend", async () => {
-    mockFetch({
-      mediaModelsGet: {
-        models: {
-          ollama_video_model: "ollama-video-original",
-          openrouter_video_model: "openrouter-video-original",
-        },
-      },
-      mediaModelsPatch: {
-        models: {
-          ollama_video_model: "ollama-video-updated",
-          openrouter_video_model: "openrouter-video-original",
-        },
-      },
-    });
-
-    render(<AiModelsTab />);
-
-    const ollamaVideo = (await screen.findByLabelText(
-      /prefs_media_models_ollama_video|Ollama — video|Ollama — vídeo/,
-    )) as HTMLInputElement;
-    const openrouterVideo = (await screen.findByLabelText(
-      /prefs_media_models_openrouter_video|OpenRouter — video|OpenRouter — vídeo/,
-    )) as HTMLInputElement;
-    expect(ollamaVideo.value).toBe("ollama-video-original");
-    expect(openrouterVideo.value).toBe("openrouter-video-original");
-
-    fireEvent.change(ollamaVideo, {
-      target: { value: "ollama-video-updated" },
-    });
-    fireEvent.blur(ollamaVideo);
-    await waitFor(() => expect(ollamaVideo.value).toBe("ollama-video-updated"));
-    expect(global.fetch).toHaveBeenCalledWith(
-      "/admin/media-models",
-      expect.objectContaining({
-        method: "PATCH",
-        body: JSON.stringify({ ollama_video_model: "ollama-video-updated" }),
-      }),
-    );
-  });
-
-  it("backend fora do ar deixa os campos vazios sem quebrar a aba (edge)", async () => {
-    mockFetch({ mediaModelsGet: null });
-
-    render(<AiModelsTab />);
-
-    const campo = (await screen.findByLabelText(
-      "Ollama — voice",
-    )) as HTMLInputElement;
-    expect(campo.value).toBe("");
-  });
-});
-
 describe("LlamaCppSection", () => {
   beforeEach(() => {
     overwriteGetLocale(() => "pt");
   });
 
-  it("remove uma versão inativa sem permitir remover a ativa", async () => {
-    const runtimeStatus = {
-      installed: true,
-      path: "/tmp/llama-server",
-      files: ["llama-server"],
-      active_runtime: "active-runtime",
-      runtimes: [
-        { id: "active-runtime", asset: "llama-active" },
-        { id: "old-runtime", asset: "llama-old" },
-      ],
-    };
-    mockFetch({ llamacppRuntimeStatus: runtimeStatus });
-    vi.spyOn(window, "confirm").mockReturnValue(true);
+  it("permite registrar um modelo detectado e mostra a lista registrada", async () => {
+    mockFetch({
+      llamacppModels: {
+        reachable: true,
+        models: [{ id: "laya" }],
+      },
+      llamacppRegistered: [],
+    });
 
     render(<ProviderRoutingTab />);
 
-    const removeButtons = await screen.findAllByRole("button", {
-      name: /remover esta versão do runtime/i,
-    });
-    expect(removeButtons.length).toBe(1);
-    fireEvent.click(removeButtons[0]);
+    const llamaCard = screen
+      .getByRole("heading", { name: /llama\.cpp/i })
+      .closest(".rounded-lg.border");
+    expect(llamaCard).not.toBeNull();
+    fireEvent.click(
+      within(llamaCard as HTMLElement).getByRole("button", {
+        name: /detectar modelos/i,
+      }),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: /registrar/i }));
 
-    await waitFor(() => {
+    await waitFor(() =>
       expect(global.fetch).toHaveBeenCalledWith(
-        "/provider-routing/llamacpp/runtime/old-runtime",
-        { method: "DELETE" },
-      );
+        "/provider-routing/llamacpp/registered",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ tag: "laya" }),
+        }),
+      ),
+    );
+    expect(screen.getAllByText("Modelos registrados").length).toBeGreaterThan(
+      0,
+    );
+  });
+
+  it("exibe os cartões na ordem definida para o roteamento", async () => {
+    mockFetch({});
+    render(<ProviderRoutingTab />);
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 20));
     });
+
+    const headings = screen.getAllByRole("heading", { level: 3 });
+    const titles = headings.map((heading) => heading.textContent);
+    expect(titles).toEqual([
+      "llama.cpp",
+      "Ollama (modelos locais)",
+      "Docker Model Runner",
+      "Catálogo Hugging Face",
+      "OpenRouter (multi-provider)",
+      "9Router (proxy local)",
+    ]);
   });
 });

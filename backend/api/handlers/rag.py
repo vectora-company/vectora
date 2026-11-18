@@ -28,39 +28,24 @@ router = APIRouter(prefix="/rag", tags=["rag"])
 class RagSettingsBody(BaseModel):
     reranker_enabled: bool | None = None
     reranker_top_k: int | None = None
-    rerank_provider: str | None = None
-    embed_provider: str | None = None
+    rerank_model: str | None = None
     embed_model: str | None = None
     ingest_file_types: list[str] | None = None
 
 
 @router.get("/settings")
 async def get_rag_settings() -> dict[str, Any]:
-    from backend.settings import configured_gateway_model, settings
     from backend.workspace.runtime_settings import runtime_settings
 
-    out = dict(runtime_settings.rag_settings)
-    # Mesmos checks que backend/tools/rag.py::_build_cohere_reranker/
-    # _build_voyage_reranker/_build_openrouter_reranker fazem antes de
-    # instanciar o client — sem isso o dropdown deixava escolher um
-    # provider sem key/modelo configurado, e o reranking parava de rodar
-    # em silêncio (nenhum log/erro visível).
-    out["rerank_provider_available"] = {
-        "cohere": bool(settings.get_cohere_api_key()),
-        "voyage": bool(settings.voyage_api_key),
-        "openrouter": bool(
-            settings.openrouter_api_key
-            and configured_gateway_model("openrouter", "rerank")
-        ),
-    }
-    return out
+    return dict(runtime_settings.rag_settings)
 
 
 @router.patch("/settings")
 async def patch_rag_settings(body: RagSettingsBody) -> dict[str, Any]:
     from backend.workspace.runtime_settings import runtime_settings
 
-    return runtime_settings.set_rag_settings(**body.model_dump())
+    runtime_settings.set_rag_settings(**body.model_dump())
+    return await get_rag_settings()
 
 
 @router.get("/collections")
@@ -169,7 +154,7 @@ async def search_rag(request: Request, body: RagSearchBody) -> dict[str, Any]:
 
 @router.delete("/collections/{name}")
 async def delete_collection(name: str) -> dict[str, Any]:
-    from backend.storage.factory import get_vector_store_backend
+    from backend.storage.factory import _embedding_meta_db, get_vector_store_backend
 
     backend = await get_vector_store_backend()
     try:
@@ -179,4 +164,7 @@ async def delete_collection(name: str) -> dict[str, Any]:
         raise HTTPException(
             status_code=404, detail=f"Coleção {name!r} não encontrada"
         ) from exc
+    db = await _embedding_meta_db()
+    await db.execute("DELETE FROM embedding_index_meta WHERE collection = ?", (name,))
+    await db.commit()
     return {"status": "deleted", "name": name}

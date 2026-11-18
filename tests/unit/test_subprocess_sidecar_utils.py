@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import signal
 from collections.abc import Coroutine
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -31,7 +32,7 @@ def test_sidecar_process_options_isolates_windows_console_group(monkeypatch):
     assert "start_new_session" not in options
 
 
-def test_sidecar_process_options_starts_a_posix_session(monkeypatch):
+def test_sidecar_process_options_isolates_a_posix_process_group(monkeypatch):
     monkeypatch.setattr(
         "backend.services.subprocess_sidecar_utils.sys.platform", "linux"
     )
@@ -105,13 +106,21 @@ class TestTerminateGracefully:
     @pytest.mark.asyncio
     async def test_termina_gracioso_dentro_do_timeout(self):
         proc = MagicMock()
+        proc.pid = 123
         proc.terminate = MagicMock()
         proc.wait = AsyncMock(return_value=None)
         logger = logging.getLogger("test")
 
-        await terminate_gracefully(
-            proc, timeout_seconds=5.0, logger=logger, log_prefix="x"
-        )
+        with (
+            patch("backend.services.subprocess_sidecar_utils.sys.platform", "win32"),
+            patch(
+                "backend.services.subprocess_sidecar_utils._terminate_windows_tree",
+                new=AsyncMock(),
+            ),
+        ):
+            await terminate_gracefully(
+                proc, timeout_seconds=5.0, logger=logger, log_prefix="x"
+            )
 
         proc.terminate.assert_called_once()
         proc.kill.assert_not_called()
@@ -121,6 +130,7 @@ class TestTerminateGracefully:
         # Erro/borda: processo não morre a tempo do shutdown gracioso —
         # kill() é chamado, sem propagar TimeoutError.
         proc = MagicMock()
+        proc.pid = 123
         proc.terminate = MagicMock()
 
         async def _never_returns() -> None:
@@ -129,21 +139,36 @@ class TestTerminateGracefully:
         proc.wait = AsyncMock(side_effect=_never_returns)
         logger = logging.getLogger("test")
 
-        await terminate_gracefully(
-            proc, timeout_seconds=0.01, logger=logger, log_prefix="x"
-        )
+        with (
+            patch("backend.services.subprocess_sidecar_utils.sys.platform", "win32"),
+            patch(
+                "backend.services.subprocess_sidecar_utils._terminate_windows_tree",
+                new=AsyncMock(),
+            ),
+        ):
+            await terminate_gracefully(
+                proc, timeout_seconds=0.01, logger=logger, log_prefix="x"
+            )
 
         proc.kill.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_excecao_inesperada_e_logada_nao_propagada(self):
         proc = MagicMock()
+        proc.pid = 123
         proc.terminate = MagicMock(side_effect=RuntimeError("boom"))
         logger = MagicMock()
 
-        await terminate_gracefully(
-            proc, timeout_seconds=5.0, logger=logger, log_prefix="x"
-        )
+        with (
+            patch("backend.services.subprocess_sidecar_utils.sys.platform", "win32"),
+            patch(
+                "backend.services.subprocess_sidecar_utils._terminate_windows_tree",
+                new=AsyncMock(),
+            ),
+        ):
+            await terminate_gracefully(
+                proc, timeout_seconds=5.0, logger=logger, log_prefix="x"
+            )
 
         logger.warning.assert_called_once()
 
@@ -153,12 +178,74 @@ class TestTerminateGracefully:
         # sob CancelledError encadeado do shutdown do lifespan) não deve virar
         # warning com traceback completo — é caso esperado, idempotente.
         proc = MagicMock()
+        proc.pid = 123
         proc.terminate = MagicMock(side_effect=ProcessLookupError())
         logger = MagicMock()
 
-        await terminate_gracefully(
-            proc, timeout_seconds=5.0, logger=logger, log_prefix="x"
-        )
+        with (
+            patch("backend.services.subprocess_sidecar_utils.sys.platform", "win32"),
+            patch(
+                "backend.services.subprocess_sidecar_utils._terminate_windows_tree",
+                new=AsyncMock(),
+            ),
+        ):
+            await terminate_gracefully(
+                proc, timeout_seconds=5.0, logger=logger, log_prefix="x"
+            )
 
         logger.debug.assert_called_once()
         logger.warning.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_posix_shutdown_encerra_grupo_de_processos_do_sidecar(self):
+        proc = MagicMock()
+        proc.pid = 43210
+        proc.wait = AsyncMock(return_value=None)
+        logger = MagicMock()
+
+        with (
+            patch("backend.services.subprocess_sidecar_utils.sys.platform", "linux"),
+            patch(
+                "backend.services.subprocess_sidecar_utils._terminate_windows_tree",
+                new=AsyncMock(),
+            ),
+            patch("backend.services.subprocess_sidecar_utils.os.killpg") as killpg,
+            patch(
+                "backend.services.subprocess_sidecar_utils._wait_posix_group_exit",
+                new=AsyncMock(return_value=None),
+            ),
+        ):
+            await terminate_gracefully(
+                proc, timeout_seconds=5.0, logger=logger, log_prefix="electron"
+            )
+
+        killpg.assert_called_once_with(43210, signal.SIGTERM)
+        proc.wait.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_posix_shutdown_forca_grupo_que_nao_encerra(self):
+        proc = MagicMock()
+        proc.pid = 43210
+        proc.wait = AsyncMock(return_value=None)
+        logger = MagicMock()
+
+        with (
+            patch("backend.services.subprocess_sidecar_utils.sys.platform", "linux"),
+            patch(
+                "backend.services.subprocess_sidecar_utils._terminate_windows_tree",
+                new=AsyncMock(),
+            ),
+            patch("backend.services.subprocess_sidecar_utils.os.killpg") as killpg,
+            patch(
+                "backend.services.subprocess_sidecar_utils._wait_posix_group_exit",
+                new=AsyncMock(side_effect=TimeoutError),
+            ),
+        ):
+            await terminate_gracefully(
+                proc, timeout_seconds=5.0, logger=logger, log_prefix="electron"
+            )
+
+        assert [call.args for call in killpg.call_args_list] == [
+            (43210, signal.SIGTERM),
+            (43210, signal.SIGKILL),
+        ]

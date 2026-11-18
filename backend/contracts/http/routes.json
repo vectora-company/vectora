@@ -65,14 +65,6 @@
       "GET",
       "PATCH"
     ],
-    "name": "get_fallback_order_admin_model_fallback_order_get",
-    "path": "/admin/model/fallback-order"
-  },
-  {
-    "methods": [
-      "GET",
-      "PATCH"
-    ],
     "name": "get_image_fallback_model_admin_model_image_fallback_get",
     "path": "/admin/model/image-fallback"
   },
@@ -531,6 +523,62 @@
   },
   {
     "methods": [
+      "DELETE"
+    ],
+    "name": "close_tab_browser_workbench__tab_id__delete",
+    "path": "/browser-workbench/{tab_id}"
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "name": "get_frame_browser_workbench__tab_id__frame_get",
+    "path": "/browser-workbench/{tab_id}/frame"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "name": "history_browser_workbench__tab_id__history__direction__post",
+    "path": "/browser-workbench/{tab_id}/history/{direction}"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "name": "send_input_browser_workbench__tab_id__input_post",
+    "path": "/browser-workbench/{tab_id}/input"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "name": "navigate_browser_workbench__tab_id__navigate_post",
+    "path": "/browser-workbench/{tab_id}/navigate"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "name": "open_tab_browser_workbench__tab_id__open_post",
+    "path": "/browser-workbench/{tab_id}/open"
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "name": "get_state_browser_workbench__tab_id__state_get",
+    "path": "/browser-workbench/{tab_id}/state"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "name": "set_viewport_browser_workbench__tab_id__viewport_post",
+    "path": "/browser-workbench/{tab_id}/viewport"
+  },
+  {
+    "methods": [
       "GET"
     ],
     "name": "get_status_connect_status_get",
@@ -744,6 +792,13 @@
     ],
     "name": "metrics_metrics_get",
     "path": "/metrics"
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "name": "get_model_catalog_models_catalog_get",
+    "path": "/models/catalog"
   },
   {
     "methods": [
@@ -1007,6 +1062,13 @@
     "methods": [
       "POST"
     ],
+    "name": "cancel_llamacpp_install_provider_routing_llamacpp_runtime_cancel_post",
+    "path": "/provider-routing/llamacpp/runtime/cancel"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
     "name": "cleanup_llamacpp_runtime_versions_provider_routing_llamacpp_runtime_cleanup_post",
     "path": "/provider-routing/llamacpp/runtime/cleanup"
   },
@@ -1016,6 +1078,13 @@
     ],
     "name": "rollback_llamacpp_runtime_provider_routing_llamacpp_runtime_rollback_post",
     "path": "/provider-routing/llamacpp/runtime/rollback"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "name": "start_confirmed_llamacpp_runtime_provider_routing_llamacpp_runtime_start_post",
+    "path": "/provider-routing/llamacpp/runtime/start"
   },
   {
     "methods": [
@@ -1082,6 +1151,13 @@
   },
   {
     "methods": [
+      "GET"
+    ],
+    "name": "get_model_capabilities_provider_routing_model_capabilities_get",
+    "path": "/provider-routing/model-capabilities"
+  },
+  {
+    "methods": [
       "DELETE",
       "POST"
     ],
@@ -1119,6 +1195,14 @@
   },
   {
     "methods": [
+      "GET",
+      "POST"
+    ],
+    "name": "get_ollama_config_provider_routing_ollama_config_get",
+    "path": "/provider-routing/ollama/config"
+  },
+  {
+    "methods": [
       "GET"
     ],
     "name": "discover_ollama_models_provider_routing_ollama_models_get",
@@ -1148,10 +1232,31 @@
   },
   {
     "methods": [
+      "POST"
+    ],
+    "name": "start_ollama_runtime_provider_routing_ollama_runtime_start_post",
+    "path": "/provider-routing/ollama/runtime/start"
+  },
+  {
+    "methods": [
       "GET"
     ],
     "name": "ollama_runtime_status_provider_routing_ollama_runtime_status_get",
     "path": "/provider-routing/ollama/runtime/status"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "name": "stop_ollama_runtime_provider_routing_ollama_runtime_stop_post",
+    "path": "/provider-routing/ollama/runtime/stop"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "name": "test_ollama_connection_provider_routing_ollama_test_post",
+    "path": "/provider-routing/ollama/test"
   },
   {
     "methods": [

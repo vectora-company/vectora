@@ -25,7 +25,6 @@ CapabilityEvidenceLevel = Literal["documented", "observed", "unverified"]
 class BaseQuestion(BaseModel):
     """Pergunta formulada para o modelo de decisão."""
 
-    type: QuestionType
     instructions: str | None = Field(
         default=None,
         description="Instruções específicas para a avaliação desta pergunta.",
@@ -118,7 +117,6 @@ SystemOneQuestion = Annotated[
 class BaseAnswer(BaseModel):
     """Resposta base emitida pelo modelo para uma pergunta."""
 
-    type: QuestionType
     confidence: float | None = Field(
         default=None,
         ge=0.0,

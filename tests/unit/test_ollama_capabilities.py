@@ -192,7 +192,7 @@ class TestEmbeddings:
 
 
 class TestFactoryUsaClienteNativo:
-    def test_build_ollama_embeddings_devolve_o_nativo(self, monkeypatch):
+    def test_build_ollama_embeddings_anota_provider_e_modelo(self, monkeypatch):
         from backend.settings import settings as _s
         from backend.storage import factory
 
@@ -201,10 +201,12 @@ class TestFactoryUsaClienteNativo:
 
         emb = factory._build_ollama_embeddings()
 
-        assert isinstance(emb, OllamaEmbeddings)
+        assert emb.vectora_provider == "ollama"
+        assert emb.vectora_model == "nomic-embed-text"
+        assert isinstance(emb.inner, OllamaEmbeddings)
         # Erro/borda: client nativo, sem dependência de SDK externo — um
         # import quebrado falharia alto, não passaria silenciosamente.
-        assert emb.client.base_url == "http://127.0.0.1:11434"
+        assert emb.inner.client.base_url == "http://127.0.0.1:11434"
 
     def test_sem_modelo_configurado_devolve_none(self, monkeypatch):
         from backend.settings import settings as _s

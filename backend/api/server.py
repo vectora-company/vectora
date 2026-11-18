@@ -46,6 +46,7 @@ from backend.api.handlers.auth import router as auth_router
 from backend.api.handlers.background import router as background_router
 from backend.api.handlers.backup import router as backup_router
 from backend.api.handlers.boards import router as boards_router
+from backend.api.handlers.browser_workbench import router as browser_workbench_router
 from backend.api.handlers.chat import router as chat_router
 from backend.api.handlers.connect import router as connect_router
 from backend.api.handlers.context_graph import router as graph_router
@@ -225,6 +226,17 @@ async def _lifespan(app: FastAPI):  # type: ignore[return]  # noqa: ANN202
     não-daemon de libs externas (httpx, aiosqlite) que ignoram cancel.
     """
     logger.info("api/server: startup")
+
+    # Preenche o catálogo de capabilities sem atrasar o início da API.
+    async def _refresh_model_catalog() -> None:
+        try:
+            from backend.services.model_catalog import list_model_catalog
+
+            await list_model_catalog()
+        except Exception as exc:
+            logger.info("model catalog: atualização em segundo plano falhou: %s", exc)
+
+    catalog_task = asyncio.create_task(_refresh_model_catalog())
 
     try:
         await _autostart_storage_stack()
@@ -546,6 +558,10 @@ async def _lifespan(app: FastAPI):  # type: ignore[return]  # noqa: ANN202
     try:
         yield
     finally:
+        if not catalog_task.done():
+            catalog_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await catalog_task
         logger.info("api/server: shutdown — fechando recursos")
         if consolidation_task is not None:
             consolidation_task.cancel()
@@ -642,6 +658,12 @@ async def _lifespan(app: FastAPI):  # type: ignore[return]  # noqa: ANN202
                 "api/server: erro ao encerrar Ollama gerenciado", exc_info=True
             )
 
+        try:
+            from backend.api.handlers.browser_workbench import close_all
+
+            await close_all()
+        except Exception:
+            logger.debug("api/server: erro ao encerrar browser do Vectora Web")
         try:
             from backend.services.electron_sidecar import stop_electron_sidecar
 
@@ -847,6 +869,7 @@ def create_app(serve_static: bool = True) -> FastAPI:
     app.include_router(rag_router)
     app.include_router(terminal_router)
     app.include_router(background_router)
+    app.include_router(browser_workbench_router)
     app.include_router(boards_router)
     app.include_router(agent_profiles_router)
     app.include_router(graph_router)

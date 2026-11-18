@@ -1220,7 +1220,7 @@ class TestManageRetriever:
 
 
 # ---------------------------------------------------------------------------
-# _build_reranker — Cohere ↔ VoyageAI
+# _build_reranker — modelo canônico provider:model
 # ---------------------------------------------------------------------------
 
 
@@ -1229,8 +1229,17 @@ class TestBuildReranker:
         """Verifica o comportamento de cohere without key returns none."""
         from backend.tools.rag import _build_reranker
 
-        with patch("backend.tools.rag.settings") as ms:
-            ms.reranker_type = "cohere"
+        with (
+            patch("backend.tools.rag.settings") as ms,
+            patch(
+                "backend.tools.rag._rag_runtime",
+                return_value={
+                    "reranker_enabled": True,
+                    "rerank_model": "cohere:rerank-v4",
+                    "reranker_top_k": 5,
+                },
+            ),
+        ):
             ms.get_cohere_api_key.return_value = None
             assert _build_reranker() is None
 
@@ -1238,8 +1247,17 @@ class TestBuildReranker:
         """Verifica o comportamento de voyage without key returns none."""
         from backend.tools.rag import _build_reranker
 
-        with patch("backend.tools.rag.settings") as ms:
-            ms.reranker_type = "voyage"
+        with (
+            patch("backend.tools.rag.settings") as ms,
+            patch(
+                "backend.tools.rag._rag_runtime",
+                return_value={
+                    "reranker_enabled": True,
+                    "rerank_model": "voyage:rerank-2",
+                    "reranker_top_k": 5,
+                },
+            ),
+        ):
             ms.voyage_api_key = None
             assert _build_reranker() is None
 
@@ -1247,8 +1265,16 @@ class TestBuildReranker:
         """Verifica o comportamento de unknown type returns none."""
         from backend.tools.rag import _build_reranker
 
-        with patch("backend.tools.rag.settings") as ms:
-            ms.reranker_type = "qualquer-outro"
+        with (
+            patch("backend.tools.rag.settings"),
+            patch(
+                "backend.tools.rag._rag_runtime",
+                return_value={
+                    "reranker_enabled": True,
+                    "rerank_model": "desconhecido:modelo",
+                },
+            ),
+        ):
             assert _build_reranker() is None
 
     def test_cohere_client_construction_failure_returns_none(self):
@@ -1257,8 +1283,17 @@ class TestBuildReranker:
         propaga pro chamador de `_build_reranker`."""
         from backend.tools.rag import _build_reranker
 
-        with patch("backend.tools.rag.settings") as ms:
-            ms.reranker_type = "cohere"
+        with (
+            patch("backend.tools.rag.settings") as ms,
+            patch(
+                "backend.tools.rag._rag_runtime",
+                return_value={
+                    "reranker_enabled": True,
+                    "rerank_model": "cohere:rerank-v4",
+                    "reranker_top_k": 5,
+                },
+            ),
+        ):
             # get_cohere_api_key() devolve algo não-vazio (passa no guard de
             # _build_cohere_reranker), mas CohereClient valida de novo e
             # rejeita string vazia — simula um estado inconsistente real.
@@ -1270,8 +1305,17 @@ class TestBuildReranker:
         from backend.llm.voyage.rerank import VectoraVoyageRerank
         from backend.tools.rag import _build_reranker
 
-        with patch("backend.tools.rag.settings") as ms:
-            ms.reranker_type = "voyage"
+        with (
+            patch("backend.tools.rag.settings") as ms,
+            patch(
+                "backend.tools.rag._rag_runtime",
+                return_value={
+                    "reranker_enabled": True,
+                    "rerank_model": "voyage:rerank-2",
+                    "reranker_top_k": 5,
+                },
+            ),
+        ):
             ms.voyage_api_key = "voy-1"
             ms.voyage_rerank_model = "rerank-2"
             ms.reranker_top_k = 5
@@ -1299,106 +1343,30 @@ class TestBuildReranker:
             ms.get_cohere_api_key.return_value = "ck-1"
             assert _build_reranker() is None
 
-    def test_reranker_provider_pref_forces_voyage(self):
-        """Verifica o comportamento de reranker provider pref forces voyage."""
-        from backend.llm.voyage.rerank import VectoraVoyageRerank
+    def test_model_id_selects_provider_without_provider_preference(self):
         from backend.tools import rag as rag_mod
         from backend.tools.rag import _build_reranker
 
+        cohere_reranker = object()
         with (
-            patch("backend.tools.rag.settings") as ms,
+            patch("backend.tools.rag.settings"),
             patch.object(
                 rag_mod,
                 "_rag_runtime",
                 lambda: {
                     "reranker_enabled": True,
                     "reranker_top_k": 5,
-                    "rerank_provider": "voyage",
+                    "rerank_model": "cohere:rerank-v4",
                 },
             ),
+            patch.object(
+                rag_mod,
+                "_build_cohere_reranker",
+                return_value=cohere_reranker,
+            ) as build_cohere,
+            patch.object(rag_mod, "_build_voyage_reranker") as build_voyage,
         ):
-            ms.reranker_type = "cohere"  # mas a preferência força voyage
-            ms.voyage_api_key = "voy-1"
-            ms.voyage_rerank_model = "rerank-2"
-            ms.get_cohere_api_key.return_value = None
             out = _build_reranker()
-        assert isinstance(out, VectoraVoyageRerank)
-
-    def test_both_configured_returns_fallback_reranker(self):
-        """Verifica o comportamento de both configured returns fallback reranker."""
-        from backend.llm.fallback_reranker import FallbackReranker
-        from backend.tools.rag import _build_reranker
-
-        with patch("backend.tools.rag.settings") as ms:
-            ms.reranker_type = "cohere"
-            ms.get_cohere_api_key.return_value = "ck-1"
-            ms.reranker_model = "rerank-english-v3.0"
-            ms.voyage_api_key = "voy-1"
-            ms.voyage_rerank_model = "rerank-2"
-            ms.reranker_top_k = 5
-            out = _build_reranker()
-        assert isinstance(out, FallbackReranker)
-        assert out.primary_id == "cohere:rerank-english-v3.0"
-        assert out.secondary_id == "voyage:rerank-2"
-
-
-class TestFallbackRerankerBehavior:
-    def _wrap(self, primary, secondary):
-        """Executa a operação  wrap."""
-        from backend.llm.fallback_reranker import FallbackReranker
-
-        return FallbackReranker(
-            primary,
-            secondary,
-            primary_id="cohere:r",
-            secondary_id="voyage:r",
-        )
-
-    def test_compress_primary_ok_no_switch(self):
-        """Verifica o comportamento de compress primary ok no switch."""
-        from backend.llm import provider_fallback as pf
-
-        pf.drain_switches()
-        primary = MagicMock()
-        primary.compress_documents.return_value = ["doc-primary"]
-        secondary = MagicMock()
-        out = self._wrap(primary, secondary).compress_documents(["d"], "q")
-        assert out == ["doc-primary"]
-        secondary.compress_documents.assert_not_called()
-        assert pf.drain_switches() == []
-
-    def test_compress_primary_quota_switches(self):
-        """Verifica o comportamento de compress primary quota switches."""
-        from backend.llm import provider_fallback as pf
-
-        pf.drain_switches()
-        primary = MagicMock()
-        primary.compress_documents.side_effect = Exception("429 quota")
-        secondary = MagicMock()
-        secondary.compress_documents.return_value = ["doc-secondary"]
-        out = self._wrap(primary, secondary).compress_documents(["d"], "q")
-        assert out == ["doc-secondary"]
-        assert pf.drain_switches() == [{"from": "cohere:r", "to": "voyage:r"}]
-
-    def test_compress_non_quota_reraises(self):
-        """Verifica o comportamento de compress non quota reraises."""
-        primary = MagicMock()
-        primary.compress_documents.side_effect = ValueError("boom")
-        secondary = MagicMock()
-        with pytest.raises(ValueError):
-            self._wrap(primary, secondary).compress_documents(["d"], "q")
-        secondary.compress_documents.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_acompress_quota_switches(self):
-        """Verifica o comportamento de acompress quota switches."""
-        from backend.llm import provider_fallback as pf
-
-        pf.drain_switches()
-        primary = MagicMock()
-        primary.acompress_documents = AsyncMock(side_effect=Exception("rate limit"))
-        secondary = MagicMock()
-        secondary.acompress_documents = AsyncMock(return_value=["async-secondary"])
-        out = await self._wrap(primary, secondary).acompress_documents(["d"], "q")
-        assert out == ["async-secondary"]
-        assert pf.drain_switches() == [{"from": "cohere:r", "to": "voyage:r"}]
+        assert out is cohere_reranker
+        build_cohere.assert_called_once_with("rerank-v4")
+        build_voyage.assert_not_called()

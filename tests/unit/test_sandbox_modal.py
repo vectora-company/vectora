@@ -45,8 +45,8 @@ async def test_successful_run_returns_sandbox_output(monkeypatch):
     fake_app_cls.lookup.return_value = MagicMock()
 
     fake_modal = types.ModuleType("modal")
-    fake_modal.App = fake_app_cls  # ty: ignore[unresolved-attribute]
-    fake_modal.Sandbox = MagicMock()  # ty: ignore[unresolved-attribute]
+    fake_modal.App = fake_app_cls  # ty: ignore[missing-attribute]
+    fake_modal.Sandbox = MagicMock()  # ty: ignore[missing-attribute]
     fake_modal.Sandbox.create.return_value = fake_sandbox
     monkeypatch.setitem(sys.modules, "modal", fake_modal)
 
@@ -64,9 +64,9 @@ async def test_successful_run_returns_sandbox_output(monkeypatch):
 @pytest.mark.asyncio
 async def test_sdk_failure_returns_clear_error_offering_other_backends(monkeypatch):
     fake_modal = types.ModuleType("modal")
-    fake_modal.App = MagicMock()  # ty: ignore[unresolved-attribute]
+    fake_modal.App = MagicMock()  # ty: ignore[missing-attribute]
     fake_modal.App.lookup.side_effect = RuntimeError("invalid token")
-    fake_modal.Sandbox = MagicMock()  # ty: ignore[unresolved-attribute]
+    fake_modal.Sandbox = MagicMock()  # ty: ignore[missing-attribute]
     monkeypatch.setitem(sys.modules, "modal", fake_modal)
 
     from backend.sandbox.modal import run_modal_sandboxed
@@ -90,9 +90,9 @@ def _fake_modal_module(*, exec_side_effect=None, wait_return=0):
     fake_sandbox.exec.return_value = fake_process
 
     fake_modal = types.ModuleType("modal")
-    fake_modal.App = MagicMock()  # ty: ignore[unresolved-attribute]
+    fake_modal.App = MagicMock()  # ty: ignore[missing-attribute]
     fake_modal.App.lookup.return_value = MagicMock()
-    fake_modal.Sandbox = MagicMock()  # ty: ignore[unresolved-attribute]
+    fake_modal.Sandbox = MagicMock()  # ty: ignore[missing-attribute]
     fake_modal.Sandbox.create.return_value = fake_sandbox
     return fake_modal, fake_sandbox, fake_process
 
@@ -221,8 +221,8 @@ async def test_sandbox_terminate_called_even_when_exec_raises(monkeypatch):
     fake_app_cls.lookup.return_value = MagicMock()
 
     fake_modal = types.ModuleType("modal")
-    fake_modal.App = fake_app_cls  # ty: ignore[unresolved-attribute]
-    fake_modal.Sandbox = MagicMock()  # ty: ignore[unresolved-attribute]
+    fake_modal.App = fake_app_cls  # ty: ignore[missing-attribute]
+    fake_modal.Sandbox = MagicMock()  # ty: ignore[missing-attribute]
     fake_modal.Sandbox.create.return_value = fake_sandbox
     monkeypatch.setitem(sys.modules, "modal", fake_modal)
 
@@ -248,8 +248,8 @@ async def test_nonzero_exit_code_from_sandbox_process_is_propagated(monkeypatch)
     fake_app_cls.lookup.return_value = MagicMock()
 
     fake_modal = types.ModuleType("modal")
-    fake_modal.App = fake_app_cls  # ty: ignore[unresolved-attribute]
-    fake_modal.Sandbox = MagicMock()  # ty: ignore[unresolved-attribute]
+    fake_modal.App = fake_app_cls  # ty: ignore[missing-attribute]
+    fake_modal.Sandbox = MagicMock()  # ty: ignore[missing-attribute]
     fake_modal.Sandbox.create.return_value = fake_sandbox
     monkeypatch.setitem(sys.modules, "modal", fake_modal)
 
@@ -269,8 +269,8 @@ async def test_timeout_returns_clear_error_without_raising(monkeypatch):
     # dependem de tempo real perto da borda são inerentemente instáveis
     # (a duração do sleep pode terminar ANTES do timeout por poucos ms).
     fake_modal = types.ModuleType("modal")
-    fake_modal.App = MagicMock()  # ty: ignore[unresolved-attribute]
-    fake_modal.Sandbox = MagicMock()  # ty: ignore[unresolved-attribute]
+    fake_modal.App = MagicMock()  # ty: ignore[missing-attribute]
+    fake_modal.Sandbox = MagicMock()  # ty: ignore[missing-attribute]
     monkeypatch.setitem(sys.modules, "modal", fake_modal)
 
     import backend.sandbox.modal as sandbox_modal

@@ -1,8 +1,4 @@
-"""Rerank nativo do Cohere — ``POST /v2/rerank``.
-
-Mesma interface dos rerankers já usados (``compress_documents``), pra encaixar
-no ``FallbackReranker`` que alterna Cohere↔Voyage sem mudança.
-"""
+"""Rerank nativo do Cohere — ``POST /v2/rerank``."""
 
 from __future__ import annotations
 

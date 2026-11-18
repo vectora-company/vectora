@@ -11,15 +11,15 @@ from __future__ import annotations
 import os
 from uuid import uuid4
 
-from mcp.server.fastmcp import FastMCP  # ty: ignore[unresolved-import]
+from mcp.server.mcpserver import MCPServer
 
 from backend.services.media_adapter import invoke_media, media_specs
 from backend.tools.context import ToolContext
 
 
-def create_media_server() -> FastMCP:
+def create_media_server() -> MCPServer:
     """Build an MCP server exposing only authorized native media tools."""
-    server = FastMCP("Vectora Media")
+    server = MCPServer("Vectora Media")
     user_id = os.environ.get("VECTORA_MCP_USER_ID", "")
     if not user_id:
         raise RuntimeError("VECTORA_MCP_USER_ID é obrigatório para o servidor MCP")

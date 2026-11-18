@@ -333,59 +333,6 @@ class TestFaultTolerance:
 
 
 # ---------------------------------------------------------------------------
-# fallback_order (Parte A3)
-# ---------------------------------------------------------------------------
-
-
-class TestFallbackOrder:
-    def test_default_empty(self, rs: RuntimeSettings) -> None:
-        assert rs.fallback_order == []
-
-    def test_set_and_get_roundtrip(self, rs: RuntimeSettings) -> None:
-        rs.set_fallback_order(["openai:gpt-4o", "google-genai:gemini-2.5-flash"])
-        assert rs.fallback_order == [
-            "openai:gpt-4o",
-            "google-genai:gemini-2.5-flash",
-        ]
-
-    def test_preserves_order(self, rs: RuntimeSettings) -> None:
-        rs.set_fallback_order(["cohere:command-a", "openai:gpt-4o"])
-        assert rs.fallback_order == ["cohere:command-a", "openai:gpt-4o"]
-
-    def test_filters_empty_and_blank(self, rs: RuntimeSettings) -> None:
-        rs.set_fallback_order(["openai:gpt-4o", "", "   ", "cohere:command-a"])
-        assert rs.fallback_order == ["openai:gpt-4o", "cohere:command-a"]
-
-    def test_trims_whitespace(self, rs: RuntimeSettings) -> None:
-        rs.set_fallback_order(["  openai:gpt-4o  "])
-        assert rs.fallback_order == ["openai:gpt-4o"]
-
-    def test_set_empty_clears(self, rs: RuntimeSettings) -> None:
-        rs.set_fallback_order(["openai:gpt-4o"])
-        rs.set_fallback_order([])
-        assert rs.fallback_order == []
-
-    def test_persists_to_disk(self, tmp_settings_path: Path) -> None:
-        rs = RuntimeSettings(path=tmp_settings_path)
-        rs.set_fallback_order(["openai:gpt-4o"])
-        rs2 = RuntimeSettings(path=tmp_settings_path)
-        assert rs2.fallback_order == ["openai:gpt-4o"]
-
-    def test_invalid_type_in_store_returns_empty(self, rs: RuntimeSettings) -> None:
-        rs.set("llm_fallback_order", "not-a-list")
-        assert rs.fallback_order == []
-
-    def test_overwrite_replaces(self, rs: RuntimeSettings) -> None:
-        rs.set_fallback_order(["openai:gpt-4o", "cohere:command-a"])
-        rs.set_fallback_order(["google-genai:gemini-2.5-flash"])
-        assert rs.fallback_order == ["google-genai:gemini-2.5-flash"]
-
-    def test_entries_are_strings(self, rs: RuntimeSettings) -> None:
-        rs.set_fallback_order(["openai:gpt-4o"])
-        assert all(isinstance(x, str) for x in rs.fallback_order)
-
-
-# ---------------------------------------------------------------------------
 # reload()
 # ---------------------------------------------------------------------------
 
@@ -417,8 +364,8 @@ class TestRagSettings:
         s = rs.rag_settings
         assert s["reranker_enabled"] is True
         assert s["reranker_top_k"] == 5
-        assert s["rerank_provider"] == "auto"
-        assert s["embed_provider"] == "auto"
+        assert s["rerank_model"] == ""
+        assert s["embed_model"] == ""
         assert s["ingest_file_types"] == []
 
     def test_set_merges_partial(self, rs) -> None:
@@ -426,15 +373,15 @@ class TestRagSettings:
         s = rs.rag_settings
         assert s["reranker_enabled"] is False
         assert s["reranker_top_k"] == 12
-        # Campos não informados mantêm o default.
-        assert s["rerank_provider"] == "auto"
+        # O modelo selecionado permanece vazio até ser escolhido em IA Models.
+        assert s["rerank_model"] == ""
 
     def test_set_ignores_none(self, rs) -> None:
         rs.set_rag_settings(reranker_top_k=8)
-        rs.set_rag_settings(reranker_top_k=None, rerank_provider="voyage")
+        rs.set_rag_settings(reranker_top_k=None, rerank_model="cohere:rerank-v4")
         s = rs.rag_settings
         assert s["reranker_top_k"] == 8  # não sobrescrito por None
-        assert s["rerank_provider"] == "voyage"
+        assert s["rerank_model"] == "cohere:rerank-v4"
 
     def test_persists_across_reload(self, tmp_settings_path) -> None:
         from backend.workspace.runtime_settings import RuntimeSettings

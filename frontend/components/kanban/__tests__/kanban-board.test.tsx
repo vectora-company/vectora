@@ -424,9 +424,12 @@ describe("KanbanBoard", () => {
     await montar();
 
     const card = screen.getByText("tarefa bloqueada").closest("[style]");
-    expect(card).toHaveStyle({
-      borderLeftColor: "var(--color-kanban-tone-blocked)",
-    });
+    expect(card).toHaveAttribute(
+      "style",
+      expect.stringContaining(
+        "border-left-color: var(--color-kanban-tone-blocked)",
+      ),
+    );
   });
 
   it("chip de prioridade só aparece quando a prioridade não é 'normal'", async () => {

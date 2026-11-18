@@ -86,6 +86,11 @@ export function resolveDockerExecutable(
 export type DockerOperation =
   | "version"
   | "info"
+  | "installPlugin"
+  | "status"
+  | "installRunner"
+  | "startRunner"
+  | "enableModelRunner"
   | "list"
   | "inspect"
   | "pull"
@@ -133,6 +138,18 @@ export function buildDockerArguments(
       return ["model", "version"];
     case "info":
       return ["info", "--format", "{{json .}}"];
+    case "installPlugin":
+      throw new Error(
+        "A instalação do plugin requer um gerenciador do sistema",
+      );
+    case "status":
+      return ["model", "status", "--json"];
+    case "installRunner":
+      return ["model", "install-runner"];
+    case "startRunner":
+      return ["model", "start-runner"];
+    case "enableModelRunner":
+      return ["desktop", "enable", "model-runner", "--tcp", "12434"];
     case "list":
       return ["model", "list", "--format", "json"];
     case "inspect":
@@ -159,6 +176,29 @@ export function buildDockerArguments(
     case "remove":
       return ["model", "rm", validateModelReference(reference ?? "")];
   }
+}
+
+export function resolveModelPluginInstaller(
+  platform: NodeJS.Platform = process.platform,
+  hasExecutable: (filePath: string) => boolean = existsSync,
+): {
+  executable: string;
+  args: string[];
+} | null {
+  if (platform !== "linux" || !hasExecutable("/usr/bin/pkexec")) return null;
+  const packageManagers = [
+    {
+      path: "/usr/bin/apt-get",
+      args: ["install", "-y", "docker-model-plugin"],
+    },
+    { path: "/usr/bin/dnf", args: ["install", "-y", "docker-model-plugin"] },
+  ];
+  const manager = packageManagers.find(({ path: executable }) =>
+    hasExecutable(executable),
+  );
+  return manager
+    ? { executable: "/usr/bin/pkexec", args: [manager.path, ...manager.args] }
+    : null;
 }
 
 function appendLimited(
@@ -192,9 +232,18 @@ export class DockerCliExecutor {
     options: DockerCommandOptions = {},
   ): Promise<DockerCommandResult> {
     const operationId = options.operationId ?? randomUUID();
-    const args = buildDockerArguments(operation, reference, contextSize);
+    const installer =
+      operation === "installPlugin" ? resolveModelPluginInstaller() : null;
+    if (operation === "installPlugin" && !installer) {
+      throw new Error(
+        "Instalação automática do plugin Docker Model Runner não é suportada nesta plataforma. Consulte as instruções oficiais.",
+      );
+    }
+    const args = installer
+      ? installer.args
+      : buildDockerArguments(operation, reference, contextSize);
     const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-    const executable = resolveDockerExecutable();
+    const executable = installer?.executable ?? resolveDockerExecutable();
 
     return await new Promise<DockerCommandResult>((resolve, reject) => {
       const child = spawn(executable, args, {
@@ -250,6 +299,10 @@ export class DockerCliExecutor {
       if (options.signal?.aborted) abort();
       else options.signal?.addEventListener("abort", abort, { once: true });
     });
+  }
+
+  canInstallPlugin(): boolean {
+    return resolveModelPluginInstaller() !== null;
   }
 
   cancel(operationId: string): boolean {

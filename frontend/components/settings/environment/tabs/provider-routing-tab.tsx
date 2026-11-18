@@ -17,9 +17,10 @@
  * estático com os registrados de cada gateway).
  */
 
-import { Loader2, Plus, RefreshCw, Search, Server, Trash2 } from "lucide-react";
+import { Loader2, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { ProviderIcon } from "@/components/icons/provider-icons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,10 +36,11 @@ interface OllamaModelInfo {
 
 interface OllamaRuntimeStatus {
   installed: boolean;
+  managed?: boolean;
   executable?: string | null;
   reachable: boolean;
   version?: string | null;
-  state: "missing" | "installed" | "running" | "error";
+  state: "missing" | "installing" | "installed" | "running" | "error";
   phase?:
     | "idle"
     | "detect"
@@ -50,6 +52,24 @@ interface OllamaRuntimeStatus {
     | "failed"
     | "cancelled";
   detail?: string | null;
+  downloaded?: number;
+  download_total?: number | null;
+}
+
+async function responseError(
+  response: Response,
+  fallback: string,
+): Promise<string> {
+  const payload: unknown = await response.json().catch(() => null);
+  if (
+    payload &&
+    typeof payload === "object" &&
+    "detail" in payload &&
+    typeof payload.detail === "string"
+  ) {
+    return payload.detail;
+  }
+  return fallback;
 }
 
 interface RegisteredModel {
@@ -111,16 +131,11 @@ interface HuggingFaceMetadata {
   files?: HuggingFaceFileInfo[];
 }
 
-interface LlamaCppReleaseAsset {
-  name: string;
-  url: string;
-  size: number;
-  sha256?: string;
-  recommended?: boolean;
-}
-
 interface LlamaCppRuntimeStatus {
   installed: boolean;
+  managed?: boolean;
+  external?: boolean;
+  reachable?: boolean;
   path: string | null;
   files: string[];
   free_bytes?: number;
@@ -133,6 +148,12 @@ interface LlamaCppRuntimeStatus {
     source?: string;
     version?: string;
   }>;
+  install_progress?: {
+    status?: string;
+    downloaded?: number;
+    total?: number | null;
+    phase?: string;
+  };
 }
 
 interface DmrStatus {
@@ -145,7 +166,16 @@ interface DmrStatus {
   models: string[];
   managed_models: string[];
   detail?: string | null;
-  state: "docker_unavailable" | "plugin_unavailable" | "stopped" | "ready";
+  state:
+    | "docker_unavailable"
+    | "plugin_unavailable"
+    | "runner_unavailable"
+    | "stopped"
+    | "ready";
+  runner_available: boolean;
+  runner_installed: boolean;
+  docker_desktop: boolean;
+  plugin_install_supported: boolean;
   platform: string;
   architecture: string;
   backend: string | null;
@@ -156,6 +186,38 @@ interface DmrStatus {
     gpu_backends: string[];
     warnings: string[];
   };
+}
+
+interface OllamaConfig {
+  configured: boolean;
+  base_url: string;
+  api_key_configured: boolean;
+  api_key_masked: string;
+}
+
+async function fetchOllamaConfig(): Promise<OllamaConfig> {
+  const response = await fetch("/provider-routing/ollama/config");
+  if (!response.ok) throw new Error(`Erro ${response.status}`);
+  return (await response.json()) as OllamaConfig;
+}
+
+async function saveOllamaConfig(
+  baseUrl: string,
+  apiKey: string,
+  clearApiKey = false,
+): Promise<OllamaConfig> {
+  const response = await fetch("/provider-routing/ollama/config", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      base_url: baseUrl,
+      api_key: apiKey || null,
+      clear_api_key: clearApiKey,
+    }),
+  });
+  if (!response.ok)
+    throw new Error(await responseError(response, `Erro ${response.status}`));
+  return (await response.json()) as OllamaConfig;
 }
 
 interface DmrJob {
@@ -195,13 +257,15 @@ async function fetchOllamaRuntimeStatus(): Promise<OllamaRuntimeStatus> {
   return (await response.json()) as OllamaRuntimeStatus;
 }
 
-async function installOllamaRuntime(): Promise<OllamaRuntimeStatus> {
+async function installOllamaRuntime(
+  signal?: AbortSignal,
+): Promise<OllamaRuntimeStatus> {
   const response = await fetch("/provider-routing/ollama/runtime/install", {
     method: "POST",
+    signal,
   });
   if (!response.ok) {
-    const detail = await response.text();
-    throw new Error(detail || `Erro ${response.status}`);
+    throw new Error(await responseError(response, `Erro ${response.status}`));
   }
   return (await response.json()) as OllamaRuntimeStatus;
 }
@@ -226,31 +290,14 @@ async function testLlamaCppConnection(): Promise<{
   return res.json();
 }
 
-async function fetchLlamaCppReleases(): Promise<LlamaCppReleaseAsset[]> {
-  const res = await fetch("/provider-routing/llamacpp/releases");
-  if (!res.ok) throw new Error(`Erro ${res.status}`);
-  const data = (await res.json()) as {
-    releases?: Array<{ assets?: LlamaCppReleaseAsset[] }>;
-  };
-  return data.releases?.flatMap((release) => release.assets ?? []) ?? [];
-}
-
-async function installLlamaCppRuntime(
-  assetUrl: string,
-  sha256?: string,
-): Promise<void> {
-  const res = await fetch("/provider-routing/llamacpp/install", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ asset_url: assetUrl, sha256 }),
-  });
-  if (!res.ok) throw new Error(`Erro ${res.status}`);
-}
-
 async function fetchLlamaCppRuntimeStatus(): Promise<LlamaCppRuntimeStatus> {
   const res = await fetch("/provider-routing/llamacpp/runtime/status");
   if (!res.ok) throw new Error(`Erro ${res.status}`);
   return res.json() as Promise<LlamaCppRuntimeStatus>;
+}
+
+async function cancelLlamaCppRuntimeInstall(): Promise<void> {
+  await fetch("/provider-routing/llamacpp/runtime/cancel", { method: "POST" });
 }
 
 async function fetchDmrStatus(): Promise<DmrStatus> {
@@ -271,13 +318,21 @@ async function fetchDmrStatus(): Promise<DmrStatus> {
           : "stopped"
         : detection.status === "plugin_unavailable"
           ? "plugin_unavailable"
-          : "docker_unavailable";
+          : detection.status === "runner_unavailable"
+            ? "runner_unavailable"
+            : detection.status === "docker_unavailable"
+              ? "docker_unavailable"
+              : "stopped";
     const models = Object.keys(manifest.models);
     return {
       configured: httpStatus.configured ?? false,
       base_url: httpStatus.base_url ?? "http://127.0.0.1:12434",
       model: httpStatus.model ?? models[0] ?? "",
       cli_available: detection.docker && detection.plugin,
+      runner_available: detection.runner,
+      runner_installed: detection.runnerInstalled ?? false,
+      docker_desktop: detection.desktop ?? false,
+      plugin_install_supported: detection.pluginInstallSupported ?? false,
       reachable: httpStatus.reachable ?? false,
       contract: httpStatus.contract ?? null,
       models: httpStatus.models ?? models,
@@ -296,9 +351,35 @@ async function fetchDmrStatus(): Promise<DmrStatus> {
       },
     };
   }
-  const response = await fetch("/provider-routing/dmr/status");
-  if (!response.ok) throw new Error(`Erro ${response.status}`);
-  return (await response.json()) as DmrStatus;
+  const httpResponse = await fetch("/provider-routing/dmr/http-status");
+  if (!httpResponse.ok) throw new Error(`Erro ${httpResponse.status}`);
+  const httpStatus = (await httpResponse.json()) as Partial<DmrStatus>;
+  return {
+    configured: httpStatus.configured ?? false,
+    base_url: httpStatus.base_url ?? "http://127.0.0.1:12434",
+    model: httpStatus.model ?? "",
+    cli_available: false,
+    runner_available: httpStatus.reachable ?? false,
+    runner_installed: false,
+    docker_desktop: false,
+    plugin_install_supported: false,
+    reachable: httpStatus.reachable ?? false,
+    contract: httpStatus.contract ?? null,
+    models: httpStatus.models ?? [],
+    managed_models: httpStatus.managed_models ?? [],
+    detail: httpStatus.detail,
+    state: httpStatus.reachable ? "ready" : "stopped",
+    platform: "web",
+    architecture: "unknown",
+    backend: null,
+    capabilities: {
+      cpus: null,
+      memory_bytes: null,
+      runtimes: [],
+      gpu_backends: [],
+      warnings: [],
+    },
+  };
 }
 
 async function configureDmr(
@@ -310,8 +391,31 @@ async function configureDmr(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ base_url: baseUrl, model }),
   });
-  if (!response.ok) throw new Error(`Erro ${response.status}`);
-  return (await response.json()) as DmrStatus;
+  if (!response.ok)
+    throw new Error(await responseError(response, `Erro ${response.status}`));
+  return fetchDmrStatus();
+}
+
+async function detectDmrModels(): Promise<string[]> {
+  const response = await fetch("/provider-routing/dmr/models");
+  if (!response.ok)
+    throw new Error(await responseError(response, `Erro ${response.status}`));
+  const data = (await response.json()) as { models?: string[] };
+  return data.models ?? [];
+}
+
+async function testDmrHttpConnection(
+  baseUrl: string,
+  model: string,
+): Promise<Partial<DmrStatus>> {
+  const response = await fetch("/provider-routing/dmr/test", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ base_url: baseUrl, model }),
+  });
+  if (!response.ok)
+    throw new Error(await responseError(response, `Erro ${response.status}`));
+  return (await response.json()) as Partial<DmrStatus>;
 }
 
 async function prepareDmrModel(reference: string): Promise<DmrStatus> {
@@ -352,7 +456,11 @@ async function createDmrModelJob(
 
 function dmrOperationToJob(operation: VectoraDmrOperation): DmrJob {
   const phase: DmrJob["phase"] =
-    operation.phase === "stopping" || operation.phase === "removing"
+    operation.phase === "stopping" ||
+    operation.phase === "removing" ||
+    operation.phase === "installing" ||
+    operation.phase === "installing_plugin" ||
+    operation.phase === "installing_runner"
       ? "checking"
       : operation.phase;
   return {
@@ -470,6 +578,12 @@ function DmrSection() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [job, setJob] = useState<DmrJob | null>(null);
+  const [runtimeOperation, setRuntimeOperation] =
+    useState<VectoraDmrOperation | null>(null);
+  const [modelQuery, setModelQuery] = useState("");
+  const [discoveredModels, setDiscoveredModels] = useState<string[]>([]);
+  const [discovering, setDiscovering] = useState(false);
+  const canManageDocker = Boolean(window.vectora?.dmr);
 
   const refresh = useCallback(async () => {
     try {
@@ -477,6 +591,7 @@ function DmrSection() {
       setStatus(next);
       setBaseUrl(next.base_url);
       setModel(next.model);
+      if (!window.vectora?.dmr) return;
       const jobs = await fetchDmrModelJobs();
       const active = jobs.find(
         (candidate) =>
@@ -505,6 +620,49 @@ function DmrSection() {
       setError("Não foi possível salvar o endpoint do Docker Model Runner.");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function testConnection() {
+    setBusy(true);
+    setError("");
+    try {
+      const next = await testDmrHttpConnection(baseUrl, model);
+      setStatus((current) =>
+        current
+          ? {
+              ...current,
+              ...next,
+              base_url: baseUrl,
+              model,
+              state: next.reachable ? "ready" : "stopped",
+            }
+          : current,
+      );
+    } catch (testError) {
+      setError(
+        testError instanceof Error
+          ? testError.message
+          : "Falha ao verificar o endpoint.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function detectModels() {
+    setDiscovering(true);
+    setError("");
+    try {
+      setDiscoveredModels(await detectDmrModels());
+    } catch (detectError) {
+      setError(
+        detectError instanceof Error
+          ? detectError.message
+          : "Falha ao detectar modelos.",
+      );
+    } finally {
+      setDiscovering(false);
     }
   }
 
@@ -538,6 +696,49 @@ function DmrSection() {
       setError("Não foi possível preparar o modelo no Docker Model Runner.");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function installRunner() {
+    const bridge = window.vectora?.dmr;
+    if (!bridge) return;
+    setBusy(true);
+    setError("");
+    try {
+      let operation = await bridge.ensureRunner();
+      setRuntimeOperation(operation);
+      while (operation.status === "queued" || operation.status === "running") {
+        await new Promise((resolve) => window.setTimeout(resolve, 300));
+        const next = await bridge.getOperation(operation.id);
+        if (!next) throw new Error("operação DMR não encontrada");
+        operation = next;
+        setRuntimeOperation(operation);
+      }
+      if (operation.status !== "completed") {
+        throw new Error(operation.error ?? "operação DMR falhou");
+      }
+      await refresh();
+    } catch (installError) {
+      setError(
+        installError instanceof Error
+          ? installError.message
+          : "Não foi possível instalar ou ativar o Docker Model Runner.",
+      );
+    } finally {
+      setRuntimeOperation(null);
+      setBusy(false);
+    }
+  }
+
+  async function cancelRunnerInstall() {
+    const bridge = window.vectora?.dmr;
+    if (!bridge || !runtimeOperation) return;
+    if (await bridge.cancel(runtimeOperation.id)) {
+      setRuntimeOperation({
+        ...runtimeOperation,
+        status: "cancelled",
+        phase: "cancelled",
+      });
     }
   }
 
@@ -603,7 +804,13 @@ function DmrSection() {
   return (
     <div className="space-y-3 rounded-lg border p-4">
       <div>
-        <h3 className="font-medium">{m.provider_routing_dmr_title()}</h3>
+        <h3 className="flex items-center gap-1.5 font-medium">
+          <ProviderIcon
+            provider="dmr"
+            className="size-3.5 text-muted-foreground"
+          />
+          {m.provider_routing_dmr_title()}
+        </h3>
         <p className="text-xs text-muted-foreground">
           {m.provider_routing_dmr_subtitle()}
         </p>
@@ -639,11 +846,64 @@ function DmrSection() {
           type="button"
           variant="outline"
           disabled={busy}
-          onClick={() => void refresh()}
+          onClick={() => void testConnection()}
         >
           {m.provider_routing_dmr_test()}
         </Button>
-        {job && (job.status === "queued" || job.status === "running") ? (
+        {canManageDocker &&
+          status?.cli_available &&
+          !status.runner_available && (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={() => void installRunner()}
+            >
+              {status.docker_desktop
+                ? m.provider_routing_dmr_enable_runner()
+                : status.runner_installed
+                  ? m.provider_routing_dmr_start_runner()
+                  : m.provider_routing_dmr_install_runner()}
+            </Button>
+          )}
+        {canManageDocker &&
+          status?.state === "plugin_unavailable" &&
+          status.plugin_install_supported && (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={() => void installRunner()}
+            >
+              {m.provider_routing_dmr_install_plugin()}
+            </Button>
+          )}
+        {runtimeOperation &&
+          (runtimeOperation.status === "queued" ||
+            runtimeOperation.status === "running") && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void cancelRunnerInstall()}
+            >
+              {m.provider_routing_dmr_cancel()}
+            </Button>
+          )}
+        {canManageDocker &&
+          status?.state === "plugin_unavailable" &&
+          !status.plugin_install_supported && (
+            <a
+              className="inline-flex items-center rounded-md border px-3 py-2 text-sm hover:bg-muted/50"
+              href="https://docs.docker.com/ai/model-runner/get-started/"
+              target="_blank"
+              rel="noreferrer"
+            >
+              {m.provider_routing_dmr_install_instructions()}
+            </a>
+          )}
+        {canManageDocker &&
+        job &&
+        (job.status === "queued" || job.status === "running") ? (
           <Button
             type="button"
             variant="outline"
@@ -651,7 +911,7 @@ function DmrSection() {
           >
             {m.provider_routing_dmr_cancel()}
           </Button>
-        ) : job?.status === "interrupted" ? (
+        ) : canManageDocker && job?.status === "interrupted" ? (
           <Button
             type="button"
             disabled={busy}
@@ -659,31 +919,107 @@ function DmrSection() {
           >
             {m.provider_routing_dmr_prepare()}
           </Button>
-        ) : (
+        ) : canManageDocker ? (
           <Button
             type="button"
-            disabled={busy || !model.trim()}
+            disabled={busy || !model.trim() || !status?.runner_available}
             onClick={() => void prepare()}
           >
             {m.provider_routing_dmr_prepare()}
           </Button>
+        ) : null}
+        {canManageDocker && (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={busy || !model.trim() || status?.state !== "ready"}
+            onClick={() => void stop()}
+          >
+            {m.provider_routing_dmr_stop()}
+          </Button>
         )}
-        <Button
-          type="button"
-          variant="outline"
-          disabled={busy || !model.trim() || status?.state !== "ready"}
-          onClick={() => void stop()}
-        >
-          {m.provider_routing_dmr_stop()}
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          disabled={busy || !model.trim()}
-          onClick={() => void remove()}
-        >
-          {m.provider_routing_dmr_remove()}
-        </Button>
+        {canManageDocker && (
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={busy || !model.trim()}
+            onClick={() => void remove()}
+          >
+            {m.provider_routing_dmr_remove()}
+          </Button>
+        )}
+      </div>
+      {runtimeOperation &&
+        (runtimeOperation.status === "queued" ||
+          runtimeOperation.status === "running") && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="rounded-md border px-3 py-2 text-xs text-muted-foreground"
+          >
+            {runtimeOperation.operation === "install_plugin"
+              ? m.provider_routing_dmr_installing_plugin()
+              : runtimeOperation.phase === "installing_runner"
+                ? m.provider_routing_dmr_installing()
+                : runtimeOperation.operation === "start_runner"
+                  ? m.provider_routing_dmr_starting_runner()
+                  : m.provider_routing_dmr_installing()}
+            <progress
+              aria-label={
+                runtimeOperation.operation === "install_plugin"
+                  ? m.provider_routing_dmr_installing_plugin()
+                  : runtimeOperation.phase === "installing_runner"
+                    ? m.provider_routing_dmr_installing()
+                    : runtimeOperation.operation === "start_runner"
+                      ? m.provider_routing_dmr_starting_runner()
+                      : m.provider_routing_dmr_installing()
+              }
+              className="mt-2 block h-1.5 w-full"
+            />
+          </div>
+        )}
+      <div className="space-y-2">
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <div className="relative min-w-0 flex-1">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+            <Input
+              value={modelQuery}
+              onChange={(event) => setModelQuery(event.target.value)}
+              placeholder={m.provider_routing_nine_router_search_placeholder()}
+              className="h-8 pl-8 text-xs"
+            />
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={discovering || busy}
+            onClick={() => void detectModels()}
+          >
+            {discovering ? (
+              <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="mr-1.5 size-3.5" />
+            )}
+            {m.provider_routing_detect_models()}
+          </Button>
+        </div>
+        {discoveredModels
+          .filter((item) =>
+            item.toLowerCase().includes(modelQuery.trim().toLowerCase()),
+          )
+          .map((item) => (
+            <button
+              key={item}
+              type="button"
+              className="flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm hover:bg-muted/50"
+              onClick={() => setModel(item)}
+            >
+              <span className="truncate font-mono">{item}</span>
+              <span className="text-xs text-muted-foreground">
+                {m.provider_routing_dmr_select_model()}
+              </span>
+            </button>
+          ))}
       </div>
       {status && (
         <p className="text-xs text-muted-foreground">
@@ -693,7 +1029,9 @@ function DmrSection() {
               ? m.provider_routing_dmr_stopped()
               : status.state === "plugin_unavailable"
                 ? m.provider_routing_dmr_missing_plugin()
-                : m.provider_routing_dmr_missing_cli()}
+                : status.state === "runner_unavailable"
+                  ? m.provider_routing_dmr_runner_unavailable()
+                  : m.provider_routing_dmr_missing_cli()}
           {` · ${status.platform}/${status.architecture}`}
           {status.backend ? ` · ${status.backend}` : ""}
           {status.capabilities.gpu_backends.length
@@ -725,38 +1063,6 @@ function DmrSection() {
       {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
   );
-}
-
-async function removeLlamaCppRuntime(): Promise<void> {
-  const res = await fetch("/provider-routing/llamacpp/runtime", {
-    method: "DELETE",
-  });
-  if (!res.ok) throw new Error(`Erro ${res.status}`);
-}
-
-async function rollbackLlamaCppRuntime(runtimeId: string): Promise<void> {
-  const res = await fetch("/provider-routing/llamacpp/runtime/rollback", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ runtime_id: runtimeId }),
-  });
-  if (!res.ok) throw new Error(`Erro ${res.status}`);
-}
-
-async function removeLlamaCppRuntimeVersion(runtimeId: string): Promise<void> {
-  const res = await fetch(`/provider-routing/llamacpp/runtime/${runtimeId}`, {
-    method: "DELETE",
-  });
-  if (!res.ok) throw new Error(`Erro ${res.status}`);
-}
-
-async function cleanupLlamaCppRuntime(keep: number): Promise<void> {
-  const res = await fetch("/provider-routing/llamacpp/runtime/cleanup", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ keep }),
-  });
-  if (!res.ok) throw new Error(`Erro ${res.status}`);
 }
 
 async function searchHuggingFaceModels(
@@ -1111,7 +1417,13 @@ function HuggingFaceCatalogSection() {
   return (
     <div className="space-y-3 rounded-lg border p-4">
       <div>
-        <h3 className="font-medium">{m.provider_routing_hf_title()}</h3>
+        <h3 className="flex items-center gap-1.5 font-medium">
+          <ProviderIcon
+            provider="huggingface"
+            className="size-3.5 text-muted-foreground"
+          />
+          {m.provider_routing_hf_title()}
+        </h3>
         <p className="text-xs text-muted-foreground">
           {m.provider_routing_hf_subtitle()}
         </p>
@@ -1544,7 +1856,9 @@ function RegisteredModelsList({
           {m.provider_routing_registered_empty()}
         </p>
       ) : (
-        <div className="space-y-1.5">
+        <div
+          className={`space-y-1.5 ${registered.length > 6 ? "max-h-[26rem] overflow-y-auto pr-1" : ""}`}
+        >
           {registered.map((model) => (
             <div
               key={model.id}
@@ -1573,9 +1887,16 @@ function RegisteredModelsList({
 }
 
 function OllamaSection() {
+  const [baseUrl, setBaseUrl] = useState("http://127.0.0.1:11434");
+  const [apiKey, setApiKey] = useState("");
+  const [apiKeyMasked, setApiKeyMasked] = useState("");
+  const [apiKeyConfigured, setApiKeyConfigured] = useState(false);
+  const [savingConfig, setSavingConfig] = useState(false);
+  const [testingConnection, setTestingConnection] = useState(false);
   const [registered, setRegistered] = useState<RegisteredModel[]>([]);
   const [loadingRegistered, setLoadingRegistered] = useState(true);
   const [discovered, setDiscovered] = useState<OllamaModelInfo[] | null>(null);
+  const [modelQuery, setModelQuery] = useState("");
   const [reachable, setReachable] = useState<boolean | null>(null);
   const [discovering, setDiscovering] = useState(false);
   const [registeringTag, setRegisteringTag] = useState<string | null>(null);
@@ -1583,6 +1904,7 @@ function OllamaSection() {
   const [error, setError] = useState<string | null>(null);
   const [runtime, setRuntime] = useState<OllamaRuntimeStatus | null>(null);
   const [installingRuntime, setInstallingRuntime] = useState(false);
+  const installController = useRef<AbortController | null>(null);
 
   const loadRuntime = useCallback(async () => {
     try {
@@ -1609,21 +1931,150 @@ function OllamaSection() {
     // oxlint-disable-next-line react/set-state-in-effect
     void loadRegistered();
     void loadRuntime();
+    void fetchOllamaConfig()
+      .then((config) => {
+        setBaseUrl(config.base_url);
+        setApiKeyMasked(config.api_key_masked);
+        setApiKeyConfigured(config.api_key_configured);
+      })
+      .catch(() => setError(m.provider_routing_error_load()));
   }, [loadRegistered, loadRuntime]);
+
+  useEffect(() => {
+    if (!installingRuntime) return;
+    const timer = window.setInterval(() => {
+      void fetchOllamaRuntimeStatus()
+        .then(setRuntime)
+        .catch(() => undefined);
+    }, 700);
+    return () => window.clearInterval(timer);
+  }, [installingRuntime]);
+
+  const handleSaveConfig = async () => {
+    setSavingConfig(true);
+    setError(null);
+    try {
+      const config = await saveOllamaConfig(baseUrl, apiKey);
+      setBaseUrl(config.base_url);
+      setApiKey("");
+      setApiKeyMasked(config.api_key_masked);
+      setApiKeyConfigured(config.api_key_configured);
+      await handleDiscover();
+    } catch (saveError) {
+      setError(
+        saveError instanceof Error
+          ? saveError.message
+          : m.provider_routing_ollama_error_config_save(),
+      );
+    } finally {
+      setSavingConfig(false);
+    }
+  };
+
+  const handleTestConnection = async () => {
+    setTestingConnection(true);
+    setError(null);
+    try {
+      const response = await fetch("/provider-routing/ollama/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ base_url: baseUrl, api_key: apiKey || null }),
+      });
+      if (!response.ok)
+        throw new Error(
+          await responseError(response, `Erro ${response.status}`),
+        );
+      const result = (await response.json()) as {
+        status: string;
+        models: OllamaModelInfo[];
+      };
+      setReachable(result.status === "ok" || result.status === "empty");
+      setDiscovered(result.models);
+      if (result.status === "auth_error")
+        setError(m.provider_routing_ollama_auth_error());
+      else if (result.status === "incompatible")
+        setError(m.provider_routing_ollama_incompatible());
+      else if (result.status === "unreachable")
+        setError(m.provider_routing_ollama_unreachable());
+    } catch (testError) {
+      setError(
+        testError instanceof Error
+          ? testError.message
+          : m.provider_routing_error_discover(),
+      );
+    } finally {
+      setTestingConnection(false);
+    }
+  };
 
   const handleInstallRuntime = async () => {
     setInstallingRuntime(true);
+    const controller = new AbortController();
+    installController.current = controller;
     setError(null);
     try {
-      setRuntime(await installOllamaRuntime());
+      setRuntime(await installOllamaRuntime(controller.signal));
       const data = await discoverModels();
       setReachable(data.reachable);
       setDiscovered(data.models);
     } catch (installError) {
+      if (controller.signal.aborted) {
+        await loadRuntime();
+        return;
+      }
       setError(
         installError instanceof Error
           ? installError.message
           : "Não foi possível instalar o Ollama",
+      );
+      await loadRuntime();
+    } finally {
+      installController.current = null;
+      setInstallingRuntime(false);
+    }
+  };
+
+  const handleStopRuntime = async () => {
+    setError(null);
+    try {
+      const response = await fetch("/provider-routing/ollama/runtime/stop", {
+        method: "POST",
+      });
+      if (!response.ok)
+        throw new Error(
+          await responseError(response, `Erro ${response.status}`),
+        );
+      setRuntime((await response.json()) as OllamaRuntimeStatus);
+    } catch (stopError) {
+      setError(
+        stopError instanceof Error
+          ? stopError.message
+          : "Não foi possível parar o Ollama.",
+      );
+      await loadRuntime();
+    }
+  };
+
+  const handleStartRuntime = async () => {
+    setInstallingRuntime(true);
+    setError(null);
+    try {
+      const response = await fetch("/provider-routing/ollama/runtime/start", {
+        method: "POST",
+      });
+      if (!response.ok)
+        throw new Error(
+          await responseError(response, `Erro ${response.status}`),
+        );
+      setRuntime((await response.json()) as OllamaRuntimeStatus);
+      const data = await discoverModels();
+      setReachable(data.reachable);
+      setDiscovered(data.models);
+    } catch (startError) {
+      setError(
+        startError instanceof Error
+          ? startError.message
+          : "Não foi possível iniciar o Ollama.",
       );
       await loadRuntime();
     } finally {
@@ -1674,14 +2125,20 @@ function OllamaSection() {
   };
 
   const registeredTags = new Set(registered.map((model) => model.tag));
+  const filteredDiscovered = discovered?.filter((model) =>
+    model.name.toLowerCase().includes(modelQuery.trim().toLowerCase()),
+  );
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3 rounded-lg border p-4">
       <div className="space-y-0.5">
-        <p className="text-sm font-medium flex items-center gap-1.5">
-          <Server className="w-3.5 h-3.5 text-muted-foreground" />
+        <h3 className="text-sm font-medium flex items-center gap-1.5">
+          <ProviderIcon
+            provider="ollama"
+            className="w-3.5 h-3.5 text-muted-foreground"
+          />
           {m.provider_routing_ollama_title()}
-        </p>
+        </h3>
         <p className="text-xs text-muted-foreground max-w-[360px]">
           {m.provider_routing_ollama_subtitle()}
         </p>
@@ -1706,7 +2163,7 @@ function OllamaSection() {
             ? ` · ${runtime.phase}`
             : ""}
         </span>
-        {runtime?.state !== "running" && (
+        {!runtime?.installed && runtime?.state !== "running" && (
           <Button
             variant="outline"
             size="sm"
@@ -1717,17 +2174,129 @@ function OllamaSection() {
               <Loader2 className="mr-1.5 size-3.5 animate-spin" />
             ) : null}
             {installingRuntime
-              ? "Instalando Ollama…"
-              : "Instalar/iniciar Ollama"}
+              ? m.provider_routing_ollama_installing()
+              : m.provider_routing_ollama_install()}
+          </Button>
+        )}
+        {runtime?.installed && runtime.state !== "running" && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void handleStartRuntime()}
+            disabled={installingRuntime}
+          >
+            {installingRuntime ? (
+              <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+            ) : null}
+            {installingRuntime
+              ? m.provider_routing_ollama_starting()
+              : m.provider_routing_ollama_start()}
+          </Button>
+        )}
+        {runtime?.state === "running" && runtime.managed && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void handleStopRuntime()}
+          >
+            {m.provider_routing_ollama_stop()}
           </Button>
         )}
       </div>
+      {installingRuntime && (
+        <div className="space-y-1.5" role="status">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>
+              {runtime?.phase === "download" && runtime.download_total
+                ? `Baixando Ollama: ${Math.min(100, Math.floor(((runtime.downloaded ?? 0) / runtime.download_total) * 100))}%`
+                : runtime?.phase === "start"
+                  ? m.provider_routing_ollama_starting()
+                  : `Instalando Ollama · ${runtime?.phase ?? "detect"}`}
+            </span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => installController.current?.abort()}
+            >
+              {m.provider_routing_runtime_cancel()}
+            </Button>
+          </div>
+          <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+            {runtime?.phase === "download" && runtime.download_total ? (
+              <div
+                className="h-full bg-primary transition-[width]"
+                style={{
+                  width: `${Math.min(100, ((runtime.downloaded ?? 0) / runtime.download_total) * 100)}%`,
+                }}
+              />
+            ) : (
+              <div className="h-full w-1/3 animate-pulse rounded-full bg-primary" />
+            )}
+          </div>
+        </div>
+      )}
 
-      {/* Descoberta */}
-      <div className="space-y-2">
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <Input
+          aria-label={m.provider_routing_ollama_key()}
+          type="password"
+          autoComplete="new-password"
+          value={apiKey}
+          onChange={(event) => setApiKey(event.target.value)}
+          placeholder={
+            apiKeyConfigured
+              ? apiKeyMasked
+              : m.provider_routing_ollama_key_placeholder()
+          }
+        />
+        <Button
+          type="button"
+          disabled={savingConfig || testingConnection}
+          onClick={() => void handleSaveConfig()}
+        >
+          {savingConfig ? (
+            <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+          ) : null}
+          {m.provider_routing_dmr_save()}
+        </Button>
+      </div>
+
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <Input
+          aria-label={m.provider_routing_ollama_endpoint()}
+          value={baseUrl}
+          onChange={(event) => setBaseUrl(event.target.value)}
+          placeholder={m.provider_routing_ollama_endpoint_placeholder()}
+        />
+        <Button
+          type="button"
+          variant="outline"
+          disabled={testingConnection || savingConfig}
+          onClick={() => void handleTestConnection()}
+        >
+          {testingConnection ? (
+            <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+          ) : null}
+          {m.provider_routing_dmr_test()}
+        </Button>
+      </div>
+
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <div className="relative min-w-0 flex-1">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+          <Input
+            value={modelQuery}
+            onChange={(event) => setModelQuery(event.target.value)}
+            placeholder={m.provider_routing_nine_router_search_placeholder()}
+            className="h-8 pl-8 text-xs"
+            autoComplete="off"
+          />
+        </div>
         <Button
           variant="outline"
           size="sm"
+          className="shrink-0"
           onClick={() => void handleDiscover()}
           disabled={discovering}
         >
@@ -1738,16 +2307,26 @@ function OllamaSection() {
           )}
           {m.provider_routing_detect_models()}
         </Button>
+      </div>
 
+      <div className="space-y-2">
         {reachable === false && (
           <p className="text-xs text-muted-foreground">
             {m.provider_routing_ollama_unreachable()}
           </p>
         )}
 
-        {discovered && discovered.length > 0 && (
+        {filteredDiscovered &&
+          filteredDiscovered.length === 0 &&
+          discovered &&
+          discovered.length > 0 && (
+            <p className="text-xs text-muted-foreground">
+              {m.provider_routing_nine_router_search_empty()}
+            </p>
+          )}
+        {filteredDiscovered && filteredDiscovered.length > 0 && (
           <div className="space-y-1.5">
-            {discovered.map((model) => {
+            {filteredDiscovered.map((model) => {
               const already = registeredTags.has(model.name);
               return (
                 <div
@@ -1883,6 +2462,18 @@ function OpenRouterSection() {
     }
   };
 
+  const handleDiscover = async () => {
+    setSearching(true);
+    setError(null);
+    try {
+      setCatalog(await searchOpenRouterCatalog(query));
+    } catch {
+      setError(m.provider_routing_openrouter_error_catalog());
+    } finally {
+      setSearching(false);
+    }
+  };
+
   const handleRegister = async (id: string) => {
     setRegisteringId(id);
     setError(null);
@@ -1912,12 +2503,15 @@ function OpenRouterSection() {
   const registeredTags = new Set(registered.map((model) => model.tag));
 
   return (
-    <div className="space-y-4 pt-4 border-t">
+    <div className="space-y-3 rounded-lg border p-4">
       <div className="space-y-0.5">
-        <p className="text-sm font-medium flex items-center gap-1.5">
-          <Server className="w-3.5 h-3.5 text-muted-foreground" />
+        <h3 className="text-sm font-medium flex items-center gap-1.5">
+          <ProviderIcon
+            provider="openrouter"
+            className="w-3.5 h-3.5 text-muted-foreground"
+          />
           {m.provider_routing_openrouter_title()}
-        </p>
+        </h3>
         <p className="text-xs text-muted-foreground max-w-[360px]">
           {m.provider_routing_openrouter_subtitle()}
         </p>
@@ -1984,18 +2578,35 @@ function OpenRouterSection() {
       {/* Catálogo */}
       {status?.configured && (
         <div className="space-y-2">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={m.provider_routing_openrouter_search_placeholder()}
-              className="h-8 text-xs pl-8"
-              autoComplete="off"
-            />
-            {searching && (
-              <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 animate-spin text-muted-foreground" />
-            )}
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <div className="relative min-w-0 flex-1">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={m.provider_routing_openrouter_search_placeholder()}
+                className="h-8 text-xs pl-8"
+                autoComplete="off"
+              />
+              {searching && (
+                <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 animate-spin text-muted-foreground" />
+              )}
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="shrink-0"
+              onClick={() => void handleDiscover()}
+              disabled={searching}
+            >
+              {searching ? (
+                <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+              ) : (
+                <RefreshCw className="mr-1.5 size-3.5" />
+              )}
+              {m.provider_routing_detect_models()}
+            </Button>
           </div>
 
           {catalog.length > 0 && (
@@ -2203,12 +2814,15 @@ function NineRouterSection() {
     ) ?? null;
 
   return (
-    <div className="space-y-4 pt-4 border-t">
+    <div className="space-y-3 rounded-lg border p-4">
       <div className="space-y-0.5">
-        <p className="text-sm font-medium flex items-center gap-1.5">
-          <Server className="w-3.5 h-3.5 text-muted-foreground" />
+        <h3 className="text-sm font-medium flex items-center gap-1.5">
+          <ProviderIcon
+            provider="nine_router"
+            className="w-3.5 h-3.5 text-muted-foreground"
+          />
           {m.provider_routing_nine_router_title()}
-        </p>
+        </h3>
         <p className="text-xs text-muted-foreground max-w-[360px]">
           {m.provider_routing_nine_router_subtitle()}
         </p>
@@ -2286,20 +2900,32 @@ function NineRouterSection() {
       {/* Descoberta */}
       {status?.configured && (
         <div className="space-y-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void handleDiscover()}
-            disabled={discovering}
-          >
-            {discovering ? (
-              <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-            ) : (
-              <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
-            )}
-            {m.provider_routing_detect_models()}
-          </Button>
-
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <div className="relative min-w-0 flex-1">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+              <Input
+                value={modelQuery}
+                onChange={(e) => setModelQuery(e.target.value)}
+                placeholder={m.provider_routing_nine_router_search_placeholder()}
+                className="h-8 text-xs pl-8"
+                autoComplete="off"
+              />
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0"
+              onClick={() => void handleDiscover()}
+              disabled={discovering}
+            >
+              {discovering ? (
+                <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+              ) : (
+                <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
+              )}
+              {m.provider_routing_detect_models()}
+            </Button>
+          </div>
           {reachable === false && (
             <p className="text-xs text-muted-foreground">
               {m.provider_routing_nine_router_unreachable()}
@@ -2308,19 +2934,6 @@ function NineRouterSection() {
 
           {discovered && discovered.length > 0 && (
             <div className="space-y-2">
-              {discovered.length > 5 && (
-                <div className="relative">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                  <Input
-                    value={modelQuery}
-                    onChange={(e) => setModelQuery(e.target.value)}
-                    placeholder={m.provider_routing_nine_router_search_placeholder()}
-                    className="h-8 text-xs pl-8"
-                    autoComplete="off"
-                  />
-                </div>
-              )}
-
               {filteredDiscovered && filteredDiscovered.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
                   {m.provider_routing_nine_router_search_empty()}
@@ -2476,45 +3089,115 @@ export function MediaModelsSection() {
 function LlamaCppSection() {
   const [baseUrl, setBaseUrl] = useState("http://127.0.0.1:18080/v1");
   const [apiKey, setApiKey] = useState("");
-  const [model, setModel] = useState("");
-  const [mode, setMode] = useState<"managed" | "external">("external");
   const [models, setModels] = useState<LlamaCppModelInfo[]>([]);
-  const [hfModels, setHfModels] = useState<LlamaCppModelInfo[]>([]);
-  const [query, setQuery] = useState("llama.cpp");
+  const [registered, setRegistered] = useState<RegisteredModel[]>([]);
+  const [loadingRegistered, setLoadingRegistered] = useState(true);
+  const [registeringId, setRegisteringId] = useState<string | null>(null);
+  const [removingId, setRemovingId] = useState<string | null>(null);
+  const [modelQuery, setModelQuery] = useState("");
   const [reachable, setReachable] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [releases, setReleases] = useState<LlamaCppReleaseAsset[]>([]);
-  const [runtime, setRuntime] = useState<LlamaCppRuntimeStatus | null>(null);
   const [runtimeBusy, setRuntimeBusy] = useState(false);
-  const [runtimeKeep, setRuntimeKeep] = useState(1);
+  const [installingRuntime, setInstallingRuntime] = useState(false);
+  const [runtimeProgress, setRuntimeProgress] = useState(0);
+  const [error, setError] = useState("");
+  const [runtime, setRuntime] = useState<LlamaCppRuntimeStatus | null>(null);
+
+  const refreshRuntime = useCallback(async () => {
+    try {
+      const [runtimeStatus, configResponse] = await Promise.all([
+        fetchLlamaCppRuntimeStatus(),
+        fetch("/provider-routing/llamacpp/status"),
+      ]);
+      setRuntime(runtimeStatus);
+      if (configResponse.ok) {
+        const config = (await configResponse.json()) as { base_url?: string };
+        setBaseUrl(config.base_url ?? "http://127.0.0.1:18080/v1");
+      }
+    } catch {
+      setRuntime(null);
+    }
+  }, []);
+
+  const loadRegistered = useCallback(async () => {
+    setLoadingRegistered(true);
+    try {
+      setRegistered(await fetchRegistered("llamacpp"));
+    } catch {
+      setError(m.provider_routing_error_load());
+    } finally {
+      setLoadingRegistered(false);
+    }
+  }, []);
 
   useEffect(() => {
-    void fetchLlamaCppRuntimeStatus()
-      .then(setRuntime)
-      .catch(() => setRuntime(null));
-  }, []);
-  const [installing, setInstalling] = useState(false);
+    // Carrega o status e o catálogo já habilitado no seletor.
+    // oxlint-disable-next-line react/set-state-in-effect
+    void refreshRuntime();
+    void loadRegistered();
+  }, [loadRegistered, refreshRuntime]);
 
   useEffect(() => {
-    void fetch("/provider-routing/llamacpp/status")
-      .then((response) => {
-        if (!response.ok) throw new Error(String(response.status));
-        return response.json();
-      })
-      .then(
-        (data: {
-          base_url?: string;
-          model?: string;
-          mode?: "managed" | "external";
-        }) => {
-          setBaseUrl(data.base_url ?? "http://127.0.0.1:18080/v1");
-          setModel(data.model ?? "");
-          setMode(data.mode ?? "external");
-        },
-      )
-      .catch(() => undefined);
-  }, []);
+    if (!installingRuntime) return;
+    const timer = window.setInterval(() => {
+      void fetchLlamaCppRuntimeStatus().then((status) => {
+        setRuntime(status);
+        const progress = status.install_progress;
+        if (progress?.total && progress.total > 0) {
+          setRuntimeProgress(
+            Math.min(
+              100,
+              Math.floor(((progress.downloaded ?? 0) / progress.total) * 100),
+            ),
+          );
+        }
+      });
+    }, 700);
+    return () => window.clearInterval(timer);
+  }, [installingRuntime]);
+
+  async function installRuntime() {
+    setInstallingRuntime(true);
+    setRuntimeProgress(0);
+    setError("");
+    try {
+      const releasesResponse = await fetch(
+        "/provider-routing/llamacpp/releases",
+      );
+      if (!releasesResponse.ok)
+        throw new Error(`Erro ${releasesResponse.status}`);
+      const releases = (await releasesResponse.json()) as {
+        releases?: Array<{
+          assets?: Array<{ url: string; sha256: string; recommended: boolean }>;
+        }>;
+      };
+      const asset = releases.releases
+        ?.flatMap((release) => release.assets ?? [])
+        .find((candidate) => candidate.recommended && candidate.sha256);
+      if (!asset)
+        throw new Error(
+          "Não há um runtime oficial compatível com este dispositivo.",
+        );
+      const response = await fetch("/provider-routing/llamacpp/install", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ asset_url: asset.url, sha256: asset.sha256 }),
+      });
+      if (!response.ok)
+        throw new Error(
+          await responseError(response, `Erro ${response.status}`),
+        );
+      await refreshRuntime();
+    } catch (installError) {
+      setError(
+        installError instanceof Error
+          ? installError.message
+          : "Falha ao instalar llama.cpp.",
+      );
+    } finally {
+      setInstallingRuntime(false);
+    }
+  }
 
   async function saveConfig() {
     setError("");
@@ -2522,16 +3205,23 @@ function LlamaCppSection() {
       const response = await fetch("/provider-routing/llamacpp/config", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ base_url: baseUrl, api_key: apiKey, model }),
+        body: JSON.stringify({ base_url: baseUrl, api_key: apiKey }),
       });
-      if (!response.ok) throw new Error(String(response.status));
+      if (!response.ok)
+        throw new Error(
+          await responseError(response, `Erro ${response.status}`),
+        );
       setApiKey("");
-    } catch {
-      setError("Erro ao salvar a configuração do llama.cpp");
+    } catch (saveError) {
+      setError(
+        saveError instanceof Error
+          ? saveError.message
+          : "Erro ao salvar a configuração do llama.cpp",
+      );
     }
   }
 
-  async function discover() {
+  async function detectModels() {
     setLoading(true);
     setError("");
     try {
@@ -2539,33 +3229,11 @@ function LlamaCppSection() {
       setReachable(result.reachable);
       setModels(result.models);
     } catch {
+      setReachable(false);
+      setModels([]);
       setError("Erro ao consultar o llama.cpp");
     } finally {
       setLoading(false);
-    }
-  }
-
-  async function changeMode(nextMode: "managed" | "external") {
-    setError("");
-    try {
-      const response = await fetch("/provider-routing/llamacpp/mode", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: nextMode }),
-      });
-      if (!response.ok) {
-        const body = (await response.json().catch(() => ({}))) as {
-          detail?: string;
-        };
-        throw new Error(body.detail ?? String(response.status));
-      }
-      setMode(nextMode);
-    } catch (modeError) {
-      setError(
-        modeError instanceof Error
-          ? modeError.message
-          : "Não foi possível alterar o modo do llama.cpp",
-      );
     }
   }
 
@@ -2576,7 +3244,8 @@ function LlamaCppSection() {
       const result = await testLlamaCppConnection();
       setReachable(result.status === "ok" || result.status === "empty");
       if (result.models) setModels(result.models);
-      if (result.status !== "ok") setError(`Status: ${result.status}`);
+      if (result.status !== "ok" && result.status !== "empty")
+        setError(`Status: ${result.status}`);
     } catch {
       setReachable(false);
       setError("Erro ao testar o llama.cpp");
@@ -2585,311 +3254,318 @@ function LlamaCppSection() {
     }
   }
 
-  async function search() {
-    setLoading(true);
+  async function handleRegister(id: string) {
+    setRegisteringId(id);
     setError("");
     try {
-      setHfModels(await searchHuggingFaceModels(query));
+      await registerModel("llamacpp", id);
+      await loadRegistered();
     } catch {
-      setError("Erro ao consultar a Hugging Face");
+      setError(m.provider_routing_error_register());
     } finally {
-      setLoading(false);
+      setRegisteringId(null);
     }
   }
 
-  async function installRuntime() {
-    setLoading(true);
+  async function handleRemove(id: string) {
+    setRemovingId(id);
     setError("");
     try {
-      const assets = await fetchLlamaCppReleases();
-      setReleases(assets);
-      const preferred = assets.find((asset) => asset.recommended);
-      if (!preferred) throw new Error("Nenhum runtime compatível encontrado");
-      setInstalling(true);
-      await installLlamaCppRuntime(preferred.url, preferred.sha256);
-      setRuntime(await fetchLlamaCppRuntimeStatus());
+      await unregisterModel("llamacpp", id);
+      setRegistered((current) => current.filter((item) => item.id !== id));
     } catch {
-      setError("Erro ao instalar o runtime oficial do llama.cpp");
+      setError(m.provider_routing_error_remove());
     } finally {
-      setInstalling(false);
-      setLoading(false);
+      setRemovingId(null);
     }
   }
 
-  async function removeRuntime() {
-    if (!window.confirm("Remover o runtime gerenciado do llama.cpp?")) return;
+  async function runtimeAction(action: "start" | "stop" | "remove") {
     setRuntimeBusy(true);
     setError("");
     try {
-      await removeLlamaCppRuntime();
-      setRuntime(await fetchLlamaCppRuntimeStatus());
-    } catch {
-      setError("Não foi possível remover o runtime. Pare o sidecar antes.");
-    } finally {
-      setRuntimeBusy(false);
-    }
-  }
-
-  async function cleanupRuntime() {
-    if (!runtime) return;
-    setRuntimeBusy(true);
-    setError("");
-    try {
-      await cleanupLlamaCppRuntime(runtimeKeep);
-      setRuntime(await fetchLlamaCppRuntimeStatus());
-    } catch {
+      if (action === "start") {
+        const response = await fetch(
+          "/provider-routing/llamacpp/runtime/start",
+          {
+            method: "POST",
+          },
+        );
+        if (!response.ok)
+          throw new Error(
+            await responseError(response, `Erro ${response.status}`),
+          );
+      } else if (action === "remove") {
+        const response = await fetch("/provider-routing/llamacpp/runtime", {
+          method: "DELETE",
+        });
+        if (!response.ok)
+          throw new Error(
+            await responseError(response, `Erro ${response.status}`),
+          );
+      } else {
+        const response = await fetch(
+          "/provider-routing/llamacpp/sidecar/stop",
+          { method: "POST" },
+        );
+        if (!response.ok)
+          throw new Error(
+            await responseError(response, `Erro ${response.status}`),
+          );
+      }
+      await refreshRuntime();
+    } catch (actionError) {
       setError(
-        "Não foi possível limpar versões antigas. Pare o sidecar antes.",
+        actionError instanceof Error
+          ? actionError.message
+          : "Não foi possível concluir a ação do runtime.",
       );
     } finally {
       setRuntimeBusy(false);
     }
   }
 
+  const registeredByTag = new Map(registered.map((item) => [item.tag, item]));
+  const modelRows = new Map<string, LlamaCppModelInfo>();
+  for (const item of models) modelRows.set(item.id, item);
+  for (const item of registered) {
+    if (!modelRows.has(item.tag)) modelRows.set(item.tag, { id: item.tag });
+  }
+  const filteredModels = [...modelRows.values()].filter((item) =>
+    item.id.toLowerCase().includes(modelQuery.trim().toLowerCase()),
+  );
+
   return (
     <div className="space-y-3 rounded-lg border p-4">
       <div>
-        <h3 className="font-medium">{m.provider_routing_llamacpp_title()}</h3>
+        <h3 className="flex items-center gap-1.5 font-medium">
+          <ProviderIcon
+            provider="llamacpp"
+            className="size-3.5 text-muted-foreground"
+          />
+          {m.provider_routing_llamacpp_title()}
+        </h3>
         <p className="text-xs text-muted-foreground">
           {m.provider_routing_llamacpp_subtitle()}
         </p>
       </div>
-      <div className="grid gap-2 sm:grid-cols-2">
-        <select
-          aria-label={m.provider_routing_llamacpp_mode()}
-          className="rounded-md border bg-background px-3 text-sm"
-          value={mode}
-          onChange={(event) =>
-            void changeMode(event.target.value as "managed" | "external")
-          }
-          disabled={loading || installing}
-        >
-          <option value="external">
-            {m.provider_routing_llamacpp_mode_external()}
-          </option>
-          <option value="managed">
-            {m.provider_routing_llamacpp_mode_managed()}
-          </option>
-        </select>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-base text-muted-foreground">
+          {m.provider_routing_llamacpp_status({
+            status: runtime?.reachable
+              ? m.provider_routing_ollama_runtime_running()
+              : runtime?.installed
+                ? m.provider_routing_llamacpp_runtime_installed()
+                : m.provider_routing_ollama_runtime_missing(),
+          })}
+        </span>
+        <div className="flex gap-2">
+          {!runtime?.installed && (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={installingRuntime}
+              onClick={() => void installRuntime()}
+            >
+              {installingRuntime ? (
+                <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+              ) : null}
+              {m.provider_routing_llamacpp_install()}
+            </Button>
+          )}
+          {runtime?.installed &&
+            !runtime.reachable &&
+            runtime.external !== true && (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={runtimeBusy}
+                onClick={() => void runtimeAction("start")}
+              >
+                {m.provider_routing_llamacpp_start()}
+              </Button>
+            )}
+          {runtime?.installed && runtime.external !== true && (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={runtimeBusy}
+              onClick={() => void runtimeAction("remove")}
+            >
+              {m.provider_routing_llamacpp_uninstall()}
+            </Button>
+          )}
+          {runtime?.reachable && runtime.external !== true && (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={runtimeBusy}
+              onClick={() => void runtimeAction("stop")}
+            >
+              {m.provider_routing_llamacpp_stop()}
+            </Button>
+          )}
+        </div>
+      </div>
+      {installingRuntime && (
+        <div className="space-y-1.5" role="status">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>
+              {runtime?.install_progress?.phase === "extract"
+                ? "Preparando runtime…"
+                : `Baixando runtime: ${runtimeProgress}%`}
+            </span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={runtime?.install_progress?.phase === "extract"}
+              onClick={() => void cancelLlamaCppRuntimeInstall()}
+            >
+              {m.provider_routing_runtime_cancel()}
+            </Button>
+          </div>
+          <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full bg-primary transition-[width]"
+              style={{ width: `${runtimeProgress}%` }}
+            />
+          </div>
+        </div>
+      )}
+      <div className="flex gap-2">
+        <Input
+          aria-label={m.provider_routing_llamacpp_key()}
+          type="password"
+          autoComplete="new-password"
+          value={apiKey}
+          onChange={(event) => setApiKey(event.target.value)}
+          placeholder={m.provider_routing_llamacpp_key_placeholder()}
+        />
+        <Button type="button" onClick={() => void saveConfig()}>
+          {m.provider_routing_dmr_save()}
+        </Button>
+      </div>
+      <div className="flex gap-2">
         <Input
           aria-label={m.provider_routing_llamacpp_endpoint()}
           value={baseUrl}
           onChange={(event) => setBaseUrl(event.target.value)}
           placeholder={m.provider_routing_llamacpp_endpoint_placeholder()}
         />
-        <Input
-          aria-label={m.provider_routing_llamacpp_model()}
-          value={model}
-          onChange={(event) => setModel(event.target.value)}
-          placeholder={m.provider_routing_llamacpp_model_placeholder()}
-        />
-        <Input
-          aria-label={m.provider_routing_llamacpp_key()}
-          type="password"
-          value={apiKey}
-          onChange={(event) => setApiKey(event.target.value)}
-          placeholder={m.provider_routing_llamacpp_key_placeholder()}
-        />
         <Button
           type="button"
-          onClick={() => void saveConfig()}
+          variant="outline"
           disabled={loading}
-        >
-          {m.provider_routing_llamacpp_save()}
-        </Button>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => void installRuntime()}
-          disabled={loading || installing}
-        >
-          {m.provider_routing_llamacpp_install()}
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => void discover()}
-          disabled={loading}
-        >
-          <RefreshCw className="mr-2 size-4" />{" "}
-          {m.provider_routing_llamacpp_detect()}
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
           onClick={() => void testConnection()}
-          disabled={loading}
         >
           {m.provider_routing_llamacpp_test()}
         </Button>
+      </div>
+      <div className="flex gap-2">
+        <div className="relative min-w-0 flex-1">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+          <Input
+            value={modelQuery}
+            onChange={(event) => setModelQuery(event.target.value)}
+            placeholder={m.provider_routing_nine_router_search_placeholder()}
+            className="h-8 pl-8 text-xs"
+          />
+        </div>
         <Button
           type="button"
           variant="outline"
-          onClick={() => void search()}
           disabled={loading}
+          onClick={() => void detectModels()}
         >
-          <Search className="mr-2 size-4" /> {m.provider_routing_llamacpp_hf()}
+          {loading ? (
+            <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+          ) : (
+            <RefreshCw className="mr-1.5 size-4" />
+          )}
+          {m.provider_routing_detect_models()}
         </Button>
       </div>
-      {runtime && (
-        <div className="rounded-md border p-3 text-xs text-muted-foreground">
-          <p>
-            {m.provider_routing_llamacpp_title()}:{" "}
-            {runtime.installed
-              ? m.provider_routing_llamacpp_runtime_installed()
-              : m.provider_routing_llamacpp_runtime_remove()}
-            {runtime.runtimes.length > 0 &&
-              ` (${runtime.runtimes.map((item) => item.asset).join(", ")})`}
-          </p>
-          {runtime.free_bytes !== undefined && (
-            <p>
-              {m.provider_routing_llamacpp_runtime_disk_free({
-                bytes: String(runtime.free_bytes),
-              })}
-            </p>
-          )}
-          <div className="mt-2 space-y-1">
-            {runtime.runtimes.map((item) => (
-              <p key={item.id ?? item.asset} className="truncate">
-                {m.provider_routing_llamacpp_runtime_details({
-                  version: item.version || item.asset,
-                  source: item.source || "—",
-                  sha256: item.sha256 || "—",
-                })}
-              </p>
-            ))}
-          </div>
-          {runtime.runtimes
-            .filter((item) => item.id && item.id !== runtime.active_runtime)
-            .map((item) => (
-              <div key={item.id} className="mt-2 mr-2 inline-flex gap-2">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="px-0"
-                  disabled={runtimeBusy || loading || installing}
-                  onClick={() => {
-                    if (!item.id) return;
-                    setRuntimeBusy(true);
-                    void rollbackLlamaCppRuntime(item.id)
-                      .then(async () =>
-                        setRuntime(await fetchLlamaCppRuntimeStatus()),
-                      )
-                      .catch(() =>
-                        setError("Não foi possível reverter o runtime."),
-                      )
-                      .finally(() => setRuntimeBusy(false));
-                  }}
-                >
-                  {m.provider_routing_llamacpp_runtime_rollback()} ({item.asset}
-                  )
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="px-0"
-                  disabled={runtimeBusy || loading || installing}
-                  onClick={() => {
-                    if (
-                      !item.id ||
-                      !window.confirm(
-                        m.provider_routing_llamacpp_runtime_remove_version(),
-                      )
-                    )
-                      return;
-                    setRuntimeBusy(true);
-                    void removeLlamaCppRuntimeVersion(item.id)
-                      .then(async () =>
-                        setRuntime(await fetchLlamaCppRuntimeStatus()),
-                      )
-                      .catch(() =>
-                        setError(
-                          "Não foi possível remover a versão do runtime.",
-                        ),
-                      )
-                      .finally(() => setRuntimeBusy(false));
-                  }}
-                >
-                  {m.provider_routing_llamacpp_runtime_remove_version()}
-                </Button>
-              </div>
-            ))}
-          {runtime.installed && (
-            <div className="mt-3 flex flex-wrap items-end gap-2">
-              <div className="grid gap-1">
-                <Label htmlFor="llamacpp-runtime-keep" className="text-xs">
-                  {m.provider_routing_llamacpp_runtime_keep_label()}
-                </Label>
-                <Input
-                  id="llamacpp-runtime-keep"
-                  type="number"
-                  min={0}
-                  max={50}
-                  className="w-24"
-                  value={runtimeKeep}
-                  onChange={(event) =>
-                    setRuntimeKeep(
-                      Math.max(0, Math.min(50, Number(event.target.value))),
-                    )
-                  }
-                />
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={runtimeBusy || loading || installing}
-                onClick={() => void cleanupRuntime()}
-              >
-                {m.provider_routing_llamacpp_runtime_cleanup()}
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                className="px-0"
-                disabled={runtimeBusy || loading || installing}
-                onClick={() => void removeRuntime()}
-              >
-                {m.provider_routing_llamacpp_runtime_remove_all()}
-              </Button>
-            </div>
-          )}
-        </div>
-      )}
-      {reachable !== null && (
+      {reachable === false && (
         <p className="text-xs text-muted-foreground">
-          {reachable
-            ? m.provider_routing_llamacpp_found({ n: models.length })
-            : m.provider_routing_llamacpp_unreachable()}
+          {m.provider_routing_llamacpp_unreachable()}
         </p>
       )}
-      {hfModels.length > 0 && (
-        <div className="space-y-1 text-sm">
-          {hfModels.map((item) => (
-            <div key={item.id}>{item.id}</div>
-          ))}
-        </div>
+      <div
+        className={
+          filteredModels.length > 6
+            ? "max-h-[26rem] space-y-2 overflow-y-auto pr-1"
+            : "space-y-2"
+        }
+      >
+        {filteredModels.map((item) => {
+          const registeredModel = registeredByTag.get(item.id);
+          return (
+            <div
+              key={item.id}
+              className="flex min-w-0 items-center justify-between gap-3 rounded-lg border bg-card px-3 py-2"
+            >
+              <span className="truncate font-mono text-sm">{item.id}</span>
+              {registeredModel ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">
+                    {m.provider_routing_already_registered()}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    aria-label={m.provider_routing_llamacpp_remove_model({
+                      model: item.id,
+                    })}
+                    disabled={removingId === registeredModel.id}
+                    onClick={() => void handleRemove(registeredModel.id)}
+                  >
+                    {removingId === registeredModel.id ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : (
+                      <Trash2 className="size-3.5" />
+                    )}
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={registeringId === item.id}
+                  onClick={() => void handleRegister(item.id)}
+                >
+                  {registeringId === item.id ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <>
+                      <Plus className="mr-1 size-3.5" />
+                      {m.provider_routing_register()}
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {loadingRegistered && (
+        <Loader2 className="size-4 animate-spin text-muted-foreground" />
       )}
       {error && <p className="text-xs text-destructive">{error}</p>}
-      {releases.length > 0 && (
-        <p className="text-xs text-muted-foreground">
-          {m.provider_routing_llamacpp_release_count({ n: releases.length })}
-        </p>
-      )}
     </div>
   );
 }
 
 export function ProviderRoutingTab() {
   return (
-    <div className="space-y-4 [&_button]:!h-8 [&_button]:!px-3 [&_button]:!text-sm">
+    <div className="space-y-6 [&_button]:!h-8 [&_button]:!px-3 [&_button]:!text-sm">
+      <LlamaCppSection />
       <OllamaSection />
       <DmrSection />
       <HuggingFaceCatalogSection />
       <OpenRouterSection />
       <NineRouterSection />
-      <LlamaCppSection />
     </div>
   );
 }

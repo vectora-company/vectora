@@ -352,7 +352,7 @@ async def _call_llm_async(
         return await load_native_llm(mid).agenerate(messages)
 
     try:
-        # Em 429/quota, tenta os outros providers configurados (fallback_order).
+        # A chamada usa somente o modelo selecionado; fallback global foi removido.
         response = await try_with_fallback(_invoke, model_id)
     except QuotaExhaustedError:
         # Quota esgotada em TODOS os providers — não degrada em silêncio: propaga

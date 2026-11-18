@@ -3,7 +3,7 @@
 Loop assíncrono que:
 1. Busca documentos pendentes da fila de embedding a cada 5 segundos
 2. Processa até 10 documentos em paralelo (limitado por Semaphore(5))
-3. Gera embeddings via `_build_lc_embeddings()` (Cohere↔Voyage↔Ollama↔OpenRouter)
+3. Gera embeddings via `_build_lc_embeddings()` (provider/modelo selecionado)
 4. Escreve no vector store nativo com idempotência (via queue_id como id do ponto)
 5. Retry com exponential backoff (1s → 2s → 4s) até 3 tentativas
 6. Move para DLQ após 3 falhas para auditoria manual
@@ -354,17 +354,16 @@ class BackgroundEmbeddingWorker:
                     # Marcar como processing
                     await queue.mark_processing(queue_id)
 
-                    # Respeitar limite de chamadas Cohere (token bucket)
-                    # Trial keys: 100 calls/min → configurado em 90 por segurança.
-                    # acquire() retorna imediatamente se dentro do limite,
-                    # ou aguarda async sem bloquear o event loop.
-                    await self._rate_limiter.acquire()
-
-                    # Gerar embedding via Cohere
-                    embedding_vector = await self._generate_embedding(str(record.text))
+                    # Gerar embedding com o provider/modelo configurado.
+                    (
+                        embedding_vector,
+                        embedding_identity,
+                    ) = await self._generate_embedding(str(record.text))
 
                     # Escrever em LanceDB (idempotente via queue_id)
-                    await self._write_to_vector_store(record, embedding_vector)
+                    await self._write_to_vector_store(
+                        record, embedding_vector, provider=embedding_identity
+                    )
 
                     # Marcar como success
                     await queue.mark_success(queue_id)
@@ -397,8 +396,8 @@ class BackgroundEmbeddingWorker:
 
                 attempt += 1
                 error_trace = traceback.format_exc()
-                # Mensagem enxuta no terminal — o erro cru da Cohere despeja
-                # headers HTTP inteiros e polui o log. Stack completo fica no
+                # Mensagem enxuta no terminal — erros HTTP podem incluir
+                # headers e poluir o log. Stack completo fica no
                 # `extra` (logging estruturado), não na mensagem.
                 _msg = str(e)[:300]
                 logger.warning(
@@ -465,10 +464,9 @@ class BackgroundEmbeddingWorker:
         self.paused = True
         self.paused_at = datetime.now()
         self.pause_reason = (
-            "Indexação RAG pausada: a API de embeddings (Cohere) retornou rate "
-            "limit (429). A chave Trial tem limite de 100 chamadas/min e "
-            "1000/mês. Configure uma chave paga ou aguarde a renovação do "
-            "limite e reprocesse a fila."
+            "Indexação RAG pausada: o provider de embedding selecionado retornou "
+            "rate limit/quota (429). Verifique a cota e a configuração do provider, "
+            "aguarde a renovação ou reprocesse a fila."
         )
 
         archived = await queue.archive_pending(self.pause_reason)
@@ -478,13 +476,11 @@ class BackgroundEmbeddingWorker:
             extra={"reason": self.pause_reason, "archived": archived},
         )
 
-    async def _generate_embedding(self, text: str) -> list[float]:
-        """Gera embedding via `_build_lc_embeddings()` — honra o fallback
-        multi-provider (Cohere↔Voyage↔Ollama↔OpenRouter) e a preferência de
-        runtime (`rag_settings.embed_provider`), em vez de Cohere hardcoded.
+    async def _generate_embedding(self, text: str) -> tuple[list[float], str]:
+        """Gera embedding com o modelo configurado e retorna sua identidade.
 
         Returns:
-            Lista de floats representando o embedding
+            Vetor e identidade estável ``provider:model`` usados na coleção.
 
         Raises:
             ValueError: Se nenhum provider de embedding estiver configurado
@@ -506,11 +502,19 @@ class BackgroundEmbeddingWorker:
         # baixo (httpx.AsyncClient) — sem retry interno de 429 com backoff
         # longo travando a thread do to_thread; aembed_documents propaga o
         # erro na hora e o circuit breaker do worker assume.
+        provider = str(getattr(embeddings_model, "vectora_provider", "unknown"))
+        model = str(getattr(embeddings_model, "vectora_model", "unknown"))
+        if provider == "cohere":
+            await self._rate_limiter.acquire()
         vectors = await embeddings_model.aembed_documents([text])
-        return vectors[0]
+        return vectors[0], f"{provider}:{model}"
 
     async def _write_to_vector_store(
-        self, record: EmbeddingQueueRecord, vector: list[float]
+        self,
+        record: EmbeddingQueueRecord,
+        vector: list[float],
+        *,
+        provider: str = "unknown",
     ) -> None:
         """Escreve documento no vector store nativo — LanceDB (lite) ou
         Qdrant (complete), conforme `storage_mode` — idempotente via
@@ -531,9 +535,7 @@ class BackgroundEmbeddingWorker:
         # Guard de dimensão: troca de embedding_provider sem reindex quebraria
         # similarity search silenciosamente (vetores de dimensões diferentes
         # na mesma coleção) — levanta antes de escrever, não depois.
-        await _check_embedding_dimension(
-            str(record.collection), len(vector), provider="cohere"
-        )
+        await _check_embedding_dimension(str(record.collection), len(vector), provider)
 
         meta = _json.loads(str(record.doc_metadata or "{}"))
         row = VectorRow(

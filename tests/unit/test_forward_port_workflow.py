@@ -471,7 +471,9 @@ def test_pull_request_workflows_that_write_skip_forks() -> None:
             "uses: actions/github-script", 1
         )[0]
     )
-    comment = checks.split("\n  comment-no-plan-metadata:\n", 1)[1]
+    comment = checks.split("\n  comment-no-plan-metadata:\n", 1)[1].split(
+        "\n  contracts:\n", 1
+    )[0]
     assert same_repo in comment.split("\n    steps:", 1)[0]
 
 
@@ -482,7 +484,9 @@ def test_no_plan_metadata_comment_is_posted_by_a_separate_write_job() -> None:
     validator = checks.split("\n  no-plan-metadata:\n", 1)[1].split(
         "\n  comment-no-plan-metadata:\n", 1
     )[0]
-    comment = checks.split("\n  comment-no-plan-metadata:\n", 1)[1]
+    comment = checks.split("\n  comment-no-plan-metadata:\n", 1)[1].split(
+        "\n  contracts:\n", 1
+    )[0]
 
     assert "pull-requests: write" not in validator
     assert "upload-artifact" not in validator

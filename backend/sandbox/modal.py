@@ -47,7 +47,7 @@ async def run_modal_sandboxed(
     """
     del workspace_dir
     try:
-        import modal  # ty: ignore[unresolved-import]
+        import modal  # ty: ignore[import-not-found]
     except ImportError:
         return SandboxResult(
             stdout="",

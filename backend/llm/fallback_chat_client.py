@@ -1,12 +1,12 @@
-"""``FallbackChatClient`` — chat nativo com fallback automático de provider
-por quota, implementa o Protocol ``ChatClient`` (``backend/llm/base.py``).
-Fecha os 5 chat clients (openai/anthropic/google_genai/ollama/openrouter)
-num único ponto de entrada com fallback.
+"""Adapter do chat nativo com compatibilidade de mídia e visão explícita.
 
-``tools=`` é parâmetro explícito de ``astream``/``agenerate``, cada
-candidato recebe as mesmas tools direto, sem bind prévio. O evento
-``model_switched`` vira um callback direto (`on_model_switch`), passado
-pelo loop de conversa nativo.
+Implementa o Protocol ``ChatClient`` (``backend/llm/base.py``) e fecha os
+clients de provider num único ponto de entrada. Não troca de provider por
+quota ou indisponibilidade; a única troca é o modelo de visão configurado
+explicitamente pelo usuário.
+
+``tools=`` é parâmetro explícito de ``astream``/``agenerate``. Trocas
+explícitas de modelo são expostas pelo callback `on_model_switch`.
 
 Arquivo separado dos 5 `chat_client.py` de provider por natureza — não é
 um cliente de provider, é o orquestrador entre eles.
@@ -48,22 +48,10 @@ def _has_images(messages: list[VMessage]) -> bool:
 
 
 async def _vision_state(model_id: str) -> CapabilityState:
-    """Executa a operação  vision state."""
-    from backend.settings import provider_capability_state
+    """Resolve image capability for the candidate model, not just provider."""
+    from backend.llm.capabilities import model_vision_state
 
-    provider, _, model_name = model_id.partition(":")
-    provider = provider.replace("-", "_")
-    if provider == "openrouter":
-        from backend.api.handlers.provider_routing import openrouter_model_image_state
-
-        return await openrouter_model_image_state(model_name)
-    if provider == "nine_router":
-        from backend.api.handlers.provider_routing import (
-            nine_router_model_supports_image,
-        )
-
-        return await nine_router_model_supports_image(model_name)
-    return provider_capability_state(provider.replace("_", "-"), "vision")
+    return await model_vision_state(model_id)
 
 
 async def _candidates(primary_model_id: str, *, has_images: bool) -> list[str]:
@@ -182,12 +170,13 @@ def load_chat_client(model_id: str) -> ChatClient:  # noqa: PLR0911
         case "ollama":
             from backend.llm.ollama.chat_client import OllamaChatClient
             from backend.llm.ollama.client import OllamaClient
+            from backend.settings import settings
 
             return OllamaChatClient(
                 model=model_name,
                 client=OllamaClient(
-                    base_url=os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434"),
-                    api_key=os.getenv("OLLAMA_API_KEY", ""),
+                    base_url=settings.ollama_base_url or "http://127.0.0.1:11434",
+                    api_key=settings.ollama_api_key or "",
                 ),
             )
         case "openrouter":
@@ -259,6 +248,7 @@ def load_chat_client(model_id: str) -> ChatClient:  # noqa: PLR0911
                     require_api_key=False,
                     include_attribution=False,
                 ),
+                media_model_id=f"llamacpp:{model_name}",
                 # Modelos locais pequenos não conseguem seguir o prompt
                 # completo de identidade, ferramentas e contexto. O DMR já
                 # usa a projeção compacta; llama.cpp precisa do mesmo
@@ -280,6 +270,7 @@ def load_chat_client(model_id: str) -> ChatClient:  # noqa: PLR0911
                 return OllamaChatClient(
                     model=model_name,
                     client=OllamaClient(base_url=base_url),
+                    media_model_id=f"dmr:{model_name}",
                 )
             return OpenRouterChatClient(
                 model=model_name,
@@ -289,6 +280,7 @@ def load_chat_client(model_id: str) -> ChatClient:  # noqa: PLR0911
                     require_api_key=False,
                     include_attribution=False,
                 ),
+                media_model_id=f"dmr:{model_name}",
                 compact_system_prompt=True,
             )
         case _:
@@ -312,23 +304,19 @@ async def _emit_switch(
         logger.debug("fallback_chat_client: on_model_switch falhou", exc_info=True)
 
 
-def _deve_tentar_proximo(exc: BaseException, *, indice: int) -> bool:
-    """Troca em quota, falha transiente (timeout/conexão) ou incompatibilidade
-    permanente de provider — ou qualquer erro depois do primeiro candidato
-    (já estamos em fallback, não vale insistir no mesmo tipo de erro sem
-    tentar o resto da cadeia)."""
+def _deve_tentar_proximo(exc: BaseException) -> bool:
+    """Só permite trocar para um modelo de visão configurado explicitamente
+    quando a falha indica quota, transitoriedade ou incompatibilidade."""
     return (
         is_quota_error(exc)
         or is_transient_error(exc)
         or is_provider_incompatible_error(exc)
         or is_multimodal_incompatible_error(exc)
-        or indice > 0
     )
 
 
 class FallbackChatClient:
-    """``ChatClient`` nativo com fallback automático de provider por quota
-    (ver docstring do módulo)."""
+    """Adapter do ``ChatClient`` para mídia e modelo de visão explícito."""
 
     def __init__(
         self,
@@ -380,7 +368,7 @@ class FallbackChatClient:
                     max_tokens=max_tokens,
                 )
             except Exception as exc:
-                if not _deve_tentar_proximo(exc, indice=i):
+                if not _deve_tentar_proximo(exc):
                     raise
                 last_exc = exc
                 if i + 1 < len(candidatos):
@@ -390,7 +378,7 @@ class FallbackChatClient:
         last_mid = candidatos[-1] if candidatos else self.primary_model_id
         if last_exc is not None and is_multimodal_incompatible_error(last_exc):
             raise last_exc
-        msg = f"Todos os providers esgotaram a quota (último: {last_mid})."
+        msg = f"A quota do modelo selecionado ({last_mid}) foi esgotada."
         raise QuotaExhaustedError(msg, model_id=last_mid) from last_exc
 
     async def astream(
@@ -449,7 +437,7 @@ class FallbackChatClient:
             except Exception as exc:
                 # Nunca troca de provider depois de já ter streamado chunks
                 # (resposta parcial) — mesmo invariante do adapter antigo.
-                if not _deve_tentar_proximo(exc, indice=i) or streamed:
+                if not _deve_tentar_proximo(exc) or streamed:
                     raise
                 last_exc = exc
                 if i + 1 < len(candidatos):
@@ -459,5 +447,5 @@ class FallbackChatClient:
         last_mid = candidatos[-1] if candidatos else self.primary_model_id
         if last_exc is not None and is_multimodal_incompatible_error(last_exc):
             raise last_exc
-        msg = f"Todos os providers esgotaram a quota (último: {last_mid})."
+        msg = f"A quota do modelo selecionado ({last_mid}) foi esgotada."
         raise QuotaExhaustedError(msg, model_id=last_mid) from last_exc

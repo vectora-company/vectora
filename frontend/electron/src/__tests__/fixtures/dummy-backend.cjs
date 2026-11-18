@@ -66,4 +66,6 @@ if (process.env.NEVER_HEALTHY === "1") {
   }
 }
 
-process.on("SIGTERM", () => process.exit(0));
+process.on("SIGTERM", () => {
+  if (process.env.IGNORE_SIGTERM !== "1") process.exit(0);
+});

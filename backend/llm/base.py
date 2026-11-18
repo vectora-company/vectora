@@ -17,9 +17,7 @@ if TYPE_CHECKING:
 
 
 class Embeddings(Protocol):
-    """Interface comum aos clients de embedding nativos (cohere/voyage/
-    ollama/openrouter) e ao ``FallbackEmbeddings`` que orquestra fallback
-    entre eles."""
+    """Interface comum aos clients de embedding nativos por provider."""
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
         """Vetoriza um lote de documentos (indexação)."""
@@ -40,8 +38,8 @@ class Embeddings(Protocol):
 
 class ChatClient(Protocol):
     """Interface comum aos 5 clients de chat nativos (openai/anthropic/
-    google/openrouter/ollama) e ao ``FallbackChatClient`` que orquestra
-    fallback entre eles."""
+    google/openrouter/ollama) e ao adapter ``FallbackChatClient`` usado pelo
+    harness para compatibilidade de mídia e seleção explícita de visão."""
 
     def astream(
         self,

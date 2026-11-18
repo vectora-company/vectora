@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -29,6 +30,10 @@ def _reset_sidecar_state(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(
         "backend.services.win_job_object.create_job_object", lambda: None
     )
+    # These tests exercise the sidecar lifecycle with fake PIDs. The shared
+    # termination helper has dedicated tests and must never signal a real
+    # process group that happens to reuse one of those PIDs.
+    monkeypatch.setattr(electron_sidecar, "terminate_gracefully", AsyncMock())
 
     electron_sidecar._proc = None
     electron_sidecar._spawn_lock = LazyLock()
@@ -140,7 +145,10 @@ async def test_ensure_electron_sidecar_spawna_e_guarda_o_processo():
     assert electron_sidecar._proc is fake_proc
     spawn_mock.assert_called_once()
     call_args, call_kwargs = spawn_mock.call_args
-    assert call_args == ("electron.exe", "main.js")
+    if sys.platform == "linux":
+        assert call_args == ("electron.exe", "--ozone-platform=x11", "main.js")
+    else:
+        assert call_args == ("electron.exe", "main.js")
     assert call_kwargs["env"]["VECTORA_EXTERNAL_BACKEND"] == "1"
     assert call_kwargs["stdout"] == asyncio.subprocess.PIPE
     assert call_kwargs["stderr"] == asyncio.subprocess.STDOUT
@@ -186,13 +194,21 @@ async def test_ensure_electron_sidecar_falha_de_spawn_retorna_none_sem_lancar():
 async def test_stop_electron_sidecar_termina_e_limpa_estado():
     fake_proc = MagicMock()
     fake_proc.returncode = None
-    fake_proc.terminate = MagicMock()
     fake_proc.wait = AsyncMock(return_value=None)
     electron_sidecar._proc = fake_proc
 
-    await electron_sidecar.stop_electron_sidecar()
+    terminate_mock = AsyncMock()
+    with patch(
+        "backend.services.electron_sidecar.terminate_gracefully",
+        new=terminate_mock,
+    ):
+        await electron_sidecar.stop_electron_sidecar()
 
-    fake_proc.terminate.assert_called_once()
+    terminate_mock.assert_awaited_once()
+    call = terminate_mock.await_args
+    assert call is not None
+    assert call.args == (fake_proc,)
+    assert call.kwargs["timeout_seconds"] == 10.0
     assert electron_sidecar._proc is None
 
 

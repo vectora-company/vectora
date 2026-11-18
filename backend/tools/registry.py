@@ -271,7 +271,7 @@ def vtool(
             else:
                 fields[name] = (annotation, param.default)
 
-        fn_name: str = fn.__name__  # ty: ignore[unresolved-attribute]
+        fn_name: str = fn.__name__  # ty: ignore[missing-attribute]
         args_model = create_model(f"{fn_name}Args", **fields)
         if arg_descriptions:
             for field_name, description in arg_descriptions.items():

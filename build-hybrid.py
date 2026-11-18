@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 """Build do backend: o PyInstaller empacota o launcher, o pacote `backend` (código
 e arquivos de dados) e as libs Python em `dist/vectora/` (--onedir).
 
@@ -34,6 +33,7 @@ COLLECT_ALL = [
     "lancedb",
     "aiosqlite",
     "httpx",
+    "zstandard",
     # tiktoken usa um sistema de plugins via namespace package: o registry faz
     # pkgutil.iter_modules(tiktoken_ext.__path__) para descobrir os encoders.
     # A análise estática do PyInstaller não enxerga essa descoberta.
@@ -53,7 +53,7 @@ HIDDEN_IMPORTS = [
 def run(cmd: list, cwd: Path, desc: str, env: dict | None = None) -> None:
     print(f"\n{'=' * 70}\n-> {desc}\n{'=' * 70}\n$ {' '.join(map(str, cmd))}\n")
     merged = {**os.environ, **(env or {})}
-    if subprocess.run(cmd, cwd=str(cwd), env=merged).returncode != 0:  # noqa: S603  # nosec B603
+    if subprocess.run(cmd, check=False, cwd=str(cwd), env=merged).returncode != 0:  # noqa: S603  # nosec B603
         sys.exit(f"FALHA: {desc}")
 
 

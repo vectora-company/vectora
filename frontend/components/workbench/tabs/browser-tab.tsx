@@ -96,13 +96,11 @@ function normalizeUrl(raw: string): string {
 interface TabState {
   id: string;
   title: string;
-  // caminho web (iframe) — histórico próprio, cross-origin não expõe API de
-  // histórico do navegador nativo pra fora.
+  // histórico da aba mantido pelo fallback local legado.
   history: string[];
   historyIndex: number;
   iframeKey: number;
-  // caminho desktop (WebContentsView) — fonte de verdade é o Chromium
-  // (eventos via bridge), nunca escrito à mão fora do listener de eventos.
+  // URL e estado do Chromium Electron, via IPC no desktop ou API no Web.
   viewId: number | null;
   desktopUrl: string;
   canGoBack: boolean;
@@ -139,11 +137,11 @@ export function BrowserTab({ threadId, visible = true }: BrowserTabProps) {
   const allowPopups = useSettingsStore((s) => s.browserAllowPopups);
   const browserZoomPercent = useSettingsStore((s) => s.browserZoomPercent);
 
-  // Presente só no desktop Electron — quando ausente, cai no `<iframe>` de
-  // fallback abaixo (sujeito a X-Frame-Options, único caminho possível fora
-  // do Electron). Ver electron/src/browser-view-manager.ts.
+  // No desktop, o renderer controla WebContentsView por IPC. No Vectora Web,
+  // o backend encaminha comandos ao Chromium headless do sidecar Electron.
   const desktopBrowser =
     typeof window !== "undefined" ? window.vectora?.browserView : undefined;
+  const remoteChromium = !desktopBrowser;
 
   const [configs, setConfigs] = useState<LaunchConfig[]>([]);
   const [statuses, setStatuses] = useState<ServerStatus[]>([]);
@@ -226,6 +224,7 @@ export function BrowserTab({ threadId, visible = true }: BrowserTabProps) {
   useEffect(() => {
     if (previousSessionKeyRef.current === sessionKey) return;
     previousSessionKeyRef.current = sessionKey;
+    remoteOpenedRef.current.clear();
     hydratedSessionKeyRef.current = null;
     pendingNavigateRef.current.clear();
     pendingViewCreatesRef.current.clear();
@@ -275,7 +274,9 @@ export function BrowserTab({ threadId, visible = true }: BrowserTabProps) {
     setBrowserSettingsOpen((open) => !open);
   }, []);
 
-  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [remoteFrameVersion, setRemoteFrameVersion] = useState(0);
+  const remoteOpenedRef = useRef(new Set<string>());
+  const remoteMoveAtRef = useRef(0);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const consolePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const consoleLogRef = useRef<HTMLDivElement>(null);
@@ -284,17 +285,9 @@ export function BrowserTab({ threadId, visible = true }: BrowserTabProps) {
   // URL atual toda vez que a aba monta com um servidor já rodando).
   const prevRunningRef = useRef<Record<string, boolean> | null>(null);
 
-  const currentUrl = desktopBrowser
-    ? activeTab.desktopUrl
-    : activeTab.historyIndex >= 0
-      ? activeTab.history[activeTab.historyIndex]
-      : "";
-  const canGoBack = desktopBrowser
-    ? activeTab.canGoBack
-    : activeTab.historyIndex > 0;
-  const canGoForward = desktopBrowser
-    ? activeTab.canGoForward
-    : activeTab.historyIndex < activeTab.history.length - 1;
+  const currentUrl = activeTab.desktopUrl;
+  const canGoBack = activeTab.canGoBack;
+  const canGoForward = activeTab.canGoForward;
   const desktopLoading = activeTab.loading;
   const desktopLoadError = activeTab.loadError;
 
@@ -312,6 +305,122 @@ export function BrowserTab({ threadId, visible = true }: BrowserTabProps) {
     },
     [],
   );
+
+  const remoteRequest = useCallback(
+    async (tabId: string, action: string, init?: RequestInit) => {
+      const response = await fetch(
+        `/browser-workbench/${encodeURIComponent(tabId)}/${action}`,
+        { credentials: "include", ...init },
+      );
+      if (!response.ok) {
+        const detail = await response.json().catch(() => null);
+        throw new Error(
+          detail?.detail ?? `Chromium indisponível (${response.status})`,
+        );
+      }
+      return response.json() as Promise<{
+        url: string;
+        title: string;
+        can_go_back: boolean;
+        can_go_forward: boolean;
+      }>;
+    },
+    [],
+  );
+
+  const applyRemoteState = useCallback(
+    (
+      tabId: string,
+      state: {
+        url: string;
+        title: string;
+        can_go_back: boolean;
+        can_go_forward: boolean;
+      },
+    ) => {
+      updateTab(tabId, {
+        desktopUrl: state.url === "about:blank" ? "" : state.url,
+        title: state.title,
+        canGoBack: state.can_go_back,
+        canGoForward: state.can_go_forward,
+        loading: false,
+        loadError: null,
+      });
+    },
+    [updateTab],
+  );
+
+  useEffect(() => {
+    if (!remoteChromium) return;
+    let cancelled = false;
+    for (const tab of tabs) {
+      if (remoteOpenedRef.current.has(tab.id)) continue;
+      remoteOpenedRef.current.add(tab.id);
+      void remoteRequest(tab.id, "open", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profile_id: profileId }),
+      })
+        .then((state) => {
+          if (cancelled) return;
+          applyRemoteState(tab.id, state);
+          if (tab.desktopUrl && state.url === "about:blank") {
+            void remoteRequest(tab.id, "navigate", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ url: tab.desktopUrl }),
+            }).then((next) => applyRemoteState(tab.id, next));
+          }
+        })
+        .catch((error: unknown) => {
+          if (!cancelled) updateTab(tab.id, { loadError: String(error) });
+        });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    remoteChromium,
+    tabs,
+    profileId,
+    remoteRequest,
+    applyRemoteState,
+    updateTab,
+  ]);
+
+  useEffect(() => {
+    if (!remoteChromium || !visible || !currentUrl) return;
+    let cancelled = false;
+    let inFlight = false;
+    const refreshFrame = async () => {
+      if (inFlight) return;
+      inFlight = true;
+      try {
+        const state = await remoteRequest(activeTab.id, "state");
+        if (!cancelled) {
+          applyRemoteState(activeTab.id, state);
+          setRemoteFrameVersion((version) => version + 1);
+        }
+      } catch {
+        // A later poll will recover when the Electron sidecar is ready again.
+      } finally {
+        inFlight = false;
+      }
+    };
+    void refreshFrame();
+    const timer = window.setInterval(() => void refreshFrame(), 900);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [
+    remoteChromium,
+    visible,
+    currentUrl,
+    activeTab.id,
+    remoteRequest,
+    applyRemoteState,
+  ]);
 
   const navigateInTab = useCallback(
     (tabId: string, raw: string) => {
@@ -331,18 +440,27 @@ export function BrowserTab({ threadId, visible = true }: BrowserTabProps) {
         });
         return;
       }
-      updateTab(tabId, (t) => {
-        const base = t.history.slice(0, t.historyIndex + 1);
-        const next = [...base, url];
-        return {
-          ...t,
-          history: next,
-          historyIndex: next.length - 1,
-          iframeKey: t.iframeKey + 1,
-        };
-      });
+      if (remoteChromium) {
+        updateTab(tabId, { desktopUrl: url, loading: true, loadError: null });
+        void remoteRequest(tabId, "navigate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url }),
+        })
+          .then((state) => applyRemoteState(tabId, state))
+          .catch((error: unknown) =>
+            updateTab(tabId, { loading: false, loadError: String(error) }),
+          );
+        return;
+      }
     },
-    [desktopBrowser, updateTab],
+    [
+      desktopBrowser,
+      remoteChromium,
+      remoteRequest,
+      applyRemoteState,
+      updateTab,
+    ],
   );
 
   const navigate = useCallback(
@@ -413,9 +531,7 @@ export function BrowserTab({ threadId, visible = true }: BrowserTabProps) {
           const normalized = normalizeUrl(url);
           setTabs((prev) =>
             prev.map((t) =>
-              t.id === id
-                ? { ...t, history: [normalized], historyIndex: 0 }
-                : t,
+              t.id === id ? { ...t, desktopUrl: normalized } : t,
             ),
           );
         }
@@ -437,6 +553,13 @@ export function BrowserTab({ threadId, visible = true }: BrowserTabProps) {
       if (desktopBrowser && closing?.viewId != null) {
         desktopBrowser.destroyView(closing.viewId);
       }
+      if (remoteChromium) {
+        void fetch(`/browser-workbench/${encodeURIComponent(id)}`, {
+          method: "DELETE",
+          credentials: "include",
+        });
+        remoteOpenedRef.current.delete(id);
+      }
       const remaining = tabsRef.current.filter((t) => t.id !== id);
       if (remaining.length === 0) {
         const freshId = genId();
@@ -452,7 +575,7 @@ export function BrowserTab({ threadId, visible = true }: BrowserTabProps) {
         setActiveTabId(neighbor.id);
       }
     },
-    [desktopBrowser, activeTabId, createDesktopView],
+    [desktopBrowser, remoteChromium, activeTabId, createDesktopView],
   );
 
   const goBack = useCallback(() => {
@@ -461,12 +584,21 @@ export function BrowserTab({ threadId, visible = true }: BrowserTabProps) {
       desktopBrowser.goBack(activeTab.viewId);
       return;
     }
-    updateTab(activeTabId, (t) => ({
-      ...t,
-      historyIndex: t.historyIndex - 1,
-      iframeKey: t.iframeKey + 1,
-    }));
-  }, [canGoBack, desktopBrowser, activeTab.viewId, activeTabId, updateTab]);
+    if (remoteChromium) {
+      void remoteRequest(activeTab.id, "history/back", { method: "POST" })
+        .then((state) => applyRemoteState(activeTab.id, state))
+        .catch(() => {});
+      return;
+    }
+  }, [
+    canGoBack,
+    desktopBrowser,
+    remoteChromium,
+    remoteRequest,
+    applyRemoteState,
+    activeTab.id,
+    activeTab.viewId,
+  ]);
 
   const goForward = useCallback(() => {
     if (!canGoForward) return;
@@ -474,20 +606,41 @@ export function BrowserTab({ threadId, visible = true }: BrowserTabProps) {
       desktopBrowser.goForward(activeTab.viewId);
       return;
     }
-    updateTab(activeTabId, (t) => ({
-      ...t,
-      historyIndex: t.historyIndex + 1,
-      iframeKey: t.iframeKey + 1,
-    }));
-  }, [canGoForward, desktopBrowser, activeTab.viewId, activeTabId, updateTab]);
+    if (remoteChromium) {
+      void remoteRequest(activeTab.id, "history/forward", { method: "POST" })
+        .then((state) => applyRemoteState(activeTab.id, state))
+        .catch(() => {});
+      return;
+    }
+  }, [
+    canGoForward,
+    desktopBrowser,
+    remoteChromium,
+    remoteRequest,
+    applyRemoteState,
+    activeTab.id,
+    activeTab.viewId,
+  ]);
 
   const refresh = useCallback(() => {
     if (desktopBrowser && activeTab.viewId !== null) {
       desktopBrowser.reload(activeTab.viewId);
       return;
     }
-    updateTab(activeTabId, (t) => ({ ...t, iframeKey: t.iframeKey + 1 }));
-  }, [desktopBrowser, activeTab.viewId, activeTabId, updateTab]);
+    if (remoteChromium) {
+      void remoteRequest(activeTab.id, "history/reload", { method: "POST" })
+        .then((state) => applyRemoteState(activeTab.id, state))
+        .catch(() => {});
+      return;
+    }
+  }, [
+    desktopBrowser,
+    remoteChromium,
+    remoteRequest,
+    applyRemoteState,
+    activeTab.id,
+    activeTab.viewId,
+  ]);
 
   // Cria uma WebContentsView para cada aba restaurada. A troca de workbench
   // apenas torna as views invisíveis; fechar uma aba continua sendo a ação
@@ -705,6 +858,39 @@ export function BrowserTab({ threadId, visible = true }: BrowserTabProps) {
     settingsOpen,
     visible,
   ]);
+
+  useEffect(() => {
+    if (!remoteChromium || !currentUrl || !visible) return;
+    const element = browserViewContainerRef.current;
+    if (!element) return;
+    let timer: number | undefined;
+    const resize = () => {
+      if (timer !== undefined) window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        const rect = element.getBoundingClientRect();
+        if (rect.width < 1 || rect.height < 1) return;
+        void fetch(
+          `/browser-workbench/${encodeURIComponent(activeTab.id)}/viewport`,
+          {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              width: Math.max(320, Math.min(3840, Math.round(rect.width))),
+              height: Math.max(240, Math.min(2160, Math.round(rect.height))),
+            }),
+          },
+        );
+      }, 150);
+    };
+    resize();
+    const observer = new ResizeObserver(resize);
+    observer.observe(element);
+    return () => {
+      observer.disconnect();
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [remoteChromium, currentUrl, activeTab.id, visible]);
 
   const fetchLaunch = useCallback(
     async (isCurrent: () => boolean = () => true) => {
@@ -1000,29 +1186,6 @@ export function BrowserTab({ threadId, visible = true }: BrowserTabProps) {
 
   const getStatus = (name: string): ServerStatus | undefined =>
     statuses.find((s) => s.name === name);
-
-  // `allow-same-origin` junto de `allow-scripts` é a combinação clássica de
-  // sandbox-escape (o conteúdo do iframe passa a poder acessar/manipular o
-  // document do pai) — só é seguro pra um servidor de dev do próprio
-  // workspace (processo local do usuário, mesma confiança que terminal/PTY
-  // já assumem), nunca pra navegação livre a um site externo qualquer.
-  // Sem esse flag, o iframe recebe origem opaca mesmo pra localhost, o que
-  // faz o Next.js (allowedDevOrigins) bloquear os assets — daí o CSS sumir.
-  const isTrustedWorkspaceServer = (url: string): boolean => {
-    try {
-      const parsed = new URL(url);
-      if (parsed.hostname !== "localhost" && parsed.hostname !== "127.0.0.1")
-        return false;
-      const port = parsed.port
-        ? Number.parseInt(parsed.port, 10)
-        : parsed.protocol === "https:"
-          ? 443
-          : 80;
-      return configs.some((c) => c.port === port);
-    } catch {
-      return false;
-    }
-  };
 
   if (isLoading) {
     return (
@@ -1416,26 +1579,93 @@ export function BrowserTab({ threadId, visible = true }: BrowserTabProps) {
             {!currentUrl && emptyBrowserState}
           </div>
         ) : currentUrl ? (
-          <iframe
-            ref={iframeRef}
-            key={`${activeTab.id}-${activeTab.iframeKey}`}
-            src={currentUrl}
-            className="flex-1 w-full border-0 bg-white"
-            title={msg.workbench_browser_frame_title()}
-            sandbox={
-              isTrustedWorkspaceServer(currentUrl)
-                ? "allow-scripts allow-forms allow-modals allow-popups allow-same-origin"
-                : "allow-scripts allow-forms allow-modals allow-popups"
-            }
-          />
+          <div
+            ref={browserViewContainerRef}
+            data-testid="browser-remote-chromium-container"
+            tabIndex={0}
+            className="relative flex-1 min-h-0 w-full overflow-hidden bg-white outline-none"
+            onClick={(event) => {
+              const rect = event.currentTarget.getBoundingClientRect();
+              void fetch(
+                `/browser-workbench/${encodeURIComponent(activeTab.id)}/input`,
+                {
+                  method: "POST",
+                  credentials: "include",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    kind: "click",
+                    x: (event.clientX - rect.left) / rect.width,
+                    y: (event.clientY - rect.top) / rect.height,
+                  }),
+                },
+              );
+              event.currentTarget.focus();
+            }}
+            onMouseMove={(event) => {
+              const now = Date.now();
+              if (now - remoteMoveAtRef.current < 50) return;
+              remoteMoveAtRef.current = now;
+              const rect = event.currentTarget.getBoundingClientRect();
+              void fetch(
+                `/browser-workbench/${encodeURIComponent(activeTab.id)}/input`,
+                {
+                  method: "POST",
+                  credentials: "include",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    kind: "move",
+                    x: (event.clientX - rect.left) / rect.width,
+                    y: (event.clientY - rect.top) / rect.height,
+                  }),
+                },
+              );
+            }}
+            onWheelCapture={(event) => {
+              event.preventDefault();
+              void fetch(
+                `/browser-workbench/${encodeURIComponent(activeTab.id)}/input`,
+                {
+                  method: "POST",
+                  credentials: "include",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    kind: "wheel",
+                    delta_x: event.deltaX,
+                    delta_y: event.deltaY,
+                  }),
+                },
+              );
+            }}
+            onKeyDown={(event) => {
+              event.preventDefault();
+              void fetch(
+                `/browser-workbench/${encodeURIComponent(activeTab.id)}/input`,
+                {
+                  method: "POST",
+                  credentials: "include",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify(
+                    event.key.length === 1 && !event.ctrlKey && !event.metaKey
+                      ? { kind: "text", text: event.key }
+                      : { kind: "key", key: event.key },
+                  ),
+                },
+              );
+            }}
+          >
+            <img
+              src={`/browser-workbench/${encodeURIComponent(activeTab.id)}/frame?frame=${remoteFrameVersion}`}
+              alt={currentUrl}
+              draggable={false}
+              className="h-full w-full select-none object-fill"
+            />
+          </div>
         ) : (
           emptyBrowserState
         )}
       </div>
 
-      {/* Painel de console inline — dentro do fluxo da própria aba, não um
-          portal/dialog (senão sobrepõe a janela inteira em vez de dividir
-          o espaço com o iframe acima). */}
+      {/* Painel de console inline — divide o espaço com o Chromium abaixo. */}
       {consoleFor !== null && (
         <div className="flex h-56 shrink-0 flex-col border-t border-border/60 bg-background">
           <div className="flex shrink-0 items-center justify-between border-b border-border/60 px-4 py-2">

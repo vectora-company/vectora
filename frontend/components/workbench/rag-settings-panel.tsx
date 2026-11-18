@@ -4,7 +4,7 @@
  * RagSettingsPanel — gear + painel de configuração do RAG na aba de memória.
  *
  * Controla (persistido no backend via /rag/settings): reranker on/off + top_k,
- * providers de rerank/embedding, tipos de arquivo a ingerir. Lista as coleções
+ * tipos de arquivo a ingerir. Modelos de IA ficam na tela IA Models. Lista as coleções
  * (/rag/collections) com botão de apagar. Caso de uso paralelo ao Context Graph:
  * usar o RAG para código enquanto o grafo cuida dos markdowns.
  *
@@ -18,7 +18,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Search, Settings2, Trash2, RefreshCw } from "lucide-react";
+import { Settings2, Trash2, RefreshCw } from "lucide-react";
 
 import {
   ALL_GRAPH_FILE_TYPES,
@@ -31,14 +31,9 @@ import { m } from "@/lib/paraglide/messages";
 interface RagSettings {
   reranker_enabled: boolean;
   reranker_top_k: number;
-  rerank_provider: string;
-  embed_provider: string;
+  rerank_model: string;
   embed_model: string;
   ingest_file_types: string[];
-  //: Quais providers de rerank têm key/modelo configurados — vem de
-  //: GET /rag/settings (backend/api/handlers/rag.py). "auto" nunca entra
-  //: aqui: está sempre "disponível" (o backend escolhe o que der certo).
-  rerank_provider_available?: Record<string, boolean>;
 }
 
 interface Collection {
@@ -49,33 +44,9 @@ interface Collection {
 const DEFAULTS: RagSettings = {
   reranker_enabled: true,
   reranker_top_k: 5,
-  rerank_provider: "auto",
-  embed_provider: "auto",
+  rerank_model: "",
   embed_model: "",
   ingest_file_types: [],
-  rerank_provider_available: {},
-};
-
-// Reranker: Cohere/Voyage (rerank nativo fixo) + OpenRouter (rerank via
-// modelo configurado em Provider Routing — depende de key + modelo
-// escolhido, ver rerank_provider_available). Embedding aceita os 4 —
-// backend resolve em storage/factory.py::_build_lc_embeddings (lê
-// embed_provider/embed_model deste mesmo /rag/settings).
-const RERANK_PROVIDERS = ["auto", "cohere", "voyage", "openrouter"] as const;
-const EMBED_PROVIDERS = [
-  "auto",
-  "cohere",
-  "voyage",
-  "ollama",
-  "openrouter",
-] as const;
-
-const PROVIDER_LABELS: Record<string, () => string> = {
-  auto: m.rag_provider_auto,
-  cohere: m.rag_provider_cohere,
-  voyage: m.rag_provider_voyage,
-  ollama: m.rag_provider_ollama,
-  openrouter: m.rag_provider_openrouter,
 };
 
 export function useRagSettings({
@@ -258,6 +229,8 @@ export function RagSettingsForm({
   settingsStatus,
   collectionsStatus,
   patching,
+  includeIngestionSettings = true,
+  includeCollections = true,
 }: Pick<
   RagSettingsState,
   | "open"
@@ -271,7 +244,10 @@ export function RagSettingsForm({
   | "settingsStatus"
   | "collectionsStatus"
   | "patching"
->) {
+> & {
+  includeIngestionSettings?: boolean;
+  includeCollections?: boolean;
+}) {
   if (settingsStatus === "loading" || settingsStatus === "idle") {
     return (
       <p className="p-4 text-xs text-muted-foreground">
@@ -288,172 +264,106 @@ export function RagSettingsForm({
   }
   return (
     <div className="min-w-0 space-y-3 text-xs" aria-busy={patching}>
-      {/* Reranker on/off + top_k */}
-      <label className="flex items-center justify-between gap-2 cursor-pointer select-none">
-        <span className="text-foreground">{m.rag_reranker_enabled()}</span>
-        <input
-          type="checkbox"
-          checked={settings.reranker_enabled}
-          onChange={(e) => void patch({ reranker_enabled: e.target.checked })}
-          className="accent-[var(--color-primary)]"
-        />
-      </label>
-      <p className="-mt-1.5 text-[10px] text-muted-foreground">
-        {m.rag_reranker_help()}
-      </p>
-      <label className="flex items-center justify-between gap-2">
-        <span className="text-foreground">{m.rag_reranker_top_k()}</span>
-        <input
-          type="number"
-          min={1}
-          max={50}
-          value={settings.reranker_top_k}
-          disabled={!settings.reranker_enabled}
-          onChange={(e) =>
-            void patch({
-              reranker_top_k: Math.max(1, Number(e.target.value) || 1),
-            })
-          }
-          className="w-16 bg-background border border-border/60 rounded px-1.5 py-0.5 text-right disabled:opacity-40"
-        />
-      </label>
-
-      {/* Providers */}
-      <label className="flex items-center justify-between gap-2">
-        <span className="text-foreground">{m.rag_rerank_provider()}</span>
-        <ProviderSelect
-          value={settings.rerank_provider}
-          onChange={(v) => void patch({ rerank_provider: v })}
-          providers={RERANK_PROVIDERS}
-          unavailable={
-            new Set(
-              Object.entries(settings.rerank_provider_available ?? {})
-                .filter(([, available]) => !available)
-                .map(([provider]) => provider),
-            )
-          }
-        />
-      </label>
-      {settings.rerank_provider !== "auto" &&
-        settings.rerank_provider_available?.[settings.rerank_provider] ===
-          false && (
-          <p className="text-[10px] text-amber-600 dark:text-amber-400">
-            {m.rag_rerank_provider_unavailable_warning()}
+      {/* Tipos de arquivo a ingerir */}
+      {includeIngestionSettings && (
+        <div>
+          <p className="font-medium text-foreground">
+            {m.graph_settings_filetypes()}
           </p>
-        )}
-      <label className="flex items-center justify-between gap-2">
-        <span className="text-foreground">{m.rag_embed_provider()}</span>
-        <ProviderSelect
-          value={settings.embed_provider}
-          onChange={(v) => void patch({ embed_provider: v, embed_model: "" })}
-          providers={EMBED_PROVIDERS}
-        />
-      </label>
-      {(settings.embed_provider === "ollama" ||
-        settings.embed_provider === "openrouter") && (
-        <EmbedModelPicker
-          provider={settings.embed_provider}
-          value={settings.embed_model}
-          onChange={(v) => void patch({ embed_model: v })}
-        />
+          <div className="mt-1 space-y-1">
+            {ALL_GRAPH_FILE_TYPES.map((t: GraphFileType) => (
+              <label
+                key={t}
+                className="flex items-center gap-2 cursor-pointer select-none"
+              >
+                <input
+                  type="checkbox"
+                  checked={
+                    settings.ingest_file_types.length === 0 ||
+                    settings.ingest_file_types.includes(t)
+                  }
+                  onChange={() => {
+                    const cur =
+                      settings.ingest_file_types.length === 0
+                        ? [...ALL_GRAPH_FILE_TYPES]
+                        : settings.ingest_file_types;
+                    const next = cur.includes(t)
+                      ? cur.filter((x) => x !== t)
+                      : [...cur, t];
+                    void patch({ ingest_file_types: next });
+                  }}
+                  className="accent-[var(--color-primary)]"
+                />
+                <span className="text-foreground">
+                  {t === "code"
+                    ? m.graph_filetype_code()
+                    : t === "document"
+                      ? m.graph_filetype_document()
+                      : m.graph_filetype_paper()}
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
       )}
 
-      {/* Tipos de arquivo a ingerir */}
-      <div>
-        <p className="font-medium text-foreground">
-          {m.graph_settings_filetypes()}
-        </p>
-        <div className="mt-1 space-y-1">
-          {ALL_GRAPH_FILE_TYPES.map((t: GraphFileType) => (
-            <label
-              key={t}
-              className="flex items-center gap-2 cursor-pointer select-none"
-            >
-              <input
-                type="checkbox"
-                checked={
-                  settings.ingest_file_types.length === 0 ||
-                  settings.ingest_file_types.includes(t)
-                }
-                onChange={() => {
-                  const cur =
-                    settings.ingest_file_types.length === 0
-                      ? [...ALL_GRAPH_FILE_TYPES]
-                      : settings.ingest_file_types;
-                  const next = cur.includes(t)
-                    ? cur.filter((x) => x !== t)
-                    : [...cur, t];
-                  void patch({ ingest_file_types: next });
-                }}
-                className="accent-[var(--color-primary)]"
-              />
-              <span className="text-foreground">
-                {t === "code"
-                  ? m.graph_filetype_code()
-                  : t === "document"
-                    ? m.graph_filetype_document()
-                    : m.graph_filetype_paper()}
-              </span>
-            </label>
-          ))}
-        </div>
-      </div>
-
       {/* Coleções */}
-      <div className="border-t border-border/60 pt-2">
-        <div className="flex items-center justify-between">
-          <p className="font-medium text-foreground">
-            {m.rag_collections_title()}
-          </p>
-          <button
-            onClick={() => void loadCollections()}
-            aria-label={m.workbench_files_refresh()}
-            className="text-muted-foreground hover:text-foreground"
-          >
-            <RefreshCw className="h-3 w-3" />
-          </button>
-        </div>
-        {collectionsStatus === "loading" ? (
-          <p className="mt-1 text-[10px] text-muted-foreground">
-            {m.workbench_settings_loading()}
-          </p>
-        ) : collectionsStatus === "error" ? (
-          <p className="mt-1 text-[10px] text-destructive">
-            {m.workbench_settings_error()}
-          </p>
-        ) : collections.length === 0 ? (
-          <p className="mt-1 text-[10px] text-muted-foreground">
-            {m.rag_collections_empty()}
-          </p>
-        ) : (
-          <ul className="mt-1 space-y-1">
-            {collections.map((c) => (
-              <li
-                key={c.name}
-                className="flex items-center justify-between gap-2 rounded border border-border/60 px-2 py-1"
-              >
-                <span className="min-w-0 truncate text-foreground">
-                  {c.name}
-                  {c.count != null && (
-                    <span className="ml-1 text-[10px] text-muted-foreground">
-                      {m.rag_collection_count({ n: c.count })}
-                    </span>
-                  )}
-                </span>
-                <button
-                  onClick={() => void deleteCollection(c.name)}
-                  disabled={pendingDelete === c.name}
-                  aria-label={m.rag_collection_delete()}
-                  title={m.rag_collection_delete()}
-                  className="shrink-0 text-muted-foreground hover:text-destructive"
+      {includeCollections && (
+        <div className="border-t border-border/60 pt-2">
+          <div className="flex items-center justify-between">
+            <p className="font-medium text-foreground">
+              {m.rag_collections_title()}
+            </p>
+            <button
+              onClick={() => void loadCollections()}
+              aria-label={m.workbench_files_refresh()}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <RefreshCw className="h-3 w-3" />
+            </button>
+          </div>
+          {collectionsStatus === "loading" ? (
+            <p className="mt-1 text-[10px] text-muted-foreground">
+              {m.workbench_settings_loading()}
+            </p>
+          ) : collectionsStatus === "error" ? (
+            <p className="mt-1 text-[10px] text-destructive">
+              {m.workbench_settings_error()}
+            </p>
+          ) : collections.length === 0 ? (
+            <p className="mt-1 text-[10px] text-muted-foreground">
+              {m.rag_collections_empty()}
+            </p>
+          ) : (
+            <ul className="mt-1 space-y-1">
+              {collections.map((c) => (
+                <li
+                  key={c.name}
+                  className="flex items-center justify-between gap-2 rounded border border-border/60 px-2 py-1"
                 >
-                  <Trash2 className="h-3 w-3" />
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+                  <span className="min-w-0 truncate text-foreground">
+                    {c.name}
+                    {c.count != null && (
+                      <span className="ml-1 text-[10px] text-muted-foreground">
+                        {m.rag_collection_count({ n: c.count })}
+                      </span>
+                    )}
+                  </span>
+                  <button
+                    onClick={() => void deleteCollection(c.name)}
+                    disabled={pendingDelete === c.name}
+                    aria-label={m.rag_collection_delete()}
+                    title={m.rag_collection_delete()}
+                    className="shrink-0 text-muted-foreground hover:text-destructive"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -501,144 +411,5 @@ export function RagSettingsPanel() {
       <RagSettingsButton open={state.open} onToggle={state.toggle} />
       <RagSettingsSlidePanel {...state} />
     </>
-  );
-}
-
-function ProviderSelect({
-  value,
-  onChange,
-  providers,
-  unavailable,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  providers: readonly string[];
-  //: Providers sem key/config — ficam no dropdown mas desabilitados, com
-  //: sufixo "(sem chave)". Escolher um provider que sabidamente não vai
-  //: funcionar é pior que impedir a escolha.
-  unavailable?: Set<string>;
-}) {
-  return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="bg-background border border-border/60 rounded px-1.5 py-0.5 text-foreground"
-    >
-      {providers.map((p) => (
-        <option key={p} value={p} disabled={unavailable?.has(p)}>
-          {PROVIDER_LABELS[p]()}
-          {unavailable?.has(p) ? ` ${m.rag_provider_no_key_suffix()}` : ""}
-        </option>
-      ))}
-    </select>
-  );
-}
-
-interface DiscoveredModel {
-  id: string;
-  label: string;
-}
-
-/** Seletor de modelo pro provider de embedding quando é Ollama/OpenRouter —
- * nenhum dos dois tem um default sensato (ao contrário de Cohere/Voyage, que
- * já têm modelo fixo em settings.py), então o usuário escolhe explicitamente
- * a partir de uma lista descoberta, nunca texto livre (erro de digitação
- * viraria falha silenciosa de embedding — mesmo motivo que o seletor de
- * LLM em provider-routing-tab.tsx já evita texto livre). */
-function EmbedModelPicker({
-  provider,
-  value,
-  onChange,
-}: {
-  provider: "ollama" | "openrouter";
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  const [models, setModels] = useState<DiscoveredModel[]>([]);
-  const [query, setQuery] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  const loadOllama = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch("/provider-routing/ollama/models");
-      if (!res.ok) return;
-      const data = (await res.json()) as {
-        reachable: boolean;
-        models: { name: string }[];
-      };
-      setModels(data.models.map((mo) => ({ id: mo.name, label: mo.name })));
-    } catch {
-      /* Ollama fora do ar — lista fica vazia, sem quebrar o painel */
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const searchOpenRouter = useCallback(async (q: string) => {
-    setLoading(true);
-    try {
-      const res = await fetch(
-        `/provider-routing/openrouter/models${q ? `?q=${encodeURIComponent(q)}` : ""}`,
-      );
-      if (!res.ok) return;
-      const data = (await res.json()) as {
-        models: { id: string; name: string }[];
-      };
-      setModels(data.models.map((mo) => ({ id: mo.id, label: mo.name })));
-    } catch {
-      /* offline: mantém a lista já carregada */
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    // A resposta do provider substitui a lista; não limpamos estado
-    // sincronamente no efeito para evitar uma renderização em cascata.
-    // Network loading updates state asynchronously after the effect starts.
-    // oxlint-disable-next-line react/set-state-in-effect
-    if (provider === "ollama") void loadOllama();
-    // oxlint-disable-next-line react/set-state-in-effect
-    else void searchOpenRouter("");
-  }, [provider, loadOllama, searchOpenRouter]);
-
-  return (
-    <div className="space-y-1">
-      {provider === "openrouter" && (
-        <div className="flex items-center gap-1">
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") void searchOpenRouter(query);
-            }}
-            placeholder={m.rag_embed_model_search_placeholder()}
-            className="flex-1 bg-background border border-border/60 rounded px-1.5 py-0.5 text-foreground"
-          />
-          <button
-            onClick={() => void searchOpenRouter(query)}
-            aria-label={m.rag_embed_model_search_placeholder()}
-            className="shrink-0 text-muted-foreground hover:text-foreground"
-          >
-            <Search className="h-3 w-3" />
-          </button>
-        </div>
-      )}
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        disabled={loading}
-        className="w-full bg-background border border-border/60 rounded px-1.5 py-0.5 text-foreground disabled:opacity-40"
-      >
-        <option value="">{m.rag_embed_model_select_placeholder()}</option>
-        {models.map((mo) => (
-          <option key={mo.id} value={mo.id}>
-            {mo.label}
-          </option>
-        ))}
-      </select>
-    </div>
   );
 }

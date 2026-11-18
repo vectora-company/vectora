@@ -436,25 +436,10 @@ class RuntimeSettings:
         self.set("user_timezone", clean)
 
     @property
-    def fallback_order(self) -> list[str]:
-        """Ordem de fallback de providers LLM (lista de 'provider:model')."""
-        val = self.get("llm_fallback_order", [])
-        return [str(x) for x in val] if isinstance(val, list) else []
-
-    def set_fallback_order(self, order: list[str]) -> None:
-        """Define a ordem de fallback de LLM e persiste.
-
-        Filtra entradas vazias/em branco, preserva a ordem fornecida.
-        """
-        clean = [str(x).strip() for x in order if str(x).strip()]
-        self.set("llm_fallback_order", clean)
-
-    @property
     def rag_settings(self) -> dict[str, object]:
         """Settings de RAG configuráveis em runtime (aba de memória).
 
-        Defaults espelham o comportamento atual: reranker ligado, top_k=5,
-        providers em "auto" (escolhe por key/fallback), ingestão de todos os tipos.
+        Providers são inferidos do ID canônico do modelo selecionado.
         """
         val = self.get("rag_settings", {})
         data: dict[str, object] = (
@@ -466,12 +451,7 @@ class RuntimeSettings:
         return {
             "reranker_enabled": bool(data.get("reranker_enabled", True)),
             "reranker_top_k": top_k or 5,
-            "rerank_provider": str(data.get("rerank_provider", "auto")),
-            "embed_provider": str(data.get("embed_provider", "auto")),
-            # Nome do modelo de embedding quando embed_provider força ollama/
-            # openrouter — esses dois não têm um default sensato (ao contrário
-            # de Cohere/Voyage, que já têm modelo fixo em settings.py), então
-            # o usuário escolhe explicitamente (ver storage/factory.py).
+            "rerank_model": str(data.get("rerank_model", "")),
             "embed_model": str(data.get("embed_model", "")),
             "ingest_file_types": (
                 [str(x) for x in raw_types] if isinstance(raw_types, list) else []
