@@ -1101,6 +1101,7 @@
   "prefs_auto_update_check_now": "Check for update now",
   "prefs_auto_update_checking": "Checking…",
   "prefs_auto_update_section": "Updates",
+  "prefs_auto_update_services_off": "Updates are off for this run because Vectora was started without Services (--no-services).",
   "prefs_auto_update_toggle": "Check for updates automatically",
   "prefs_auto_update_toggle_hint": "Desktop app only. Takes effect the next time you open the app, not immediately.",
   "prefs_context_compaction_hint": "When the conversation exceeds the model's context limit, the oldest messages become a summary and the instructions and most recent work are kept. Off, the full history is sent and the provider may refuse a conversation that is too long.",

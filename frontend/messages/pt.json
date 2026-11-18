@@ -1101,6 +1101,7 @@
   "prefs_auto_update_check_now": "Verificar atualização agora",
   "prefs_auto_update_checking": "Verificando…",
   "prefs_auto_update_section": "Atualizações",
+  "prefs_auto_update_services_off": "Atualizações desligadas nesta execução porque o Vectora foi iniciado sem os Services (--no-services).",
   "prefs_auto_update_toggle": "Verificar atualizações automaticamente",
   "prefs_auto_update_toggle_hint": "Só no app desktop. Só tem efeito na próxima vez que você abrir o app, não imediatamente.",
   "prefs_context_compaction_hint": "Quando a conversa passa do limite de contexto do modelo, as mensagens mais antigas viram um resumo e as instruções e o trabalho mais recente são mantidos. Desligado, o histórico segue inteiro e o provedor pode recusar uma conversa longa demais.",
