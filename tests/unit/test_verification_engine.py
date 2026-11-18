@@ -90,7 +90,8 @@ def test_compute_files_snapshot_unreadable_and_traversal(
     assert len(sha) == 64
     assert file_hashes["main.py"] != "unreadable"
     assert file_hashes["unreadable.py"] == "unreadable"
-    assert "non_existent.py" not in file_hashes
+    # Arquivo tocado e ausente consta como removido, não some da evidência.
+    assert file_hashes["non_existent.py"] == "deleted"
     assert "../outside.py" not in file_hashes
 
 
@@ -525,3 +526,83 @@ async def test_run_verification_target_gate_missing_fails(
     assert res.status == "failed"
     assert res.outcome == "failed"
     assert "Quality gates solicitados não existem" in (res.failure_feedback or "")
+
+
+def _gate(gate_id: str, script: str, policy: str = "block") -> QualityGateSpec:
+    return QualityGateSpec(
+        id=gate_id,
+        name=gate_id,
+        command=[sys.executable, "-c", script],
+        policy=policy,  # ty: ignore[invalid-argument-type]
+    )
+
+
+@pytest.mark.asyncio
+async def test_gate_that_rewrites_a_file_degrades_the_result(
+    test_workspace: Path,
+) -> None:
+    before_sha, _ = compute_files_snapshot(test_workspace, files=["main.py"])
+    profile = WorkspaceVerificationProfile(
+        workspace_id="ws",
+        enabled=True,
+        gates=[
+            _gate(
+                "fmt",
+                "open('main.py','w').write('print(1)\\n')",
+            )
+        ],
+    )
+    res = await run_verification(
+        "ws", test_workspace, profile=profile, files_touched=["main.py"]
+    )
+    assert res.passed is True
+    assert (res.status, res.outcome) == ("degraded", "degraded")
+    assert res.snapshot_sha256 == before_sha
+    assert res.snapshot_after_sha256 != before_sha
+    assert res.changed_during_verification == ["main.py"]
+    assert "main.py" in (res.failure_feedback or "")
+    entry = res.to_evidence_entry()
+    assert entry["changed_during_verification"] == ["main.py"]
+    assert entry["snapshot_after_sha256"] == res.snapshot_after_sha256
+
+
+@pytest.mark.asyncio
+async def test_neutral_gate_keeps_snapshot_and_passes(test_workspace: Path) -> None:
+    profile = WorkspaceVerificationProfile(
+        workspace_id="ws", enabled=True, gates=[_gate("ok", "pass")]
+    )
+    res = await run_verification(
+        "ws", test_workspace, profile=profile, files_touched=["main.py"]
+    )
+    assert (res.status, res.outcome) == ("passed", "passed")
+    assert res.changed_during_verification == []
+    assert res.snapshot_sha256 == res.snapshot_after_sha256
+
+
+@pytest.mark.asyncio
+async def test_failing_gate_stays_failed_even_if_files_changed(
+    test_workspace: Path,
+) -> None:
+    profile = WorkspaceVerificationProfile(
+        workspace_id="ws",
+        enabled=True,
+        gates=[
+            _gate(
+                "bad",
+                "open('main.py','w').write('x'); raise SystemExit(1)",
+            )
+        ],
+    )
+    res = await run_verification(
+        "ws", test_workspace, profile=profile, files_touched=["main.py"]
+    )
+    assert (res.passed, res.status) == (False, "failed")
+    assert res.changed_during_verification == ["main.py"]
+
+
+def test_deleted_touched_file_is_recorded(test_workspace: Path) -> None:
+    sha_with, _ = compute_files_snapshot(test_workspace, files=["main.py"])
+    (test_workspace / "main.py").unlink()
+    sha_without, hashes = compute_files_snapshot(test_workspace, files=["main.py"])
+    assert hashes == {"main.py": "deleted"}
+    assert sha_without != sha_with
