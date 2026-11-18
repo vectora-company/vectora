@@ -32,13 +32,18 @@ def _is_regular_file(path: Path) -> bool:
 
 
 def compute_files_snapshot(
-    cwd: Path | str, files: list[str] | None = None
+    cwd: Path | str,
+    files: list[str] | None = None,
+    *,
+    scan_workspace_when_empty: bool = True,
 ) -> tuple[str, dict[str, str]]:
     """Calcula o SHA-256 combinado e o mapa de hashes individuais para auditoria.
 
     Args:
         cwd: Diretório base do workspace.
         files: Lista opcional de caminhos relativos. Se omitida ou vazia, varre os arquivos relevantes.
+        scan_workspace_when_empty: Com ``False``, uma lista vazia gera o snapshot
+            vazio em vez de varrer e hashear o workspace inteiro.
 
     Returns:
         Tupla com (sha256_combinado, mapa_arquivo_para_hash).
@@ -65,18 +70,11 @@ def compute_files_snapshot(
                     deleted.append(str(candidate.relative_to(root)).replace("\\", "/"))
             except (ValueError, OSError):
                 continue
-    else:
+    elif scan_workspace_when_empty:
         # Varre arquivos do workspace ignorando diretórios de cache/vcs
-        ignored_dirs = {
-            ".git",
-            ".venv",
-            "venv",
-            "node_modules",
-            "__pycache__",
-            ".pytest_cache",
-            "dist",
-            "build",
-        }
+        from backend.workspace.fs_watch import IGNORED_DIR_NAMES
+
+        ignored_dirs = IGNORED_DIR_NAMES
         for dirpath, dirnames, filenames in os.walk(root):
             dirnames[:] = [d for d in dirnames if d not in ignored_dirs]
             target_paths.extend(
