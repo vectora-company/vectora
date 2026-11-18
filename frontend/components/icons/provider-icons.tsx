@@ -1,11 +1,14 @@
 /**
  * Ícones dos provedores de LLM, usados no seletor de modelo e nas configurações.
- * Ollama, llama.cpp, Hugging Face, Laya, 9Router e OmniRoute usam o logo oficial em
- * arquivo SVG; os demais seguem como ícones simplificados até haver arquivo de
+ * Ollama, llama.cpp, Hugging Face, Laya, Clef, JEV, 9Router e OmniRoute usam o
+ * logo em arquivo; os demais seguem como ícones simplificados até haver arquivo de
  * origem (ver `assets/provider-logos/CREDITS.md`).
  */
 
+import clefLogo from "@/assets/provider-logos/clef.png";
 import huggingfaceLogo from "@/assets/provider-logos/huggingface.svg";
+import jevOnDark from "@/assets/provider-logos/jev-on-dark.png";
+import jevOnLight from "@/assets/provider-logos/jev-on-light.png";
 import layaLogo from "@/assets/provider-logos/laya.svg";
 import llamacppOnDark from "@/assets/provider-logos/llamacpp-on-dark.svg";
 import llamacppOnLight from "@/assets/provider-logos/llamacpp-on-light.svg";
@@ -240,39 +243,12 @@ export function GroqIcon({ className }: { className?: string }) {
 }
 
 export function ClefIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      className={className}
-      aria-hidden="true"
-    >
-      <path
-        d="M14.5 3.5a7.5 7.5 0 1 0 5.3 12.8l-2.1-2.1a4.5 4.5 0 1 1 0-6.4l2.1-2.1a7.47 7.47 0 0 0-5.3-2.2Z"
-        fill="currentColor"
-      />
-      <circle cx="8" cy="18.5" r="2" fill="currentColor" />
-    </svg>
-  );
+  return <LogoImage onDark={clefLogo} className={className} />;
 }
 
 export function JevIcon({ className }: { className?: string }) {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      className={className}
-      aria-hidden="true"
-    >
-      <path
-        d="M15.5 3H20v3h-1v10.5a4.5 4.5 0 0 1-9 0v-1h3v1a1.5 1.5 0 0 0 3 0V6h-3.5V3Z"
-        fill="currentColor"
-      />
-      <circle cx="6.5" cy="16.5" r="3.5" fill="currentColor" />
-      <circle cx="6.5" cy="16.5" r="1.3" fill="var(--background, #1f1f1f)" />
-    </svg>
+    <LogoImage onDark={jevOnDark} onLight={jevOnLight} className={className} />
   );
 }
 
