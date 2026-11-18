@@ -92,7 +92,7 @@ def test_forward_port_workflow_opens_isolated_conflict_pr() -> None:
 
 def test_pr_milestone_workflow_assigns_milestone_from_base() -> None:
     """Garante que bases de PR suportadas sejam associadas às milestones e que corridas sejam recuperadas."""
-    workflow = WORKFLOW.parent / "pr-release-milestone.yml"
+    workflow = WORKFLOW.parent / "pr-gate.yml"
     content = workflow.read_text(encoding="utf-8")
 
     assert ".github/release-lines.json" in content
@@ -108,10 +108,15 @@ def test_pr_milestone_workflow_assigns_milestone_from_base() -> None:
     assert "issues: write" in content
     assert "github-token: ${{ github.token }}" in content
     assert "github-token: ${{ secrets.RELEASE_PLEASE_TOKEN }}" not in content
-    assert "github.event.action == 'opened'" not in content
+    adjustments = content.split("\n  pr-adjustments:\n", 1)[1].split("\n  code:\n", 1)[
+        0
+    ]
+    # A milestone é conferida em todo evento do PR; só o job de código espera
+    # `opened`, `synchronize` ou `reopened`.
+    assert "github.event.action == 'opened'" not in adjustments
     assert "context.payload.pull_request.milestone?.title" in content
     assert 'core.setOutput("current_milestone", payloadMilestone)' in content
-    assert "if: github.event.pull_request != null" in content
+    assert "!cancelled() && github.event.pull_request != null" in content
     assert "if: github.event.pull_request.milestone == null" not in content
 
 
@@ -399,8 +404,7 @@ def test_release_workflows_use_native_github_token() -> None:
 def test_release_workflows_pin_github_script_to_node_24() -> None:
     """Garante que os workflows não reintroduzam a runtime Node.js 20 depreciada."""
     workflow_paths = [
-        WORKFLOW.parent / "pr-checks.yml",
-        WORKFLOW.parent / "pr-release-milestone.yml",
+        WORKFLOW.parent / "pr-gate.yml",
         WORKFLOW.parent / "rotate-release-lines.yml",
     ]
 
@@ -422,7 +426,7 @@ def test_release_rotation_uses_project_environment() -> None:
 def test_release_workflows_pin_ubuntu_runner() -> None:
     """Garante que os workflows de release não dependam do rótulo móvel do Ubuntu."""
     workflow_paths = [
-        WORKFLOW.parent / "pr-release-milestone.yml",
+        WORKFLOW.parent / "pr-gate.yml",
         WORKFLOW.parent / "rotate-release-lines.yml",
         WORKFLOW.parent / "forward-port-release.yml",
     ]
@@ -433,11 +437,7 @@ def test_release_workflows_pin_ubuntu_runner() -> None:
         assert "ubuntu-latest" not in content
 
 
-PULL_REQUEST_WORKFLOWS = (
-    "pr-checks.yml",
-    "pr-labeler.yml",
-    "pr-release-milestone.yml",
-)
+PULL_REQUEST_WORKFLOWS = ("pr-gate.yml",)
 
 
 def test_pull_request_workflows_run_the_revision_of_the_pull_request() -> None:
@@ -458,21 +458,27 @@ def test_pull_request_workflows_that_write_skip_forks() -> None:
     """Em PR de fork o token é somente leitura: o que escreve (label, milestone,
     comentário) só roda quando a cabeça do PR está neste repositório."""
     same_repo = "github.event.pull_request.head.repo.full_name == github.repository"
-    labeler = (WORKFLOW.parent / "pr-labeler.yml").read_text(encoding="utf-8")
-    milestone = (WORKFLOW.parent / "pr-release-milestone.yml").read_text(
-        encoding="utf-8"
-    )
-    checks = (WORKFLOW.parent / "pr-checks.yml").read_text(encoding="utf-8")
+    gate = (WORKFLOW.parent / "pr-gate.yml").read_text(encoding="utf-8")
+    adjustments = gate.split("\n  pr-adjustments:\n", 1)[1].split("\n  code:\n", 1)[0]
 
-    assert same_repo in labeler
+    # Rótulos (labeler e reconciliação) e milestone só escrevem em PR do
+    # mesmo repositório.
     assert (
         same_repo
-        in milestone.split("id: assign-milestone", 1)[1].split(
+        in adjustments.split("actions/labeler@v6", 1)[0].rsplit("      - ", 1)[1]
+    )
+    assert (
+        same_repo
+        in adjustments.split("id: assign-milestone", 1)[1].split(
             "uses: actions/github-script", 1
         )[0]
     )
-    comment = checks.split("\n  comment-no-plan-metadata:\n", 1)[1].split(
-        "\n  contracts:\n", 1
+    reconcile = adjustments.split("Reconcile Conventional Commit labels", 1)[1].split(
+        "uses: actions/github-script", 1
+    )[0]
+    assert same_repo in reconcile
+    comment = gate.split("\n  comment-metadata:\n", 1)[1].split(
+        "\n  pr-adjustments:\n", 1
     )[0]
     assert same_repo in comment.split("\n    steps:", 1)[0]
 
@@ -480,17 +486,17 @@ def test_pull_request_workflows_that_write_skip_forks() -> None:
 def test_no_plan_metadata_comment_is_posted_by_a_separate_write_job() -> None:
     """O job que lê título e corpo do PR (dado não confiável) nunca recebe escrita:
     o comentário vem de um job à parte, com mensagem fixa e sem dado do PR."""
-    checks = (WORKFLOW.parent / "pr-checks.yml").read_text(encoding="utf-8")
-    validator = checks.split("\n  no-plan-metadata:\n", 1)[1].split(
-        "\n  comment-no-plan-metadata:\n", 1
-    )[0]
-    comment = checks.split("\n  comment-no-plan-metadata:\n", 1)[1].split(
-        "\n  contracts:\n", 1
+    gate = (WORKFLOW.parent / "pr-gate.yml").read_text(encoding="utf-8")
+    validator = gate.split("\n  metadata:\n", 1)[1].split("\n  comment-metadata:\n", 1)[
+        0
+    ]
+    comment = gate.split("\n  comment-metadata:\n", 1)[1].split(
+        "\n  pr-adjustments:\n", 1
     )[0]
 
     assert "pull-requests: write" not in validator
     assert "upload-artifact" not in validator
-    assert "needs: no-plan-metadata" in comment
+    assert "needs: metadata" in comment
     assert "pull-requests: write" in comment
     assert "github.event.pull_request.title" not in comment
     assert "github.event.pull_request.body" not in comment
@@ -685,7 +691,7 @@ def test_release_attaches_only_the_selected_installers() -> None:
 
 def test_commitlint_packages_are_installed_with_exact_versions() -> None:
     """O job que comenta no PR não instala a última versão publicada a cada execução."""
-    content = (WORKFLOW.parent / "pr-checks.yml").read_text(encoding="utf-8")
+    content = (WORKFLOW.parent / "pr-gate.yml").read_text(encoding="utf-8")
 
     assert re.search(r"@commitlint/cli@\d+\.\d+\.\d+(\s|$)", content)
     assert re.search(r"@commitlint/config-conventional@\d+\.\d+\.\d+(\s|$)", content)
@@ -704,11 +710,12 @@ def test_release_build_does_not_inject_an_application_secret() -> None:
 def test_gitleaks_runs_on_every_pull_request_with_a_pinned_version() -> None:
     """Varredura de segredos na árvore e nos commits do PR, com a ferramenta
     fixada em versão exata."""
-    content = (WORKFLOW.parent / "gitleaks.yml").read_text(encoding="utf-8")
+    content = (WORKFLOW.parent / "pr-gate.yml").read_text(encoding="utf-8")
 
     assert "pull_request:" in content
     assert "fetch-depth: 0" in content
     assert "GITLEAKS_VERSION: v8." in content
+    assert "secrets-push:" in content
     # O módulo do gitleaks declara o caminho antigo; o novo não instala.
     assert (
         "go install github.com/zricethezav/gitleaks/v8@${{ env.GITLEAKS_VERSION }}"
@@ -737,7 +744,7 @@ def test_milestone_workflow_resolves_the_release_line_of_stacked_prs() -> None:
     """Uma PR empilhada herda a linha de release da raiz da pilha: o workflow
     segue as bases pelas PRs abertas, atribui a milestone da raiz e repassa a
     raiz ao validador."""
-    content = (WORKFLOW.parent / "pr-release-milestone.yml").read_text(encoding="utf-8")
+    content = (WORKFLOW.parent / "pr-gate.yml").read_text(encoding="utf-8")
 
     assert "github.rest.pulls.list" in content
     assert 'core.setOutput("stack_root", stackRoot)' in content
@@ -756,12 +763,12 @@ def test_milestone_workflow_resolves_the_release_line_of_stacked_prs() -> None:
 def test_labeler_keeps_labels_owned_by_path_rules() -> None:
     """A reconciliação pelo título não desfaz a label `ci` que as regras de
     caminho aplicam, e execuções do mesmo PR não rodam em paralelo."""
-    labeler = (WORKFLOW.parent / "pr-labeler.yml").read_text(encoding="utf-8")
+    labeler = (WORKFLOW.parent / "pr-gate.yml").read_text(encoding="utf-8")
 
     assert 'const pathOwned = new Set(["ci"]);' in labeler
     assert "!pathOwned.has(label.name)" in labeler
     assert "concurrency:" in labeler
-    assert "pr-labels-${{ github.event.pull_request.number }}" in labeler
+    assert "pr-gate-${{ github.event.pull_request.number || github.ref }}" in labeler
 
 
 def test_release_please_le_epoch_de_tag_anotada(tmp_path: Path) -> None:
@@ -801,3 +808,40 @@ def test_release_please_le_epoch_de_tag_anotada(tmp_path: Path) -> None:
 
     output = run(bash, "-c", f'latest_tag=v0.1.24; echo "{command}"')
     assert output.strip().isdigit()
+
+
+def test_pr_gate_is_one_queue_that_does_not_cancel_code_checks_on_metadata_events() -> (
+    None
+):
+    """Os workflows de PR viraram uma fila só: os checks de código esperam os de
+    metadado e só rodam ao abrir, sincronizar ou reabrir; eventos de label,
+    milestone e descrição têm grupo de concorrência próprio e nunca cancelam o
+    código em andamento."""
+    gate = (WORKFLOW.parent / "pr-gate.yml").read_text(encoding="utf-8")
+    code = gate.split("\n  code:\n", 1)[1].split("\n  secrets-push:\n", 1)[0]
+    concurrency = gate.split("\nconcurrency:\n", 1)[1].split("\npermissions:", 1)[0]
+
+    assert "needs: [metadata, pr-adjustments]" in code
+    for action in ("opened", "synchronize", "reopened"):
+        assert f"github.event.action == '{action}'" in code
+    assert "'metadata' || 'code'" in concurrency
+    for action in ("edited", "milestoned", "demilestoned", "labeled", "unlabeled"):
+        assert f'"{action}"' in concurrency
+    # O código monta o ambiente uma vez e roda pre-commit, contratos, testes de
+    # release e gitleaks no mesmo job.
+    assert code.count("actions/checkout@v7") == 1
+    for step in (
+        "pre-commit",
+        "backend.contracts check",
+        "utils/test_release.py",
+        "gitleaks dir",
+    ):
+        assert step in code
+    # Os workflows antigos não existem mais.
+    for old in (
+        "pr-checks.yml",
+        "pr-labeler.yml",
+        "pr-release-milestone.yml",
+        "gitleaks.yml",
+    ):
+        assert not (WORKFLOW.parent / old).exists(), old
