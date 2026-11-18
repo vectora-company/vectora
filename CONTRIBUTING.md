@@ -174,4 +174,4 @@ A simulação confere a lógica do job: a ordem e os argumentos das chamadas, o 
 
 ## O que o CI executa em PRs
 
-Os workflows de PR rodam a versão do próprio PR. Eles validam título (Conventional Commits), ausência de referências proibidas no texto do PR, milestone, labels, lint, tipos, testes, varredura de segurança (Snyk) e o build dos instaladores. PRs de fork rodam sem segredos: rotulagem, milestone e comentários automáticos só valem para branches do próprio repositório.
+Os workflows de PR rodam a versão do próprio PR. Eles validam título (Conventional Commits), ausência de referências proibidas no texto do PR, milestone, labels, lint, tipos, testes, varredura de segurança (gitleaks) e o build dos instaladores. PRs de fork rodam sem segredos: rotulagem, milestone e comentários automáticos só valem para branches do próprio repositório.

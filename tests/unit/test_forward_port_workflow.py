@@ -726,20 +726,6 @@ def test_gitleaks_runs_on_every_pull_request_with_a_pinned_version() -> None:
     assert "--redact" in content
 
 
-def test_snyk_scans_resolve_their_prerequisites() -> None:
-    """Os plugins npm e pip precisam das dependências de análise instaladas."""
-    content = (WORKFLOW.parent / "snyk.yml").read_text(encoding="utf-8")
-    node = content.split("\n  node-deps:\n", 1)[1].split("\n  python-deps:\n", 1)[0]
-    python = content.split("\n  python-deps:\n", 1)[1].split("\n  code:\n", 1)[0]
-
-    assert "pnpm install --frozen-lockfile --ignore-scripts" in node
-    assert node.index("pnpm install") < node.index("snyk test")
-    assert (
-        "uv pip install --no-config --python .venv/bin/python --reinstall "
-        '--no-deps pip "setuptools<81"' in python
-    )
-
-
 def test_milestone_workflow_resolves_the_release_line_of_stacked_prs() -> None:
     """Uma PR empilhada herda a linha de release da raiz da pilha: o workflow
     segue as bases pelas PRs abertas, atribui a milestone da raiz e repassa a
@@ -859,16 +845,3 @@ def test_local_llm_only_starts_a_machine_when_requested() -> None:
     assert "github.event_name == 'workflow_dispatch'" in job
     assert "contains(github.event.head_commit.message, '[llm-local]')" in job
     assert "contains(github.event.head_commit.message, '[local-llm]')" in job
-
-
-def test_snyk_in_pull_requests_only_runs_when_dependencies_change() -> None:
-    """Em PR o Snyk só roda quando um manifesto ou trava muda; o resto fica no
-    push do master, na agenda semanal e no disparo manual."""
-    content = (WORKFLOW.parent / "snyk.yml").read_text(encoding="utf-8")
-    pull_request = _trigger_block(content, "pull_request")
-
-    for manifest in ("pyproject.toml", "uv.lock", "pnpm-lock.yaml", "package.json"):
-        assert f'"{manifest}"' in pull_request
-    assert "paths:" in pull_request
-    assert "schedule:" in content
-    assert "workflow_dispatch:" in content
