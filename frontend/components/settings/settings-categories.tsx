@@ -25,13 +25,6 @@ const GeralTab = lazyWithRetry(
     })),
   "settings-geral-tab",
 );
-const MemoriaTab = lazyWithRetry(
-  () =>
-    import("./preferencias/tabs/memoria-tab").then((mod) => ({
-      default: mod.MemoriaTab,
-    })),
-  "settings-memoria-tab",
-);
 const ContaTab = lazyWithRetry(
   () =>
     import("./preferencias/tabs/conta-tab").then((mod) => ({
@@ -191,12 +184,6 @@ export function buildSettingsCategoryGroups({
       Component: GeralTab,
     },
     {
-      id: "memoria",
-      group: "preferencias",
-      label: m.settings_category_memoria(),
-      Component: MemoriaTab,
-    },
-    {
       id: "conta",
       group: "preferencias",
       label: m.settings_category_conta(),
@@ -335,13 +322,15 @@ export function buildSettingsCategoryGroups({
   return groups;
 }
 
-/** Cobrança e Sobre agora são seções da aba Conta, e Git faz parte de
- * Workbenches: os ids antigos ficam como alias para não quebrar deep-links
- * que ainda abrem `openCategory("billing")`, `("about")` ou `("git")`. */
+/** Cobrança e Sobre agora são seções da aba Conta, Git faz parte de
+ * Workbenches e as memórias vivem no workbench de Memória: os ids antigos
+ * ficam como alias para não quebrar deep-links que ainda abrem
+ * `openCategory("billing")`, `("about")`, `("git")` ou `("memoria")`. */
 const CATEGORY_ALIASES: Partial<
   Record<SettingsCategoryId, SettingsCategoryId>
 > = {
   about: "conta",
+  memoria: "geral",
   billing: "conta",
   git: "workbenches",
 };
