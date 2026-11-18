@@ -74,7 +74,8 @@ def compute_files_snapshot(
         # Varre arquivos do workspace ignorando diretórios de cache/vcs
         from backend.workspace.fs_watch import IGNORED_DIR_NAMES
 
-        ignored_dirs = IGNORED_DIR_NAMES
+        # O snapshot nunca inclui o ``.git``: o hash cobre só o conteúdo.
+        ignored_dirs = IGNORED_DIR_NAMES | {".git"}
         for dirpath, dirnames, filenames in os.walk(root):
             dirnames[:] = [d for d in dirnames if d not in ignored_dirs]
             target_paths.extend(
