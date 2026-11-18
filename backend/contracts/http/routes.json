@@ -831,6 +831,13 @@
   },
   {
     "methods": [
+      "GET"
+    ],
+    "name": "get_decision_models_catalog_provider_routing_decision_models_catalog_get",
+    "path": "/provider-routing/decision-models/catalog"
+  },
+  {
+    "methods": [
       "POST"
     ],
     "name": "update_decision_models_config_provider_routing_decision_models_config_post",

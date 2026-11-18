@@ -4965,6 +4965,18 @@ class UpdateSystemOneConfigRequest(BaseModel):
     risk_assessment_timeout_s: float | None = Field(default=None, gt=0.0, le=120.0)
 
 
+@router.get("/decision-models/catalog")
+async def get_decision_models_catalog() -> dict[str, object]:
+    """Modelos de decisão conhecidos e os providers que cada um aceita."""
+    from backend.llm.systemone.catalog import decision_catalog
+
+    catalog = decision_catalog().model_dump()
+    for model in catalog["models"]:
+        for transport in model["transports"]:
+            transport["supported"] = transport["provider"] is not None
+    return catalog
+
+
 @router.get("/decision-models/status")
 async def get_decision_models_status(
     _: ProviderAdmin = None,
