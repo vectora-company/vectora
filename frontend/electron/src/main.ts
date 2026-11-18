@@ -1143,15 +1143,21 @@ async function fetchPackagedChangelog(
  * (`vectora:check-for-update`, ver `registerIpc()`) também precisa desses
  * listeners pra a UI mostrar o resultado.
  */
-/** Register updater events and expose their merged status to the renderer. */
 function servicesDisabled(): boolean {
   return ["1", "true", "yes", "on"].includes(
     (process.env.VECTORA_NO_SERVICES ?? "").trim().toLowerCase(),
   );
 }
 
+/** Register updater events and expose their merged status to the renderer. */
 function setupAutoUpdater(): void {
-  if (servicesDisabled()) return;
+  if (servicesDisabled()) {
+    // Registrado no log do sidecar: confirma que a flag chegou ao Electron.
+    console.info(
+      "[updater] desativado nesta execução: Services desligados (--no-services)",
+    );
+    return;
+  }
   // O binário npm do Electron usado em desenvolvimento informa a versão
   // `0.0`; electron-updater exige semver válida e aborta o boot ao inicializar.
   // Atualizações automáticas só fazem sentido no pacote instalado.

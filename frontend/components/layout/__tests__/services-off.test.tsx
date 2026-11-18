@@ -11,6 +11,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { LicenseBanner } from "../license-banner";
 import { ServicesOffNotice } from "../services-off-notice";
 import { BillingPanel } from "@/components/settings/billing-panel";
+import { AutoUpdateSection } from "@/components/settings/preferencias/tabs/preferencias-tab";
 import { servicesDisabled, type LicenseStatus } from "@/lib/queries/license";
 
 vi.mock("@/lib/paraglide/messages", () => ({
@@ -136,5 +137,37 @@ describe("BillingPanel", () => {
       await screen.findByTestId("services-off-notice"),
     ).toBeInTheDocument();
     expect(screen.queryByRole("button")).toBeNull();
+  });
+});
+
+describe("AutoUpdateSection", () => {
+  beforeEach(() => {
+    vi.stubGlobal("vectora", { checkForUpdate: vi.fn() });
+  });
+
+  it("desliga a checagem e explica o motivo sem os Services", async () => {
+    respondWith(license({ services_enabled: false }));
+    renderWithQuery(
+      <AutoUpdateSection autoUpdateEnabled setAutoUpdateEnabled={vi.fn()} />,
+    );
+
+    expect(
+      await screen.findByTestId("auto-update-services-off"),
+    ).toHaveTextContent("prefs_auto_update_services_off");
+    expect(
+      screen.getByRole("button", { name: "prefs_auto_update_check_now" }),
+    ).toBeDisabled();
+  });
+
+  it("com os Services ligados a checagem manual continua disponível", async () => {
+    renderWithQuery(
+      <AutoUpdateSection autoUpdateEnabled setAutoUpdateEnabled={vi.fn()} />,
+    );
+
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
+    expect(screen.queryByTestId("auto-update-services-off")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "prefs_auto_update_check_now" }),
+    ).toBeEnabled();
   });
 });
