@@ -368,3 +368,18 @@ describe("useSettingsStore — migração de showToolCalls", () => {
     expect(migrated.showToolCalls).toBe(false);
   });
 });
+
+describe("useSettingsStore — migração do Solarized removido", () => {
+  it.each([
+    ["solarized-dark", "default-dark"],
+    ["solarized-light", "default-light"],
+  ])("%s volta para %s", async (antigo, novo) => {
+    const migrated = await migrateSettings({ themePreset: antigo }, 8);
+    expect(migrated.themePreset).toBe(novo);
+  });
+
+  it("outro preset salvo é preservado", async () => {
+    const migrated = await migrateSettings({ themePreset: "github-dark" }, 8);
+    expect(migrated.themePreset).toBe("github-dark");
+  });
+});
