@@ -19,7 +19,11 @@ def test_ignora_componentes_abaixo_da_raiz_apenas(tmp_path: Path) -> None:
     root = tmp_path / "build" / "proj"
     assert not is_ignored_path(root / "src" / "a.py", root)
     assert is_ignored_path(root / "node_modules" / "x" / "a.js", root)
-    assert is_ignored_path(root / ".git" / "HEAD", root)
+    # HEAD e refs do .git continuam observados (commits por fora avisam o Git).
+    assert not is_ignored_path(root / ".git" / "HEAD", root)
+    assert not is_ignored_path(root / ".git" / "refs" / "heads" / "main", root)
+    assert is_ignored_path(root / ".git" / "objects" / "ab" / "cd", root)
+    assert is_ignored_path(root / ".git" / "logs" / "HEAD", root)
 
 
 def test_throttle_deixa_passar_um_overflow_por_intervalo() -> None:
@@ -39,6 +43,7 @@ def test_nao_ha_eventos_de_diretorios_ignorados(tmp_path: Path) -> None:
 
     (tmp_path / "node_modules" / "pkg").mkdir(parents=True)
     (tmp_path / "src").mkdir()
+    (tmp_path / ".git" / "objects").mkdir(parents=True)
     vistos: list[str] = []
 
     class Coletor(FileSystemEventHandler):
@@ -51,9 +56,13 @@ def test_nao_ha_eventos_de_diretorios_ignorados(tmp_path: Path) -> None:
     observer.start()
     try:
         (tmp_path / "node_modules" / "pkg" / "a.js").write_text("x")
+        (tmp_path / ".git" / "objects" / "pack").write_text("x")
+        (tmp_path / ".git" / "HEAD").write_text("ref: refs/heads/main")
         (tmp_path / "src" / "b.py").write_text("y")
         deadline = time.monotonic() + 5
-        while time.monotonic() < deadline and not any("b.py" in v for v in vistos):
+        while time.monotonic() < deadline and not (
+            any("b.py" in v for v in vistos) and any("HEAD" in v for v in vistos)
+        ):
             time.sleep(0.05)
     finally:
         observer.stop()
@@ -61,4 +70,6 @@ def test_nao_ha_eventos_de_diretorios_ignorados(tmp_path: Path) -> None:
 
     assert any("b.py" in v for v in vistos)
     assert not any("node_modules" in v and v.endswith("a.js") for v in vistos)
+    assert any(v.endswith("/.git/HEAD") for v in vistos)
+    assert not any("/.git/objects/" in v for v in vistos)
     assert "node_modules" in IGNORED_DIR_NAMES
