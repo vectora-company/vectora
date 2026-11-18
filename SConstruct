@@ -556,6 +556,41 @@ def _free_desktop_dist() -> None:
         print(">> limpou win-unpacked travado (lock prevention)")
 
 
+def _resolve_update_channel() -> str:
+    """Canal de atualização do pacote: o do ambiente ou, sem ele, o do CI.
+
+    O electron-builder expande ``${env.VECTORA_UPDATE_CHANNEL}`` na URL de
+    publicação e aborta se a variável não existir. O workflow a define pelo
+    ``utils/release.py update-channel``; localmente o mesmo cálculo roda aqui,
+    a partir da versão do ``pyproject.toml``.
+    """
+    channel = os.environ.get("VECTORA_UPDATE_CHANNEL", "").strip()
+    if channel:
+        return channel
+    with open(os.path.join(ROOT, "pyproject.toml"), encoding="utf-8") as handle:
+        found = re.search(r'^version\s*=\s*"([^"]+)"', handle.read(), re.M)
+    if found is None:
+        raise SystemExit("pyproject.toml sem `version`: defina VECTORA_UPDATE_CHANNEL.")
+    result = subprocess.run(
+        [
+            "uv", "run", "--no-project", "--with", "pydantic>=2.13.4",
+            "python", os.path.join("utils", "release.py"), "update-channel", found.group(1),
+        ],
+        cwd=ROOT,
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
+    )
+    channel = result.stdout.strip().splitlines()[-1] if result.stdout.strip() else ""
+    if result.returncode != 0 or not channel:
+        raise SystemExit(
+            "Não foi possível resolver o canal de atualização "
+            f"({result.stderr.strip() or 'sem saída'}); defina VECTORA_UPDATE_CHANNEL."
+        )
+    print(f">> canal de atualização: {channel}")
+    return channel
+
+
 def _action_package(target, source, env, platform=""):
     """Empaqueta com electron-builder escrevendo fora do repositório.
 
@@ -581,7 +616,7 @@ def _action_package(target, source, env, platform=""):
         cmd.append(flag)
     cmd.append(f"-c.directories.output={out_dir}")
 
-    build_env: dict[str, str] = {}
+    build_env: dict[str, str] = {"VECTORA_UPDATE_CHANNEL": _resolve_update_channel()}
     has_signing_creds = any(
         os.environ.get(k)
         for k in ("CSC_LINK", "WIN_CSC_LINK", "CSC_KEY_PASSWORD", "MAC_CSC_LINK")
