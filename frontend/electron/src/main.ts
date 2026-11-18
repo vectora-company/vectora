@@ -1156,6 +1156,7 @@ function servicesDisabled(): boolean {
   );
 }
 
+/** Register updater events and expose their merged status to the renderer. */
 function setupAutoUpdater(): void {
   if (servicesDisabled()) {
     // Registrado no log do sidecar: confirma que a flag chegou ao Electron.
