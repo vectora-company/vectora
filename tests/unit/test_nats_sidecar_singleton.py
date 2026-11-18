@@ -171,7 +171,7 @@ async def test_consumo_para_quando_a_conexao_morre_de_vez():
     async def _connect():
         return _JS()
 
-    mq._connect = _connect  # ty: ignore[invalid-assignment]
+    mq._connect = _connect
     mq._failed = True  # `_closed_cb` já rodou
 
     async def _handler(_msg):

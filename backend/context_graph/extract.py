@@ -15857,6 +15857,8 @@ def extract(
     all_edges: list[dict] = []
     all_raw_calls: list[dict] = []
     for result in per_file:
+        if result is None:
+            continue
         all_nodes.extend(result.get("nodes", []))
         all_edges.extend(result.get("edges", []))
         all_raw_calls.extend(result.get("raw_calls", []))

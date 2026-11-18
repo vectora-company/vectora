@@ -335,7 +335,7 @@ class TestErroDeExecucaoFicaLogado:
 
         assert any(
             "native_stream: erro na execução do agente" in rec.message
-            and rec.exc_info is not None
+            and isinstance(rec.exc_info, tuple)
             and "boom: provider explodiu de verdade" in str(rec.exc_info[1])
             for rec in caplog.records
         )

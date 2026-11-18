@@ -784,11 +784,10 @@ def _action_update(target, source, env):
     intocado); `pnpm update` fica dentro dos ranges de cada package.json;
 
     `scons update --latest`: `pnpm update --latest` ignora os ranges do
-    package.json e cruza majors (reescreve o package.json com a versão mais
-    nova de cada pacote) — uso preparatório de migração grande, nunca rotina;
-    depois é revisão manual por pacote major-bumped contra changelogs. Do lado
-    Python, `uv lock --upgrade` resolve pro mais novo permitido pelos `>=` sem
-    teto do pyproject.toml (não há range a "ignorar" lá).
+    package.json e cruza majors, atualizando também as versões declaradas.
+    No Python, atualiza os limites mínimos das dependências diretas em
+    pyproject.toml para as versões resolvidas em uv.lock, preservando markers,
+    extras e limites superiores.
 
     Não roda lint/tests ao final: o gate continua sendo
     `scons lint && scons tests`, manual, depois de revisar os lockfiles.
@@ -797,13 +796,20 @@ def _action_update(target, source, env):
     pnpm_update_args = ["update", "--latest"] if latest else ["update"]
     with _open_log("update") as log:
         _run(["uv", "lock", "--upgrade"], log=log, cwd=VECTORA)
+        if latest:
+            _run(
+                ["uv", "run", "python", "utils/update_dependency_constraints.py"],
+                log=log,
+                cwd=VECTORA,
+            )
+            _run(["uv", "lock", "--upgrade"], log=log, cwd=VECTORA)
         _run(["uv", "sync"], log=log, cwd=VECTORA)
         _run([PNPM, "--dir", "frontend", *pnpm_update_args], log=log)
     print("\n>> log completo em .scons-logs/update.txt")
     if latest:
         print(
-            ">> --latest: ranges/lockfiles ignorados — revise cada dep com "
-            "major bump contra os changelogs antes de commitar"
+            ">> --latest atualizou manifests e lockfiles; revise breaking "
+            "changes das dependências antes de commitar"
         )
     else:
         print(">> revise uv.lock / frontend/pnpm-lock.yaml antes de commitar")

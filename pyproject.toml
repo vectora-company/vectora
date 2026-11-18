@@ -15,98 +15,98 @@ requires-python = ">=3.13"
 classifiers = ["Private :: Do Not Upload"]
 
 dependencies = [
-    "fastapi>=0.138.0",
+    "fastapi>=0.163.2",
     "defusedxml>=0.7.1",
-    "uvicorn[standard]>=0.49.0",
-    "pydantic>=2.13.4",
-    "pydantic-settings>=2.14.2",
+    "uvicorn[standard]>=0.54.0",
+    "pydantic>=2.14.3",
+    "pydantic-settings>=2.16.3",
     "aiosqlite>=0.22.1",
-    "lancedb>=0.37.1 ; (sys_platform != 'darwin' or platform_machine != 'x86_64') and (sys_platform != 'win32' or platform_machine != 'ARM64')",
-    "pyarrow>=24.0.0",
-    "sqlalchemy>=2.0.51",
-    "mcp>=1.29.0",
+    "lancedb>=0.41.0 ; (sys_platform != 'darwin' or platform_machine != 'x86_64') and (sys_platform != 'win32' or platform_machine != 'ARM64')",
+    "pyarrow>=26.0.1",
+    "sqlalchemy>=2.1.9",
+    "mcp>=2.3.0",
     # mcp.cli.cli importa typer incondicionalmente — não é dependência
     # opcional de fato apesar do extra "cli" do pacote; sem isso o build
     # nativo (PyInstaller collect_all('mcp')) quebra com ModuleNotFoundError.
-    "typer>=0.15.0",
+    "typer>=0.29.1",
     "rich>=15.0.0",
     "rank-bm25>=0.2.2",
-    "python-dotenv>=1.2.2",
+    "python-dotenv>=1.2.4",
     "pathspec>=1.1.1",
-    "watchdog>=6.0.0",
-    "tiktoken>=0.13.0",
-    "pandas>=3.0.3",
+    "watchdog>=7.1.0",
+    "tiktoken>=0.14.0",
+    "pandas>=3.1.1",
     "argon2-cffi>=25.1.0",
     "pynacl>=1.6.2",
     "slowapi>=0.1.10",
     "keyring>=25.7.0",
-    "pykeepass>=4.1.1",
-    "cryptography>=44.0.0",
-    "certifi>=2026.10.18",
+    "pykeepass>=4.2.0",
+    "cryptography>=50.0.2",
+    "certifi>=2026.10.23",
     "gitpython>=3.2.1",
     "httpx>=0.28.1",
-    "pywinpty>=3.0.5 ; sys_platform == 'win32'",
-    "ptyprocess>=0.7 ; sys_platform != 'win32'",
+    "pywinpty>=3.1.2 ; sys_platform == 'win32'",
+    "ptyprocess>=0.7.0 ; sys_platform != 'win32'",
     "pyseccomp>=0.1.2 ; sys_platform == 'linux'",
-    "asyncssh>=2.23.1",
-    "send2trash>=2.1.0",
+    "asyncssh>=2.24.1",
+    "send2trash>=2.2.0",
     "pystray>=0.19.5",
     "pillow>=13.0.0",
-    "pyautogui-next>=0.9.55",
-    "redis[hiredis]>=7.4.1",
-    "asyncpg>=0.31.0",
+    "pyautogui-next>=1.0.0",
+    "redis[hiredis]>=8.1.0",
+    "asyncpg>=0.32.0",
     # qdrant-client requires grpcio, which has no Windows ARM64 wheel and
     # currently fails to build there with conflicting MSVC /std flags.
     # Windows ARM remains usable with local SQLite/LanceDB; Qdrant is omitted.
-    "qdrant-client>=1.18.0 ; sys_platform != 'win32' or platform_machine != 'ARM64'",
+    "qdrant-client>=1.20.0 ; sys_platform != 'win32' or platform_machine != 'ARM64'",
     # SDKs oficiais usados direto por backend/tools/media.py (geração de
     # imagem/áudio) e backend/llm/transcription.py.
-    "openai>=2.52.0",
-    "google-genai>=2.16.0",
-    "pyjwt>=2.13.0",
-    "croniter>=6.2.2",
-    "psycopg>=3.3.4",
+    "openai>=3.53.0",
+    "google-genai>=3.4.0",
+    "pyjwt>=2.15.1",
+    "croniter>=7.0.0",
+    "psycopg>=3.3.9",
     # psycopg-binary ainda não publica wheel para Windows ARM64. O backend
     # SQLite continua funcional nesse alvo; PostgreSQL requer libpq externa.
-    "psycopg-binary>=3.3.4 ; sys_platform != 'win32' or platform_machine != 'ARM64'",
-    "networkx>=3.4",
-    "numpy>=1.21",
-    "rapidfuzz>=3.0",
-    "tree-sitter>=0.23.0,<0.26",
-    "tree-sitter-python>=0.23,<0.26",
-    "tree-sitter-javascript>=0.23,<0.26",
-    "tree-sitter-typescript>=0.23,<0.25",
-    "tree-sitter-go>=0.23,<0.26",
-    "tree-sitter-rust>=0.23,<0.25",
-    "tree-sitter-java>=0.23,<0.25",
-    "tree-sitter-c>=0.23,<0.25",
-    "tree-sitter-cpp>=0.23,<0.25",
-    "tree-sitter-json>=0.23,<0.26",
-    "playwright>=1.50.0",
-    "nats-py>=2.9.0",
+    "psycopg-binary>=3.3.9 ; sys_platform != 'win32' or platform_machine != 'ARM64'",
+    "networkx>=3.7",
+    "numpy>=2.5.5",
+    "rapidfuzz>=3.14.6",
+    "tree-sitter>=0.25.2,<0.26",
+    "tree-sitter-python>=0.25.0,<0.26",
+    "tree-sitter-javascript>=0.25.0,<0.26",
+    "tree-sitter-typescript>=0.23.2,<0.25",
+    "tree-sitter-go>=0.25.0,<0.26",
+    "tree-sitter-rust>=0.24.2,<0.25",
+    "tree-sitter-java>=0.23.5,<0.25",
+    "tree-sitter-c>=0.24.2,<0.25",
+    "tree-sitter-cpp>=0.23.4,<0.25",
+    "tree-sitter-json>=0.24.8,<0.26",
+    "playwright>=1.65.2",
+    "nats-py>=2.17.0",
     # Vectora Connect — SDKs oficiais das plataformas de mensageria. Email usa
     # imaplib/smtplib da stdlib, sem dependência.
     "python-telegram-bot>=22.8",
     "discord.py>=2.7.1",
     "slack-bolt>=1.30.0",
-    "tree-sitter-language-pack>=1.14,<2",
+    "tree-sitter-language-pack>=1.25.2,<2",
     # Parsers de documento reais para `ingest_docs`/`context_graph/detect.py`
     # (antes só existiam atrás de `try/except ImportError` — nunca rodavam
     # em nenhuma instalação real, PDF/DOCX/XLSX viravam lixo binário no RAG).
-    "pypdf>=6.21.4",
+    "pypdf>=7.1.0",
     "python-docx>=1.2.0",
     "openpyxl>=3.1.5",
     # YouTube/outras plataformas (backend/tools/youtube.py) — captions
     # públicas primeiro (sem baixar mídia nenhuma), yt-dlp só como
     # fallback (áudio, sem captions) ou pra extrair um frame sob demanda.
-    "youtube-transcript-api>=1.2.4",
-    "yt-dlp>=2026.3.17",
+    "youtube-transcript-api>=1.2.5",
+    "yt-dlp>=2026.10.26",
     # ctranslate2 não publica wheel para Windows ARM64; nesse alvo, a
     # transcrição remota continua disponível e a readiness local reporta a dependência ausente.
     # macOS Intel não é um alvo suportado e também não possui as wheels locais necessárias.
     "faster-whisper>=1.2.1 ; (sys_platform != 'darwin' or platform_machine != 'x86_64') and (sys_platform != 'win32' or platform_machine != 'ARM64')",
     "pypdfium2>=5.15.2",
-    "zstandard>=0.23.0",
+    "zstandard>=0.25.0",
 ]
 
 [project.scripts]
@@ -336,7 +336,7 @@ exclude = ["backend/mcp/server.py", "tests/fixtures/dummy_mcp_server.py"]
 include = ["backend/sandbox/landlock.py", "backend/sandbox/rlimits.py"]
 
 [tool.ty.overrides.rules]
-unresolved-attribute = "ignore"
+missing-attribute = "ignore"
 
 [[tool.ty.overrides]]
 # extract.py: 8500+ linhas de parsers tree-sitter com imports opcionais (try/except).
@@ -345,10 +345,10 @@ unresolved-attribute = "ignore"
 include = ["backend/context_graph/extract.py"]
 
 [tool.ty.overrides.rules]
-unresolved-import = "ignore"
-unresolved-attribute = "ignore"
+import-not-found = "ignore"
+missing-attribute = "ignore"
 invalid-argument-type = "ignore"
-invalid-return-type = "ignore"
+invalid-explicit-return = "ignore"
 invalid-assignment = "ignore"
 
 [[tool.ty.overrides]]
@@ -384,10 +384,10 @@ include = [
 ]
 
 [tool.ty.overrides.rules]
-unresolved-import = "ignore"
-unresolved-attribute = "ignore"
+import-not-found = "ignore"
+missing-attribute = "ignore"
 invalid-argument-type = "ignore"
-invalid-return-type = "ignore"
+invalid-explicit-return = "ignore"
 invalid-assignment = "ignore"
 missing-argument = "ignore"
 unsupported-operator = "ignore"

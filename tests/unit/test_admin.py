@@ -29,25 +29,25 @@ class TestAdminHandlerExists:
     def test_list_users_route_registered(self):
         from backend.api.handlers.admin import router
 
-        paths = [r.path for r in router.routes]  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+        paths = [r.path for r in router.routes]  # type: ignore[attr-defined]  # ty: ignore[missing-attribute]
         assert any("users" in p for p in paths)
 
     def test_system_info_route_registered(self):
         from backend.api.handlers.admin import router
 
-        paths = [r.path for r in router.routes]  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+        paths = [r.path for r in router.routes]  # type: ignore[attr-defined]  # ty: ignore[missing-attribute]
         assert any("system" in p for p in paths)
 
     def test_config_route_registered(self):
         from backend.api.handlers.admin import router
 
-        paths = [r.path for r in router.routes]  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+        paths = [r.path for r in router.routes]  # type: ignore[attr-defined]  # ty: ignore[missing-attribute]
         assert any("config" in p for p in paths)
 
     def test_tools_override_route_registered(self):
         from backend.api.handlers.admin import router
 
-        paths = [r.path for r in router.routes]  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+        paths = [r.path for r in router.routes]  # type: ignore[attr-defined]  # ty: ignore[missing-attribute]
         assert any("tools" in p for p in paths)
 
 
@@ -341,7 +341,7 @@ class TestCreateInvite:
                 CreateInviteBody(role="member", email="novo@example.com"),
             )
 
-        assert exc.value.status_code == 403  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+        assert exc.value.status_code == 403  # type: ignore[attr-defined]  # ty: ignore[missing-attribute]
         create_invite_mock.assert_not_awaited()
 
 
@@ -414,7 +414,7 @@ class TestInviteLinkAndTypedResponses:
         with pytest.raises(Exception) as exc:
             await create_invite(self._admin_request(), CreateInviteBody(role="root"))
 
-        assert exc.value.status_code == 400  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+        assert exc.value.status_code == 400  # type: ignore[attr-defined]  # ty: ignore[missing-attribute]
         create_mock.assert_not_awaited()
 
     @pytest.mark.asyncio
@@ -457,7 +457,7 @@ class TestInviteLinkAndTypedResponses:
         for call in (list_invites(member), revoke_invite(member, "h1")):
             with pytest.raises(Exception) as exc:
                 await call
-            assert exc.value.status_code == 403  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+            assert exc.value.status_code == 403  # type: ignore[attr-defined]  # ty: ignore[missing-attribute]
         list_mock.assert_not_awaited()
         revoke_mock.assert_not_awaited()
 
@@ -477,7 +477,7 @@ class TestInviteLinkAndTypedResponses:
         monkeypatch.setattr(auth_svc, "revoke_invite", AsyncMock(return_value=False))
         with pytest.raises(Exception) as exc:
             await revoke_invite(self._admin_request(), "h2")
-        assert exc.value.status_code == 404  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+        assert exc.value.status_code == 404  # type: ignore[attr-defined]  # ty: ignore[missing-attribute]
 
 
 class TestToggleToolGlobal:
@@ -595,7 +595,7 @@ class TestTimezoneEndpoint:
     def test_rotas_registradas(self):
         from backend.api.handlers.admin import router
 
-        paths = [r.path for r in router.routes]  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+        paths = [r.path for r in router.routes]  # type: ignore[attr-defined]  # ty: ignore[missing-attribute]
         assert any("timezone" in p for p in paths)
 
     @pytest.mark.asyncio
