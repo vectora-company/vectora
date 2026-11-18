@@ -598,8 +598,8 @@ def test_linux_release_installs_native_package_build_tools() -> None:
         line.lstrip().startswith("bash ") and ".sh" in line
         for line in content.splitlines()
     )
-    assert "os: ubuntu-22.04" in content
-    assert "os: ubuntu-22.04-arm" in content
+    assert '"os":"ubuntu-22.04"' in content
+    assert '"os":"ubuntu-22.04-arm"' in content
     assert "sudo snap install lxd" not in content
     assert "sudo lxd init --auto" not in content
     assert "sudo snap install snapcraft" not in content
@@ -872,3 +872,42 @@ def test_snyk_in_pull_requests_only_runs_when_dependencies_change() -> None:
     assert "paths:" in pull_request
     assert "schedule:" in content
     assert "workflow_dispatch:" in content
+
+
+def _matrix_sets(job: str) -> tuple[list[dict], list[dict]]:
+    """Os dois conjuntos de ``include`` (PR e completo) de um job do app."""
+    import json
+
+    content = (WORKFLOW.parent / "vectora.yml").read_text(encoding="utf-8")
+    body = content.split(f"\n  {job}:\n", 1)[1].split("\n    steps:", 1)[0]
+    found = re.search(
+        r"fromJSON\(github\.event_name == 'pull_request' && '(\[.*?\])' \|\| '(\[.*?\])'\)",
+        body,
+    )
+    assert found is not None, job
+    return json.loads(found.group(1)), json.loads(found.group(2))
+
+
+def test_pull_requests_build_only_linux_x64_and_full_runs_keep_every_platform() -> None:
+    """Em PR roda um pacote, uma distribuição e um .deb; o disparo manual e o
+    master seguem com cinco plataformas, sete distribuições e oito instaladores."""
+    native_pr, native_full = _matrix_sets("release-native")
+    distro_pr, distro_full = _matrix_sets("linux-package-install")
+    smoke_pr, smoke_full = _matrix_sets("desktop-install-smoke")
+
+    assert [(e["target"], e["arch"]) for e in native_pr] == [("linux", "x64")]
+    assert {(e["target"], e["arch"]) for e in native_full} == {
+        ("linux", "x64"),
+        ("linux", "arm64"),
+        ("mac", "arm64"),
+        ("win", "x64"),
+        ("win", "arm64"),
+    }
+    assert [e["distro"] for e in distro_pr] == ["Ubuntu 24.04"]
+    assert len(distro_full) == 7
+    assert [(e["platform"], e["arch"], e["format"]) for e in smoke_pr] == [
+        ("Linux", "x64", "deb")
+    ]
+    assert len(smoke_full) == 8
+    # O que a PR instala é um subconjunto do que ela constrói.
+    assert smoke_pr[0]["arch"] == native_pr[0]["arch"]

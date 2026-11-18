@@ -486,25 +486,12 @@ jobs:
       VECTORA_UPDATE_CHANNEL: ${{ needs.release-channel.outputs.channel }}
     strategy:
       fail-fast: false
+      # Em PR só o Linux x64 (a plataforma mais barata): empacotamento e smoke
+      # do binário são validados; a matriz completa roda no disparo manual e
+      # no master. Snapcraft's project base is core22: building on the matching
+      # host lets us use destructive mode and avoids a remote LXD image pull.
       matrix:
-        include:
-          # Snapcraft's project base is core22. Building on the matching host
-          # lets us use destructive mode and avoids a remote LXD image pull.
-          - os: ubuntu-22.04
-            arch: x64
-            target: linux
-          - os: ubuntu-22.04-arm
-            arch: arm64
-            target: linux
-          - os: macos-26
-            arch: arm64
-            target: mac
-          - os: windows-latest
-            arch: x64
-            target: win
-          - os: windows-11-arm
-            arch: arm64
-            target: win
+        include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"os":"ubuntu-22.04","arch":"x64","target":"linux"}]' || '[{"os":"ubuntu-22.04","arch":"x64","target":"linux"},{"os":"ubuntu-22.04-arm","arch":"arm64","target":"linux"},{"os":"macos-26","arch":"arm64","target":"mac"},{"os":"windows-latest","arch":"x64","target":"win"},{"os":"windows-11-arm","arch":"arm64","target":"win"}]') }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -799,28 +786,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - distro: Ubuntu 22.04
-            image: ubuntu:22.04
-            family: deb
-          - distro: Ubuntu 24.04
-            image: ubuntu:24.04
-            family: deb
-          - distro: Ubuntu 26.04
-            image: ubuntu:26.04
-            family: deb
-          - distro: Debian 12
-            image: debian:12
-            family: deb
-          - distro: Debian 13
-            image: debian:13
-            family: deb
-          - distro: Fedora
-            image: fedora:latest
-            family: rpm
-          - distro: Arch Linux
-            image: archlinux:latest
-            family: pacman
+        # Em PR só o Ubuntu 24.04; todas as distribuições no disparo manual e
+        # no master.
+        include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"distro":"Ubuntu 24.04","image":"ubuntu:24.04","family":"deb"}]' || '[{"distro":"Ubuntu 22.04","image":"ubuntu:22.04","family":"deb"},{"distro":"Ubuntu 24.04","image":"ubuntu:24.04","family":"deb"},{"distro":"Ubuntu 26.04","image":"ubuntu:26.04","family":"deb"},{"distro":"Debian 12","image":"debian:12","family":"deb"},{"distro":"Debian 13","image":"debian:13","family":"deb"},{"distro":"Fedora","image":"fedora:latest","family":"rpm"},{"distro":"Arch Linux","image":"archlinux:latest","family":"pacman"}]') }}
     steps:
       - name: Download Linux x64 installers
         uses: actions/download-artifact@v8
@@ -915,39 +883,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - platform: Windows
-            os: windows-latest
-            arch: x64
-            format: exe
-          - platform: Windows
-            os: windows-latest
-            arch: x64
-            format: msi
-          - platform: Windows
-            os: windows-11-arm
-            arch: arm64
-            format: exe
-          - platform: Windows
-            os: windows-11-arm
-            arch: arm64
-            format: msi
-          - platform: macOS
-            os: macos-26
-            arch: arm64
-            format: dmg
-          - platform: macOS
-            os: macos-26
-            arch: arm64
-            format: zip
-          - platform: Linux
-            os: ubuntu-24.04
-            arch: x64
-            format: deb
-          - platform: Linux
-            os: ubuntu-24.04-arm
-            arch: arm64
-            format: deb
+        # Em PR só o .deb de Linux x64, o único pacote que a PR constrói.
+        include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"platform":"Linux","os":"ubuntu-24.04","arch":"x64","format":"deb"}]' || '[{"platform":"Windows","os":"windows-latest","arch":"x64","format":"exe"},{"platform":"Windows","os":"windows-latest","arch":"x64","format":"msi"},{"platform":"Windows","os":"windows-11-arm","arch":"arm64","format":"exe"},{"platform":"Windows","os":"windows-11-arm","arch":"arm64","format":"msi"},{"platform":"macOS","os":"macos-26","arch":"arm64","format":"dmg"},{"platform":"macOS","os":"macos-26","arch":"arm64","format":"zip"},{"platform":"Linux","os":"ubuntu-24.04","arch":"x64","format":"deb"},{"platform":"Linux","os":"ubuntu-24.04-arm","arch":"arm64","format":"deb"}]') }}
     runs-on: ${{ matrix.os }}
     steps:
       - name: Download native installer
