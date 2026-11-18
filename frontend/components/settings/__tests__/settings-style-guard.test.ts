@@ -39,7 +39,6 @@ const BASELINE: Record<string, number> = {
   "environment/tabs/skills-tab.tsx": 5,
   "environment/tabs/tool-policy-panel.tsx": 3,
   "preferencias/tabs/memoria-tab.tsx": 1,
-  "preferencias/tabs/preferencias-tab.tsx": 1,
   "preferencias/theme-picker.tsx": 2,
   "settings-overlay.tsx": 1,
 };

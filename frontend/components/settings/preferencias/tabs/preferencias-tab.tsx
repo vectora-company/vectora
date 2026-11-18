@@ -43,6 +43,11 @@ import { useIsDark } from "@/lib/hooks/use-is-dark";
 import { getPairedPresetId } from "@/lib/theme/presets";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { m } from "@/lib/paraglide/messages";
+import {
+  SettingsMessage,
+  SettingsSection,
+  SettingsStack,
+} from "@/components/settings/primitives";
 import { useServicesDisabled } from "@/components/layout/services-off-notice";
 import { mDyn } from "@/lib/i18n-dyn";
 import {
@@ -137,8 +142,7 @@ function ContextCompactionSection() {
   const enabled = useSettingsStore((s) => s.contextCompactionEnabled);
   const setEnabled = useSettingsStore((s) => s.setContextCompactionEnabled);
   return (
-    <div className="space-y-3">
-      <Label>{m.prefs_context_compaction_section()}</Label>
+    <SettingsSection title={m.prefs_context_compaction_section()}>
       <div className="flex items-center justify-between gap-3">
         <div>
           <Label htmlFor="context-compaction-toggle" className="cursor-pointer">
@@ -154,7 +158,7 @@ function ContextCompactionSection() {
           onCheckedChange={setEnabled}
         />
       </div>
-    </div>
+    </SettingsSection>
   );
 }
 
@@ -196,8 +200,7 @@ function AutoUpdateControls({
   };
 
   return (
-    <div className="space-y-3">
-      <Label>{m.prefs_auto_update_section()}</Label>
+    <SettingsSection title={m.prefs_auto_update_section()}>
       <div className="flex items-center justify-between gap-3">
         <div>
           <Label htmlFor="auto-update-toggle" className="cursor-pointer">
@@ -215,13 +218,9 @@ function AutoUpdateControls({
         />
       </div>
       {servicesOff && (
-        <p
-          role="status"
-          data-testid="auto-update-services-off"
-          className="text-xs text-muted-foreground"
-        >
+        <SettingsMessage tone="info" data-testid="auto-update-services-off">
           {m.prefs_auto_update_services_off()}
-        </p>
+        </SettingsMessage>
       )}
       <Button
         variant="outline"
@@ -233,7 +232,7 @@ function AutoUpdateControls({
           ? m.prefs_auto_update_checking()
           : m.prefs_auto_update_check_now()}
       </Button>
-    </div>
+    </SettingsSection>
   );
 }
 
@@ -288,11 +287,16 @@ function TimezoneSection() {
   if (available.length === 0) return null;
 
   return (
-    <div className="space-y-3">
-      <Label htmlFor="timezone">{m.prefs_timezone_section()}</Label>
-      <p className="text-xs text-muted-foreground">{m.prefs_timezone_hint()}</p>
+    <SettingsSection
+      title={m.prefs_timezone_section()}
+      description={m.prefs_timezone_hint()}
+    >
       <Select value={timezone} onValueChange={(v) => void handleChange(v)}>
-        <SelectTrigger id="timezone" className="w-[280px]">
+        <SelectTrigger
+          id="timezone"
+          className="w-[280px]"
+          aria-label={m.prefs_timezone_section()}
+        >
           <SelectValue placeholder={m.prefs_timezone_placeholder()} />
         </SelectTrigger>
         <SelectContent className="max-h-[300px]">
@@ -303,8 +307,8 @@ function TimezoneSection() {
           ))}
         </SelectContent>
       </Select>
-      {error && <p className="text-xs text-destructive">{error}</p>}
-    </div>
+      {error && <SettingsMessage tone="danger">{error}</SettingsMessage>}
+    </SettingsSection>
   );
 }
 
@@ -450,14 +454,11 @@ export function PreferenciasTab() {
   };
 
   return (
-    <div className="space-y-6">
-      <section className="space-y-3 rounded-lg border border-border/60 p-4">
-        <h3 className="text-sm font-medium text-foreground">
-          {m.prefs_weekly_insight_title()}
-        </h3>
-        <p className="text-xs text-muted-foreground">
-          {m.prefs_weekly_insight_help()}
-        </p>
+    <SettingsStack>
+      <SettingsSection
+        title={m.prefs_weekly_insight_title()}
+        description={m.prefs_weekly_insight_help()}
+      >
         <div className="flex items-center justify-between gap-3">
           <Label htmlFor="weekly-insight-enabled">
             {m.prefs_weekly_insight_enabled()}
@@ -495,7 +496,7 @@ export function PreferenciasTab() {
               weeklyInsightDismissedWindow !==
                 `${weeklyInsight.window_start}/${weeklyInsight.window_end}` && (
                 <div
-                  className="rounded-md bg-muted/40 p-3 text-xs space-y-1"
+                  className="rounded-md border border-border bg-muted/40 p-3 text-xs space-y-1"
                   role="status"
                 >
                   <div>
@@ -547,14 +548,10 @@ export function PreferenciasTab() {
               )}
           </>
         )}
-      </section>
+      </SettingsSection>
       {/* Aparência — tema (com preview) + UI Scale, agrupados numa seção só,
           em vez de espalhados sem relação visual entre si. */}
-      <div className="space-y-6">
-        <h3 className="text-sm font-medium text-foreground">
-          {m.prefs_appearance_section()}
-        </h3>
-
+      <SettingsSection title={m.prefs_appearance_section()}>
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-3">
             <Label>{m.prefs_theme()}</Label>
@@ -611,7 +608,7 @@ export function PreferenciasTab() {
                       }
                       className="h-8 w-8 shrink-0 cursor-pointer rounded border border-border bg-transparent p-0.5"
                     />
-                    <span className="text-[11px] font-mono text-muted-foreground truncate">
+                    <span className="text-2xs font-mono text-muted-foreground truncate">
                       {activeCustomColors[key]}
                     </span>
                   </div>
@@ -638,141 +635,146 @@ export function PreferenciasTab() {
             }))}
           />
         </div>
+      </SettingsSection>
 
-        <div className="space-y-3 rounded-lg border border-border/60 p-4">
-          <div>
-            <h4 className="text-sm font-medium text-foreground">
-              {m.prefs_fonts_section()}
-            </h4>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {m.prefs_fonts_godot_help()}
+      <SettingsSection
+        title={m.prefs_fonts_section()}
+        description={m.prefs_fonts_godot_help()}
+      >
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <Label htmlFor="editor-auto-save">
+              {m.prefs_editor_auto_save()}
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              {m.prefs_editor_auto_save_help()}
             </p>
           </div>
-          <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <Label htmlFor="editor-auto-save">
-                {m.prefs_editor_auto_save()}
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                {m.prefs_editor_auto_save_help()}
-              </p>
-            </div>
-            <Switch
-              id="editor-auto-save"
-              checked={editorAutoSave}
-              onCheckedChange={setEditorAutoSave}
-            />
-          </div>
-          <FontSelect
-            id="editor-font-family"
-            label={m.prefs_editor_font()}
-            help={m.prefs_editor_font_help()}
-            value={editorFontFamily}
-            onChange={setEditorFontFamily}
-          />
-          <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <Label htmlFor="editor-font-size">
-                {m.prefs_editor_font_size()}
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                {m.prefs_editor_font_size_help()}
-              </p>
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <Input
-                id="editor-font-size"
-                type="number"
-                min={MONACO_FONT_SIZE_MIN}
-                max={MONACO_FONT_SIZE_MAX}
-                step={1}
-                value={monacoFontSize}
-                onChange={(event) => {
-                  const value = Number(event.target.value);
-                  if (Number.isFinite(value)) setMonacoFontSize(value);
-                }}
-                className="w-[100px]"
-                aria-label={m.prefs_editor_font_size()}
-              />
-              <span className="text-xs text-muted-foreground">
-                {m.prefs_editor_font_size_unit()}
-              </span>
-            </div>
-          </div>
-          <FontSelect
-            id="mono-font-family"
-            label={m.prefs_mono_font()}
-            help={m.prefs_mono_font_help()}
-            value={monoFontFamily}
-            onChange={setMonoFontFamily}
-            mono
-          />
-          <FontSelect
-            id="ui-font-family"
-            label={m.prefs_ui_font()}
-            help={m.prefs_ui_font_help()}
-            value={uiFontFamily}
-            onChange={setUiFontFamily}
+          <Switch
+            id="editor-auto-save"
+            checked={editorAutoSave}
+            onCheckedChange={setEditorAutoSave}
           />
         </div>
-      </div>
-
-      {/* Idioma */}
-      <div className="space-y-2">
-        <Label htmlFor="language">{m.prefs_language()}</Label>
-        <Select value={language} onValueChange={(v) => setLanguage(v as Lang)}>
-          <SelectTrigger id="language">
-            <SelectValue>
-              {SUPPORTED_LANGS.find((l) => l.value === language)?.label ??
-                language}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {SUPPORTED_LANGS.map(({ value, label }) => (
-              <SelectItem key={value} value={value}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Posição da sidebar de sessões (workbench no lado oposto) */}
-      <div className="space-y-2">
-        <Label htmlFor="sidebar-position">{m.prefs_sidebar_position()}</Label>
-        <Select
-          value={sidebarPosition}
-          onValueChange={(v) => setSidebarPosition(v as SidebarPosition)}
-        >
-          <SelectTrigger id="sidebar-position">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="left">
-              {m.prefs_sidebar_position_left()}
-            </SelectItem>
-            <SelectItem value="right">
-              {m.prefs_sidebar_position_right()}
-            </SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Exibe as chamadas de tool na interface do chat. */}
-      <div className="flex items-center justify-between gap-3">
-        <Label htmlFor="show-tool-calls" className="cursor-pointer">
-          {m.settings_chat_show_tool_calls()}
-        </Label>
-        <Switch
-          id="show-tool-calls"
-          checked={showToolCalls}
-          onCheckedChange={setShowToolCalls}
+        <FontSelect
+          id="editor-font-family"
+          label={m.prefs_editor_font()}
+          help={m.prefs_editor_font_help()}
+          value={editorFontFamily}
+          onChange={setEditorFontFamily}
         />
-      </div>
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <Label htmlFor="editor-font-size">
+              {m.prefs_editor_font_size()}
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              {m.prefs_editor_font_size_help()}
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <Input
+              id="editor-font-size"
+              type="number"
+              min={MONACO_FONT_SIZE_MIN}
+              max={MONACO_FONT_SIZE_MAX}
+              step={1}
+              value={monacoFontSize}
+              onChange={(event) => {
+                const value = Number(event.target.value);
+                if (Number.isFinite(value)) setMonacoFontSize(value);
+              }}
+              className="w-[100px]"
+              aria-label={m.prefs_editor_font_size()}
+            />
+            <span className="text-xs text-muted-foreground">
+              {m.prefs_editor_font_size_unit()}
+            </span>
+          </div>
+        </div>
+        <FontSelect
+          id="mono-font-family"
+          label={m.prefs_mono_font()}
+          help={m.prefs_mono_font_help()}
+          value={monoFontFamily}
+          onChange={setMonoFontFamily}
+          mono
+        />
+        <FontSelect
+          id="ui-font-family"
+          label={m.prefs_ui_font()}
+          help={m.prefs_ui_font_help()}
+          value={uiFontFamily}
+          onChange={setUiFontFamily}
+        />
+      </SettingsSection>
+
+      <SettingsSection title={m.prefs_interface_section()}>
+        {/* Idioma */}
+        <div className="space-y-2">
+          <Label htmlFor="language">{m.prefs_language()}</Label>
+          <Select
+            value={language}
+            onValueChange={(v) => setLanguage(v as Lang)}
+          >
+            <SelectTrigger id="language">
+              <SelectValue>
+                {SUPPORTED_LANGS.find((l) => l.value === language)?.label ??
+                  language}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {SUPPORTED_LANGS.map(({ value, label }) => (
+                <SelectItem key={value} value={value}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Posição da sidebar de sessões (workbench no lado oposto) */}
+        <div className="space-y-2">
+          <Label htmlFor="sidebar-position">{m.prefs_sidebar_position()}</Label>
+          <Select
+            value={sidebarPosition}
+            onValueChange={(v) => setSidebarPosition(v as SidebarPosition)}
+          >
+            <SelectTrigger id="sidebar-position">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="left">
+                {m.prefs_sidebar_position_left()}
+              </SelectItem>
+              <SelectItem value="right">
+                {m.prefs_sidebar_position_right()}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Exibe as chamadas de tool na interface do chat. */}
+        <div className="flex items-center justify-between gap-3">
+          <Label htmlFor="show-tool-calls" className="cursor-pointer">
+            {m.settings_chat_show_tool_calls()}
+          </Label>
+          <Switch
+            id="show-tool-calls"
+            checked={showToolCalls}
+            onCheckedChange={setShowToolCalls}
+          />
+        </div>
+      </SettingsSection>
 
       {/* System prompt personalizado */}
-      <div className="space-y-2">
-        <Label htmlFor="custom-prompt">{m.prefs_custom_prompt()}</Label>
+      <SettingsSection
+        title={m.prefs_custom_prompt()}
+        description={m.prefs_custom_prompt_help()}
+      >
+        <Label htmlFor="custom-prompt" className="sr-only">
+          {m.prefs_custom_prompt()}
+        </Label>
         <Textarea
           id="custom-prompt"
           placeholder={m.prefs_custom_prompt_placeholder()}
@@ -781,28 +783,19 @@ export function PreferenciasTab() {
           rows={4}
           className="resize-none text-sm"
         />
-        <p className="text-xs text-muted-foreground">
-          {m.prefs_custom_prompt_help()}
-        </p>
-      </div>
+      </SettingsSection>
 
       {/* Treinamento — blocos de instrução adicionais */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <Label>{m.prefs_training()}</Label>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
-            onClick={handleAddTrainingBlock}
-          >
-            <Plus className="w-3.5 h-3.5 mr-1" />
+      <SettingsSection
+        title={m.prefs_training()}
+        description={m.prefs_training_help()}
+        actions={
+          <Button variant="ghost" size="sm" onClick={handleAddTrainingBlock}>
+            <Plus className="size-3.5" />
             {m.prefs_training_add()}
           </Button>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          {m.prefs_training_help()}
-        </p>
+        }
+      >
         {trainingInstructions.map((block, index) => (
           <div key={index} className="flex items-start gap-2">
             <Textarea
@@ -815,7 +808,7 @@ export function PreferenciasTab() {
             <Button
               variant="ghost"
               size="sm"
-              className="h-8 px-2 text-muted-foreground hover:text-destructive shrink-0"
+              className="text-muted-foreground hover:text-destructive shrink-0"
               onClick={() => handleRemoveTrainingBlock(index)}
               title={m.prefs_training_remove()}
               aria-label={m.prefs_training_remove()}
@@ -824,7 +817,7 @@ export function PreferenciasTab() {
             </Button>
           </div>
         ))}
-      </div>
+      </SettingsSection>
 
       {/* Compactação automática do histórico */}
       <ContextCompactionSection />
@@ -837,6 +830,6 @@ export function PreferenciasTab() {
 
       {/* Fuso horário usado pelos agendamentos */}
       <TimezoneSection />
-    </div>
+    </SettingsStack>
   );
 }
