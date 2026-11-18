@@ -1510,11 +1510,7 @@ async def run_conversation(  # noqa: PLR0911
                                     )
                                     agent_run.evidence.append(v_entry)
                                     agent_run.metrics = iter_metrics
-                                    agent_run.detail = (
-                                        "Verificação concluída com sucesso."
-                                        if v_res.passed
-                                        else f"Falha nos quality gates: {v_res.failure_feedback or ''}"
-                                    )
+                                    agent_run.detail = v_res.detail
                                     await session_store.upsert_agent_run(agent_run)
                                     # A persistência da evidência não deve alterar a
                                     # máquina de estados. O motor de verificação é a
@@ -1532,11 +1528,7 @@ async def run_conversation(  # noqa: PLR0911
                                     session_store,
                                     config.run_id,
                                     status=v_res.status,
-                                    detail=(
-                                        "Verificação concluída com sucesso."
-                                        if v_res.passed
-                                        else "Falha nos quality gates."
-                                    ),
+                                    detail=v_res.detail,
                                     metrics=iter_metrics,
                                 )
                         except Exception:

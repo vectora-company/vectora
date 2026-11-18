@@ -42,6 +42,15 @@ class VerificationResult:
     commit_sha: str | None = None
     artifact_refs: list[str] = field(default_factory=list)
 
+    @property
+    def detail(self) -> str:
+        """Texto curto do desfecho, para o estado do AgentRun."""
+        if self.outcome == "not_run":
+            return "Nenhum quality gate foi executado: a execução não foi verificada."
+        if self.passed:
+            return "Verificação concluída com sucesso."
+        return f"Falha nos quality gates: {self.failure_feedback or ''}"
+
     def to_evidence_entry(self) -> dict[str, Any]:
         """Formata o resultado da verificação como evidência persistível no AgentRun."""
         return {
@@ -350,10 +359,14 @@ async def run_verification(
         compute_files_snapshot, root_dir, files=files_touched
     )
 
-    if not prof.enabled or (not prof.gates and git_unclean_reason is None):
+    if git_unclean_reason is None and not gate_results:
+        # Nenhum gate rodou (perfil desabilitado, sem gates ou sem gate
+        # aplicável aos arquivos tocados): não há bloqueio, mas também não
+        # houve verificação. ``degraded`` evita apresentar como aprovada uma
+        # execução que nada validou.
         return VerificationResult(
             passed=True,
-            status="passed",
+            status="degraded",
             outcome="not_run",
             snapshot_sha256=snapshot_sha256,
             file_hashes=file_hashes,
