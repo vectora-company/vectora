@@ -32,36 +32,39 @@ function adminCategoryIds() {
   return admin?.categories.map((c) => c.id) ?? [];
 }
 
-describe("buildSettingsCategoryGroups — Administração achatada (5 categorias, não 1)", () => {
-  it("usuário admin vê as 5 categorias, cada uma no rail", () => {
+describe("buildSettingsCategoryGroups — Administração achatada", () => {
+  it("usuário admin vê Acesso às ferramentas e as quatro categorias de admin", () => {
     const ids = adminCategoryIds();
     expect(ids).toEqual([
+      "tool_policy",
       "admin_users",
-      "admin_tools",
       "admin_saferoots",
       "admin_system",
       "admin_storage",
     ]);
   });
 
-  it("usuário admin Free mantém gerenciamento local de usuários", () => {
-    const ids = adminCategoryIds();
-    expect(ids).toEqual([
-      "admin_users",
-      "admin_tools",
-      "admin_saferoots",
-      "admin_system",
-      "admin_storage",
-    ]);
-    expect(ids).toContain("admin_users");
+  it("admin Free mantém gerenciamento local de usuários", () => {
+    expect(adminCategoryIds()).toContain("admin_users");
   });
 
-  it("erro/borda: sem role admin/root, nenhuma categoria de Administração aparece", () => {
+  it("sem role admin/root, Administração só tem o Acesso às ferramentas", () => {
     const groups = buildSettingsCategoryGroups({
       connectEnabled: false,
       isAdmin: false,
     });
-    expect(groups.find((g) => g.id === "administracao")).toBeUndefined();
+    const admin = groups.find((g) => g.id === "administracao");
+    expect(admin?.categories.map((c) => c.id)).toEqual(["tool_policy"]);
+  });
+
+  it("Acesso às ferramentas deixou o grupo Ambiente e o id antigo de Ferramentas leva a ele", () => {
+    const groups = buildSettingsCategoryGroups({
+      connectEnabled: false,
+      isAdmin: true,
+    });
+    const ambiente = groups.find((g) => g.id === "ambiente");
+    expect(ambiente?.categories.map((c) => c.id)).not.toContain("tool_policy");
+    expect(findCategory(groups, "admin_tools")?.id).toBe("tool_policy");
   });
 
   it("Mídia vem depois do Provider Routing, dentro do grupo Ambiente", () => {
