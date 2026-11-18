@@ -9,8 +9,18 @@ name: Snyk
 # correção publicada aparecem no log e no painel do Snyk, mas não travam o PR.
 
 on:
+  # Em PR só quando uma dependência muda; o SAST roda no push do master e na
+  # agenda semanal.
   pull_request:
     branches: [master, "release/**"]
+    paths:
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "frontend/package.json"
+      - "frontend/pnpm-lock.yaml"
+      - ".github/workflows/snyk.yml"
   push:
     branches: [master]
   schedule:
