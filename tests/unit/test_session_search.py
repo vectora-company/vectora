@@ -72,3 +72,29 @@ async def test_busca_exclui_a_thread_atual_e_avisos_sinteticos(store) -> None:
 @pytest.mark.asyncio
 async def test_consulta_vazia_nao_busca(store) -> None:
     assert await store.search_messages("ana", "") == []
+
+
+@pytest.mark.asyncio
+async def test_uso_de_tokens_da_conversa_soma_as_execucoes(store) -> None:
+    await store.create_session("t1", user_id="ana")
+    async with store._pool.acquire() as conn:
+        for run_id, metrics in (
+            ("r1", '{"input_tokens": 100, "output_tokens": 20, "total_tokens": 120}'),
+            ("r2", '{"input_tokens": 50, "output_tokens": 5, "total_tokens": 55}'),
+        ):
+            await conn.execute(
+                "INSERT INTO agent_runs (run_id, thread_id, status, model, "
+                "metrics_json, started_at, updated_at) "
+                "VALUES (?, 't1', 'passed', 'gemini-2.5-pro', ?, ?, ?)",
+                (run_id, metrics, f"2026-01-0{run_id[1]}", f"2026-01-0{run_id[1]}"),
+            )
+        await conn.commit()
+
+    uso = await store.thread_token_usage("t1")
+
+    assert uso["input_tokens"] == 150
+    assert uso["output_tokens"] == 25
+    assert uso["total_tokens"] == 175
+    assert uso["runs"] == 2
+    assert uso["model"] == "gemini-2.5-pro"
+    assert (await store.thread_token_usage("vazia"))["runs"] == 0
