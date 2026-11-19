@@ -175,8 +175,8 @@ export function MemoriaTab() {
 
   const handleAddMemory = async () => {
     if (!newContent.trim()) return;
-    // Memória é "global" do ponto de vista do usuário (como ChatGPT/Claude/Gemini):
-    // não pedimos uma chave. Geramos uma internamente quando o usuário não dá rótulo.
+    // A memória é global para o usuário e o rótulo é opcional: sem ele, a chave
+    // é gerada aqui.
     const key =
       newKey.trim() ||
       `mem_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -289,7 +289,7 @@ export function MemoriaTab() {
                 {mem.key}
               </span>
               {mem.updated_at && (
-                <span className="text-[10px] text-muted-foreground/60 shrink-0">
+                <span className="text-2xs text-muted-foreground/60 shrink-0">
                   {new Date(mem.updated_at).toLocaleDateString("pt-BR")}
                 </span>
               )}

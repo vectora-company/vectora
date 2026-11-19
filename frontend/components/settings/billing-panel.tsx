@@ -88,7 +88,7 @@ export function BillingPanel() {
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-2">
         <div className="rounded-lg border bg-card p-2.5">
-          <p className="text-[10px] text-muted-foreground">
+          <p className="text-2xs text-muted-foreground">
             {m.billing_panel_plan_label()}
           </p>
           <p className="text-xs font-medium">
@@ -96,7 +96,7 @@ export function BillingPanel() {
           </p>
         </div>
         <div className="rounded-lg border bg-card p-2.5">
-          <p className="text-[10px] text-muted-foreground">
+          <p className="text-2xs text-muted-foreground">
             {m.billing_panel_status_label()}
           </p>
           <p className="text-xs font-medium">{status.status}</p>

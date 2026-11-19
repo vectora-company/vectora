@@ -133,7 +133,7 @@ export function ToolPolicyPanel() {
                   onCheckedChange={() => toggle(name)}
                 />
               </div>
-              <div className="mt-1 flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+              <div className="mt-1 flex items-center justify-between gap-2 text-xs text-muted-foreground">
                 <span>
                   {usageLoading
                     ? m.toolpolicy_usage_loading()
@@ -171,7 +171,7 @@ export function ToolPolicyPanel() {
                   id={`tool-schema-${name}`}
                   role="region"
                   aria-label={m.toolpolicy_schema_label({ name })}
-                  className="mt-2 max-h-48 overflow-auto rounded bg-muted p-2 text-[10px]"
+                  className="mt-2 max-h-48 overflow-auto rounded bg-muted p-2 text-2xs"
                 >
                   {JSON.stringify(schema, null, 2)}
                 </pre>
@@ -185,7 +185,7 @@ export function ToolPolicyPanel() {
 
       <div className="flex items-center gap-2 justify-end">
         {saved && (
-          <span className="text-xs text-green-500 inline-flex items-center gap-1">
+          <span className="text-xs text-success inline-flex items-center gap-1">
             <Check className="w-3 h-3" />
             {m.toolpolicy_saved()}
           </span>

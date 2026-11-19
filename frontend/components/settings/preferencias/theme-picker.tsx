@@ -191,7 +191,7 @@ function MarketplaceResults({
                 <span className="block truncate text-xs font-medium">
                   {item.displayName}
                 </span>
-                <span className="block truncate text-[11px] text-muted-foreground">
+                <span className="block truncate text-xs text-muted-foreground">
                   {item.publisher}
                 </span>
               </span>
@@ -202,7 +202,7 @@ function MarketplaceResults({
                 {busy ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : installed ? (
-                  <Check className="h-4 w-4 text-green-500" />
+                  <Check className="h-4 w-4 text-success" />
                 ) : (
                   <Download className="h-4 w-4" />
                 )}

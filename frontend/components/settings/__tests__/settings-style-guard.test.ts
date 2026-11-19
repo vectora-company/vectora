@@ -6,9 +6,9 @@
  * use `text-2xs`) nem cor crua do Tailwind (`text-green-500`; use
  * `text-success`, `text-warning`, `text-destructive`, `text-info`).
  *
- * O baseline abaixo lista o que ainda falta migrar, por arquivo, e só pode
- * diminuir: um arquivo novo ou com mais ocorrências reprova, e quando um
- * arquivo chega a menos que o baseline o teste pede para baixá-lo.
+ * O baseline por arquivo está zerado: qualquer ocorrência nova reprova. Se
+ * um arquivo precisar de uma exceção real, registre-a em `BASELINE` com o
+ * motivo; ele só pode diminuir.
  */
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -27,21 +27,7 @@ const VIOLATION = new RegExp(
 );
 
 /** Arquivos ainda não migrados → ocorrências restantes. Só diminui. */
-const BASELINE: Record<string, number> = {
-  "about-panel.tsx": 2,
-  "administracao/admin-tab.tsx": 29,
-  "billing-panel.tsx": 2,
-  "environment/tabs/connect-tab.tsx": 4,
-  "environment/tabs/hitl-allowlist-panel.tsx": 2,
-  "environment/tabs/integracoes-tab.tsx": 10,
-  "environment/tabs/plugins-tab.tsx": 10,
-  "environment/tabs/sandbox-tab.tsx": 21,
-  "environment/tabs/skills-tab.tsx": 5,
-  "environment/tabs/tool-policy-panel.tsx": 3,
-  "preferencias/tabs/memoria-tab.tsx": 1,
-  "preferencias/theme-picker.tsx": 2,
-  "settings-overlay.tsx": 1,
-};
+const BASELINE: Record<string, number> = {};
 
 function listTsx(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -77,9 +63,9 @@ describe("estilo das telas de Settings", () => {
     expect(stale).toEqual([]);
   });
 
-  it("AI Models e Provider Routing não têm nenhuma ocorrência", () => {
-    expect(counts.get("environment/tabs/ai-models-tab.tsx")).toBe(0);
-    expect(counts.get("environment/tabs/provider-routing-tab.tsx")).toBe(0);
-    expect(counts.get("primitives.tsx")).toBe(0);
+  it("nenhuma tela de Settings usa hex, text-[Npx] ou cor crua", () => {
+    const dirty = [...counts].filter(([, n]) => n > 0).map(([file]) => file);
+    expect(dirty).toEqual([]);
+    expect(counts.size).toBeGreaterThan(20);
   });
 });

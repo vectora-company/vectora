@@ -164,7 +164,7 @@ export function ConnectTab() {
         <div className="rounded-lg border bg-card p-4 space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <MessageCircle className="w-5 h-5 text-blue-500" />
+              <MessageCircle className="w-5 h-5 text-info" />
               <div>
                 <h4 className="text-sm font-semibold flex items-center gap-1.5">
                   Telegram
@@ -200,7 +200,7 @@ export function ConnectTab() {
         <div className="rounded-lg border bg-card p-4 space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <MessageCircle className="w-5 h-5 text-indigo-500" />
+              <MessageCircle className="w-5 h-5 text-muted-foreground" />
               <div>
                 <h4 className="text-sm font-semibold flex items-center gap-1.5">
                   Discord
@@ -251,7 +251,7 @@ export function ConnectTab() {
         <div className="rounded-lg border bg-card p-4 space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <MessageCircle className="w-5 h-5 text-purple-500" />
+              <MessageCircle className="w-5 h-5 text-muted-foreground" />
               <div>
                 <h4 className="text-sm font-semibold flex items-center gap-1.5">
                   Slack
@@ -302,7 +302,7 @@ export function ConnectTab() {
         <div className="rounded-lg border bg-card p-4 space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <Mail className="w-5 h-5 text-red-500" />
+              <Mail className="w-5 h-5 text-destructive" />
               <div>
                 <h4 className="text-sm font-semibold flex items-center gap-1.5">
                   Email (IMAP/SMTP)

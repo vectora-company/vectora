@@ -32,10 +32,10 @@ const LEVEL_LABEL: Record<IsolationLevel, () => string> = {
 };
 
 const LEVEL_STYLE: Record<IsolationLevel, string> = {
-  effective: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
-  partial: "bg-amber-500/15 text-amber-700 dark:text-amber-300",
-  soft: "bg-orange-500/15 text-orange-700 dark:text-orange-300",
-  off: "bg-red-500/15 text-red-700 dark:text-red-300",
+  effective: "bg-success/15 text-success ",
+  partial: "bg-warning/15 text-warning ",
+  soft: "bg-warning/15 text-warning ",
+  off: "bg-destructive/15 text-destructive ",
 };
 
 const STATE_LABEL: Record<IsolationState, () => string> = {
@@ -291,7 +291,7 @@ export function SandboxTab() {
     );
   }
   if (status.isError || policy.isError) {
-    return <p className="text-sm text-red-600">{m.sandbox_error()}</p>;
+    return <p className="text-sm text-destructive">{m.sandbox_error()}</p>;
   }
   if (status.isLoading || policy.isLoading || !draft || !policyData) {
     return (
@@ -316,7 +316,7 @@ export function SandboxTab() {
       {ignored.length > 0 && (
         <div
           role="alert"
-          className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm"
+          className="rounded-md border border-warning/40 bg-warning/10 p-3 text-sm"
         >
           <p className="font-medium">{m.sandbox_ignored_title()}</p>
           <p className="mt-1 text-xs text-muted-foreground">
@@ -364,9 +364,7 @@ export function SandboxTab() {
         </div>
 
         {!workspace.trusted && (
-          <p className="text-xs text-amber-700 dark:text-amber-300">
-            {m.sandbox_untrusted()}
-          </p>
+          <p className="text-xs text-warning ">{m.sandbox_untrusted()}</p>
         )}
 
         <fieldset
@@ -511,7 +509,7 @@ export function SandboxTab() {
             {message && (
               <span
                 role="status"
-                className={`text-xs ${message.ok ? "text-emerald-600" : "text-red-600"}`}
+                className={`text-xs ${message.ok ? "text-success" : "text-destructive"}`}
               >
                 {message.text}
               </span>
@@ -681,7 +679,7 @@ export function SandboxTab() {
         {audit.data && (
           <p
             role="status"
-            className={`text-xs ${audit.data.chain_ok ? "text-emerald-600" : "text-red-600"}`}
+            className={`text-xs ${audit.data.chain_ok ? "text-success" : "text-destructive"}`}
           >
             {audit.data.chain_ok
               ? m.sandbox_audit_chain_ok({

@@ -278,7 +278,7 @@ function InvitesSection() {
         <div className="space-y-2 border-t pt-3">
           <div className="grid grid-cols-3 gap-2">
             <div className="space-y-1">
-              <label className="text-[10px] text-muted-foreground">
+              <label className="text-2xs text-muted-foreground">
                 {m.invite_role_label()}
               </label>
               <Select value={role} onValueChange={setRole}>
@@ -295,7 +295,7 @@ function InvitesSection() {
               </Select>
             </div>
             <div className="space-y-1 col-span-1">
-              <label className="text-[10px] text-muted-foreground">
+              <label className="text-2xs text-muted-foreground">
                 {m.invite_ttl_label()}
               </label>
               <Input
@@ -309,7 +309,7 @@ function InvitesSection() {
               />
             </div>
             <div className="space-y-1">
-              <label className="text-[10px] text-muted-foreground">
+              <label className="text-2xs text-muted-foreground">
                 {m.invite_email_label()}
               </label>
               <Input
@@ -337,9 +337,7 @@ function InvitesSection() {
 
           {link && (
             <div className="flex items-center gap-1.5 rounded-md border bg-background p-1.5">
-              <span className="text-[10px] font-mono truncate flex-1">
-                {link}
-              </span>
+              <span className="text-2xs font-mono truncate flex-1">{link}</span>
               <Button
                 variant="ghost"
                 size="sm"
@@ -347,7 +345,7 @@ function InvitesSection() {
                 onClick={handleCopy}
               >
                 {copied ? (
-                  <Check className="w-3.5 h-3.5 text-green-500" />
+                  <Check className="w-3.5 h-3.5 text-success" />
                 ) : (
                   <Copy className="w-3.5 h-3.5" />
                 )}
@@ -365,7 +363,7 @@ function InvitesSection() {
 
       {/* Convites pendentes */}
       <div className="space-y-1">
-        <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
+        <p className="text-2xs text-muted-foreground uppercase tracking-wide">
           {m.invite_pending()}
         </p>
         {invites.length === 0 ? (
@@ -376,7 +374,7 @@ function InvitesSection() {
               key={inv.token_hash}
               className="flex items-center gap-2 px-2 py-1.5 rounded-md border text-xs"
             >
-              <Badge variant="secondary" className="text-[9px] h-4">
+              <Badge variant="secondary" className="text-2xs h-4">
                 {inv.role}
               </Badge>
               <span className="flex-1 truncate text-muted-foreground">
@@ -463,7 +461,7 @@ function UserToolsRow({ userId }: { userId: string }) {
             key={name}
             className="flex items-center justify-between px-2.5 py-1.5"
           >
-            <span className="text-[11px] font-mono">{name}</span>
+            <span className="text-xs font-mono">{name}</span>
             <Switch
               checked={!disabled.has(name)}
               onCheckedChange={() => toggle(name)}
@@ -473,9 +471,7 @@ function UserToolsRow({ userId }: { userId: string }) {
       </div>
       <div className="flex items-center justify-end gap-2">
         {saved && (
-          <span className="text-[10px] text-green-500">
-            {m.toolpolicy_saved()}
-          </span>
+          <span className="text-2xs text-success">{m.toolpolicy_saved()}</span>
         )}
         <Button
           size="sm"
@@ -550,7 +546,7 @@ export function UsersPanel() {
           <div className="flex items-center gap-3 p-2.5 rounded-lg border bg-card">
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium truncate">{u.email}</p>
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-2xs text-muted-foreground">
                 {m.admin_users_since()}{" "}
                 {new Date(u.created_at).toLocaleDateString("pt-BR")}
                 {u.last_login_at &&
@@ -689,13 +685,13 @@ export function ToolsPanel() {
                     {t.destructive && (
                       <Badge
                         variant="destructive"
-                        className="text-[9px] h-3.5 px-1"
+                        className="text-2xs h-3.5 px-1"
                       >
                         {m.admin_tools_destructive()}
                       </Badge>
                     )}
                   </div>
-                  <p className="text-[10px] text-muted-foreground truncate">
+                  <p className="text-2xs text-muted-foreground truncate">
                     {t.description}
                   </p>
                 </div>
@@ -766,7 +762,7 @@ export function SystemPanel() {
           [m.admin_system_label_spans(), String(info.recent_spans_count)],
         ].map(([label, value]) => (
           <div key={label} className="rounded-lg border bg-card p-2.5">
-            <p className="text-[10px] text-muted-foreground">{label}</p>
+            <p className="text-2xs text-muted-foreground">{label}</p>
             <p className="text-xs font-medium truncate">{value}</p>
           </div>
         ))}
@@ -878,11 +874,11 @@ function ConfigSection() {
         <div className="flex items-center gap-2">
           <p className="text-sm font-medium">{TOKEN_ENV_NAME}</p>
           {config.vectora_token_configured ? (
-            <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
+            <span className="text-2xs uppercase tracking-wider px-1.5 py-0.5 rounded bg-success/15 text-success border border-success/30">
               {m.admin_config_token_configured()}
             </span>
           ) : (
-            <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-orange-500/15 text-orange-700 dark:text-orange-300 border border-orange-500/30">
+            <span className="text-2xs uppercase tracking-wider px-1.5 py-0.5 rounded bg-warning/15 text-warning border border-warning/30">
               {m.admin_config_token_absent()}
             </span>
           )}
@@ -1192,18 +1188,18 @@ export function SafeRootsPanel() {
                   <div className="font-medium text-foreground flex items-center gap-1.5">
                     {r.label}
                     {r.builtin && (
-                      <Badge variant="secondary" className="text-[10px] py-0">
+                      <Badge variant="secondary" className="text-2xs py-0">
                         {m.admin_saferoots_builtin_badge()}
                       </Badge>
                     )}
                     {r.archived_at && (
-                      <Badge variant="outline" className="text-[10px] py-0">
+                      <Badge variant="outline" className="text-2xs py-0">
                         {m.admin_saferoots_archived_badge()}
                       </Badge>
                     )}
                   </div>
                 )}
-                <div className="font-mono text-[10px] text-muted-foreground truncate">
+                <div className="font-mono text-2xs text-muted-foreground truncate">
                   {r.path}
                 </div>
               </div>
@@ -1321,7 +1317,7 @@ function StorageStatusBadge({ status }: { status: StorageBackendStatus }) {
   }
   if (status.ok) {
     return (
-      <span className="flex items-center gap-1 text-xs text-green-600">
+      <span className="flex items-center gap-1 text-xs text-success">
         <CheckCircle2 className="w-3.5 h-3.5" />
         {m.admin_storage_connected()}
         {status.latency_ms !== undefined && (
@@ -1351,7 +1347,7 @@ interface StorageTestResult {
 function StorageTestResultLine({ result }: { result: StorageTestResult }) {
   return (
     <div
-      className={`text-xs flex items-center gap-1 ${result.ok ? "text-green-600" : "text-destructive"}`}
+      className={`text-xs flex items-center gap-1 ${result.ok ? "text-success" : "text-destructive"}`}
     >
       {result.ok ? (
         <>
