@@ -30,7 +30,6 @@ import {
   XCircle,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useVirtualizer } from "@tanstack/react-virtual";
 
 const DASHBOARD_URL = "https://vectora.company/dashboard";
 const TOKEN_ENV_NAME = "VECTORA_TOKEN";
@@ -86,14 +85,6 @@ interface PendingInvite {
   created_by: string | null;
   expires_at: string;
   created_at: string;
-}
-
-interface AdminTool {
-  name: string;
-  description: string;
-  category: string;
-  destructive: boolean;
-  enabled: boolean;
 }
 
 interface SystemInfo {
@@ -607,118 +598,6 @@ export function UsersPanel() {
 // ---------------------------------------------------------------------------
 
 //: Altura de linha estimada (nome+badge + descrição truncada + padding) —
-//: o virtualizer corrige com `measureElement` real depois do 1º paint;
-//: só precisa ser próximo o bastante pra `getTotalSize()` inicial não
-//: pular visivelmente.
-const TOOL_ROW_ESTIMATE_PX = 58;
-
-export function ToolsPanel() {
-  const [tools, setTools] = useState<AdminTool[]>([]);
-  const [loading, setLoading] = useState(true);
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    setLoading(true);
-    api.tools
-      .list()
-      .then((d) => setTools(d.tools ?? []))
-      .finally(() => setLoading(false));
-  }, []);
-
-  // Lista real: 166 tools nativas registradas — sem virtualização, isso é
-  // 166 nós DOM montados de uma vez toda vez que a categoria abre.
-  //
-  // `getVirtualItems`/`getTotalSize`/`measureElement` do react-virtual não
-  // podem ser memoizados com segurança (mesmo diagnóstico já investigado e
-  // suprimido em message-list.tsx) — projeto não usa React Compiler, e os
-  // valores só são lidos dentro deste componente, nunca passados adiante
-  // como prop memoizada. Não é bug vivo, é diagnóstico de ferramenta sobre
-  // um padrão já seguro aqui.
-  // oxlint-disable-next-line react/incompatible-library
-  const virtualizer = useVirtualizer({
-    count: tools.length,
-    getScrollElement: () => scrollRef.current,
-    estimateSize: () => TOOL_ROW_ESTIMATE_PX,
-    overscan: 6,
-  });
-
-  const handleToggle = async (name: string, enabled: boolean) => {
-    await api.tools.toggle(name, enabled);
-    setTools((prev) =>
-      prev.map((t) => (t.name === name ? { ...t, enabled } : t)),
-    );
-  };
-
-  if (loading) {
-    return (
-      <div className="flex justify-center py-8">
-        <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
-  return (
-    <div ref={scrollRef} className="h-[65vh] overflow-y-auto custom-scrollbar">
-      <div
-        style={{
-          height: `${virtualizer.getTotalSize()}px`,
-          position: "relative",
-        }}
-      >
-        {virtualizer.getVirtualItems().map((vItem) => {
-          const t = tools[vItem.index]!;
-          return (
-            <div
-              key={t.name}
-              data-index={vItem.index}
-              ref={virtualizer.measureElement}
-              style={{
-                position: "absolute",
-                top: 0,
-                left: 0,
-                width: "100%",
-                transform: `translateY(${vItem.start}px)`,
-              }}
-              className="pb-1.5"
-            >
-              <div
-                className={cn(settingsItemClass, "flex items-center gap-3 p-3")}
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs font-mono font-medium">
-                      {t.name}
-                    </span>
-                    {t.destructive && (
-                      <Badge
-                        variant="destructive"
-                        className="text-2xs h-3.5 px-1"
-                      >
-                        {m.admin_tools_destructive()}
-                      </Badge>
-                    )}
-                  </div>
-                  <p className="text-2xs text-muted-foreground truncate">
-                    {t.description}
-                  </p>
-                </div>
-                <Switch
-                  checked={t.enabled}
-                  onCheckedChange={(v) => void handleToggle(t.name, v)}
-                />
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Sub-aba: Sistema
-// ---------------------------------------------------------------------------
-
 export function SystemPanel() {
   const [info, setInfo] = useState<SystemInfo | null>(null);
   const [traces, setTraces] = useState<TraceSpan[]>([]);
