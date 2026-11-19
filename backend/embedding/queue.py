@@ -611,8 +611,8 @@ class EmbeddingQueue:
         """Move itens failed/DLQ de volta para pending para nova tentativa.
 
         Permite ao operador reprocessar embeddings que falharam sem precisar
-        re-enfileirar os documentos originais. Os contadores de tentativa e
-        mensagens de erro são preservados para auditoria.
+        re-enfileirar os documentos originais. O contador de tentativas é
+        reiniciado para permitir um novo ciclo; os motivos de erro são mantidos.
 
         Args:
             limit: Número máximo de itens a mover para pending (default 100)
@@ -645,13 +645,18 @@ class EmbeddingQueue:
 
                 update_query = (
                     update(EmbeddingQueueRecord)
-                    .where(EmbeddingQueueRecord.queue_id.in_(ids))
-                    .values(status=EmbeddingStatus.PENDING)
+                    .where(
+                        EmbeddingQueueRecord.queue_id.in_(ids),
+                        EmbeddingQueueRecord.status.in_(
+                            (EmbeddingStatus.FAILED, EmbeddingStatus.DLQ)
+                        ),
+                    )
+                    .values(status=EmbeddingStatus.PENDING, attempt_count=0)
                 )
-                await session.execute(update_query)
+                result = await session.execute(update_query)
                 await session.commit()
 
-                retried = len(ids)
+                retried = result.rowcount
                 logger.info(
                     "embedding_queue_retry_failed",
                     extra={"retried": retried},
