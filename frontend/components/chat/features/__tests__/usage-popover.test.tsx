@@ -125,6 +125,7 @@ describe("UsagePopover — consumo da conversa", () => {
               input_tokens: 1500,
               output_tokens: 300,
               total_tokens: 1800,
+              cached_input_tokens: 1200,
               runs: 2,
             }),
             { status: 200 },
@@ -148,6 +149,8 @@ describe("UsagePopover — consumo da conversa", () => {
     expect(bloco.textContent).toContain("Consumo da conversa");
     expect(bloco.textContent).toContain("1.5k");
     expect(bloco.textContent).toContain("1.8k");
+    expect(bloco.textContent).toContain("Entrada em cache");
+    expect(bloco.textContent).toContain("1.2k");
   });
 
   it("não mostra o bloco sem execuções", async () => {

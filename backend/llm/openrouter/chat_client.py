@@ -57,6 +57,7 @@ class _UsagePayload(TypedDict, total=False):
     prompt_tokens: int
     completion_tokens: int
     total_tokens: int
+    prompt_tokens_details: dict[str, int]
 
 
 _AUDIO_FORMATS = {"audio/mpeg": "mp3", "audio/wav": "wav"}
@@ -227,11 +228,15 @@ def _usage_metadata(usage: _UsagePayload | None) -> UsageSnapshot | None:
         return None
     entrada = int(usage.get("prompt_tokens") or 0)
     saida = int(usage.get("completion_tokens") or 0)
-    return {
+    snapshot: UsageSnapshot = {
         "input_tokens": entrada,
         "output_tokens": saida,
         "total_tokens": int(usage.get("total_tokens") or entrada + saida),
     }
+    cached = int((usage.get("prompt_tokens_details") or {}).get("cached_tokens") or 0)
+    if cached:
+        snapshot["cached_input_tokens"] = cached
+    return snapshot
 
 
 class OpenRouterChatClient:

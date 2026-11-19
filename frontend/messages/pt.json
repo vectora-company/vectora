@@ -888,6 +888,7 @@
   "meter_provider_usage": "Consumo por provider",
   "meter_requests": "requisições",
   "meter_resets_in": "reseta em",
+  "meter_thread_cached": "Entrada em cache",
   "meter_thread_input": "Entrada",
   "meter_thread_output": "Saída",
   "meter_thread_total": "Total",

@@ -427,3 +427,23 @@ class TestCacheDePrompt:
             "system": "regras",
             "messages": [{"role": "user", "content": "oi"}],
         }
+
+
+def test_usage_da_anthropic_soma_cache_e_expoe_o_lido() -> None:
+    from backend.llm.anthropic.chat_client import _usage_metadata
+
+    uso = _usage_metadata(
+        {
+            "input_tokens": 50,
+            "cache_read_input_tokens": 900,
+            "cache_creation_input_tokens": 50,
+            "output_tokens": 20,
+        }
+    )
+
+    assert uso == {
+        "input_tokens": 1000,
+        "output_tokens": 20,
+        "total_tokens": 1020,
+        "cached_input_tokens": 900,
+    }
