@@ -296,20 +296,20 @@ class GoogleChatClient:
         original = self._payload(
             messages, tools=tools, temperature=temperature, max_tokens=max_tokens
         )
-        corpo, cached = await apply_cached_content(self.client, self.model, original)
+        body, cached = await apply_cached_content(self.client, self.model, original)
         try:
-            resposta = await self.client.generate_content(self.model, corpo)
+            response = await self.client.generate_content(self.model, body)
         except GoogleGenAIResponseError:
             if not cached:
                 raise
             # Cache vencido ou recusado: refaz a chamada sem ele.
             invalidate(original, self.model)
-            resposta = await self.client.generate_content(self.model, original)
-        candidatos = resposta.get("candidates")
+            response = await self.client.generate_content(self.model, original)
+        candidatos = response.get("candidates")
         if not isinstance(candidatos, list) or not candidatos:
             msg = (
                 "Google Gemini respondeu sem `candidates` — resposta bloqueada "
-                f"(safety filter?) ou inutilizável: {resposta.get('promptFeedback')!r}"
+                f"(safety filter?) ou inutilizável: {response.get('promptFeedback')!r}"
             )
             raise GoogleGenAIResponseError(msg)
 
@@ -327,23 +327,23 @@ class GoogleChatClient:
     async def _stream_events(self, original: dict) -> AsyncIterator[dict]:
         """Eventos do stream, usando o cache de contexto quando disponível.
 
-        Se a API recusar o cache antes de o primeiro evento chegar, refaz a
+        Se a API recusar o cache antes de o primeiro event chegar, refaz a
         chamada sem ele.
         """
-        corpo, cached = await apply_cached_content(self.client, self.model, original)
+        body, cached = await apply_cached_content(self.client, self.model, original)
         started = False
         try:
-            async for evento in self.client.stream_generate_content(self.model, corpo):
+            async for event in self.client.stream_generate_content(self.model, body):
                 started = True
-                yield evento
+                yield event
         except GoogleGenAIResponseError:
             if not cached or started:
                 raise
             invalidate(original, self.model)
-            async for evento in self.client.stream_generate_content(
+            async for event in self.client.stream_generate_content(
                 self.model, original
             ):
-                yield evento
+                yield event
 
     async def astream(
         self,
@@ -362,10 +362,10 @@ class GoogleChatClient:
         # só o último visto e emite UM chunk de uso ao final do stream.
         ultimo_usage: dict | None = None
 
-        async for evento in self._stream_events(original):
-            candidatos = evento.get("candidates")
+        async for event in self._stream_events(original):
+            candidatos = event.get("candidates")
             if not isinstance(candidatos, list) or not candidatos:
-                feedback = evento.get("promptFeedback")
+                feedback = event.get("promptFeedback")
                 if feedback:
                     msg = f"Google Gemini bloqueou o stream: {feedback!r}"
                     raise GoogleGenAIResponseError(msg)
@@ -395,7 +395,7 @@ class GoogleChatClient:
                 )
                 proximo_index += 1
 
-            usage = evento.get("usageMetadata")
+            usage = event.get("usageMetadata")
             if usage:
                 ultimo_usage = usage
 

@@ -39,10 +39,10 @@ def _client(handler, **kwargs) -> AnthropicChatClient:
     return AnthropicChatClient(model="claude-sonnet-test", client=http_client, **kwargs)
 
 
-def _resposta_ok(texto: str = "Olá", **extra) -> dict:
+def _resposta_ok(text: str = "Olá", **extra) -> dict:
     return {
         "id": "msg_1",
-        "content": [{"type": "text", "text": texto}],
+        "content": [{"type": "text", "text": text}],
         "usage": {"input_tokens": 10, "output_tokens": 3},
         **extra,
     }
@@ -292,9 +292,9 @@ class TestStreaming:
                 [text_message(MessageRole.USER, "oi")]
             )
         ]
-        texto = "".join(c.delta_text for c in chunks)
+        text = "".join(c.delta_text for c in chunks)
 
-        assert texto == "Oi mundo"
+        assert text == "Oi mundo"
 
     async def test_stream_sem_nenhum_chunk_util_nao_trava(self):
         def handler(_req):
@@ -390,7 +390,7 @@ class TestStreamingToolCallsEUsage:
         }
 
 
-class TestCacheDePrompt:
+class TestPromptCache:
     def test_marca_tools_system_e_ultimas_mensagens(self, monkeypatch) -> None:
         from backend.llm.anthropic.chat_client import _with_prompt_cache
         from backend.settings import settings
@@ -429,7 +429,7 @@ class TestCacheDePrompt:
         }
 
 
-def test_usage_da_anthropic_soma_cache_e_expoe_o_lido() -> None:
+def test_anthropic_usage_sums_cache_and_exposes_cache_read() -> None:
     from backend.llm.anthropic.chat_client import _usage_metadata
 
     uso = _usage_metadata(

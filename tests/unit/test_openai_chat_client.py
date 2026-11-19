@@ -29,12 +29,12 @@ def _client(handler, **kwargs) -> OpenAIChatClient:
     return OpenAIChatClient(model="gpt-5", client=http_client, **kwargs)
 
 
-def _resposta_ok(texto: str = "Olá", **extra) -> dict:
+def _resposta_ok(text: str = "Olá", **extra) -> dict:
     return {
         "id": "resp_1",
         "status": "completed",
         "output": [
-            {"type": "message", "content": [{"type": "output_text", "text": texto}]}
+            {"type": "message", "content": [{"type": "output_text", "text": text}]}
         ],
         "usage": {"input_tokens": 10, "output_tokens": 3, "total_tokens": 13},
         **extra,
@@ -235,9 +235,9 @@ class TestStreaming:
                 [text_message(MessageRole.USER, "oi")]
             )
         ]
-        texto = "".join(c.delta_text for c in chunks)
+        text = "".join(c.delta_text for c in chunks)
 
-        assert texto == "Oi mundo"
+        assert text == "Oi mundo"
 
     async def test_stream_sem_nenhum_chunk_util_nao_trava(self):
         def handler(_req):
@@ -349,7 +349,7 @@ class TestStreamingToolCallsEUsage:
         assert usage["total_tokens"] == 13
 
 
-def test_payload_envia_a_chave_de_cache_da_conversa() -> None:
+def test_payload_sends_thread_cache_key() -> None:
     from backend.llm.prompt_cache import prompt_cache_key
 
     client = _client(lambda request: httpx.Response(200, json=_resposta_ok()))

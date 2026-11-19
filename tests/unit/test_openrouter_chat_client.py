@@ -32,13 +32,13 @@ def _client(handler, **kwargs) -> OpenRouterChatClient:
     return OpenRouterChatClient(model="openrouter/auto", client=http_client, **kwargs)
 
 
-def _resposta_ok(texto: str = "Olá", **extra) -> dict:
+def _resposta_ok(text: str = "Olá", **extra) -> dict:
     return {
         "id": "gen_1",
         "model": "openrouter/auto",
         "choices": [
             {
-                "message": {"role": "assistant", "content": texto},
+                "message": {"role": "assistant", "content": text},
                 "finish_reason": "stop",
             }
         ],
@@ -304,9 +304,9 @@ class TestStreaming:
                 [text_message(MessageRole.USER, "oi")]
             )
         ]
-        texto = "".join(c.delta_text for c in chunks)
+        text = "".join(c.delta_text for c in chunks)
 
-        assert texto == "Oi mundo"
+        assert text == "Oi mundo"
 
     async def test_reasoning_nao_entra_no_delta_text(self):
         corpo = (
@@ -326,10 +326,10 @@ class TestStreaming:
                 [text_message(MessageRole.USER, "oi")]
             )
         ]
-        texto = "".join(c.delta_text for c in chunks)
+        text = "".join(c.delta_text for c in chunks)
         raciocinio = "".join(c.delta_reasoning or "" for c in chunks)
 
-        assert texto == "resposta"
+        assert text == "resposta"
         assert raciocinio == "pensando..."
 
     async def test_stream_sem_nenhum_chunk_util_nao_trava(self):
@@ -591,7 +591,7 @@ class TestStreamingToolCallsEUsage:
         assert "Execute testes antes de concluir." in sys_msg
 
 
-class TestCacheDePrompt:
+class TestPromptCache:
     def _client(self, model: str, origem: str):
         from backend.llm.openrouter.chat_client import OpenRouterChatClient
 
@@ -603,7 +603,7 @@ class TestCacheDePrompt:
         )
         return OpenRouterChatClient(model, http, media_model_id=f"{origem}:{model}")
 
-    def _mensagens(self):
+    def _messages(self):
         from backend.vtypes.message import MessageRole, text_message
 
         return [
@@ -613,42 +613,42 @@ class TestCacheDePrompt:
             text_message(MessageRole.USER, "segunda"),
         ]
 
-    def test_modelo_anthropic_no_openrouter_marca_os_pontos_de_cache(self) -> None:
+    def test_anthropic_model_on_openrouter_marks_cache_breakpoints(self) -> None:
         corpo = self._client("anthropic/claude-sonnet-4.5", "openrouter")._payload(
-            self._mensagens(), tools=None, temperature=None, max_tokens=None
+            self._messages(), tools=None, temperature=None, max_tokens=None
         )
 
-        marcadas = [
+        marked = [
             m["role"]
             for m in corpo["messages"]
             if isinstance(m["content"], list) and m["content"][-1].get("cache_control")
         ]
-        assert marcadas == ["system", "assistant", "user"]
+        assert marked == ["system", "assistant", "user"]
         assert corpo["messages"][1]["content"] == "primeira"
 
-    def test_modelo_sem_cache_explicito_fica_intacto(self) -> None:
+    def test_model_without_explicit_cache_is_untouched(self) -> None:
         corpo = self._client("meta-llama/llama-4", "openrouter")._payload(
-            self._mensagens(), tools=None, temperature=None, max_tokens=None
+            self._messages(), tools=None, temperature=None, max_tokens=None
         )
         assert all(isinstance(m["content"], str) for m in corpo["messages"])
         assert "cache_prompt" not in corpo
 
-    def test_llamacpp_pede_reaproveitar_o_prefixo(self) -> None:
+    def test_llamacpp_asks_to_reuse_prefix(self) -> None:
         corpo = self._client("qwen", "llamacpp")._payload(
-            self._mensagens(), tools=None, temperature=None, max_tokens=None
+            self._messages(), tools=None, temperature=None, max_tokens=None
         )
         assert corpo["cache_prompt"] is True
 
 
-class TestChaveDeCacheNosRoteadores:
+class TestRouterCacheKey:
     def _payload(self, origem: str):
         from backend.llm.prompt_cache import prompt_cache_key
 
-        client = TestCacheDePrompt()._client("cc/claude-sonnet", origem)
+        client = TestPromptCache()._client("cc/claude-sonnet", origem)
         token = prompt_cache_key.set("thread-9")
         try:
             return client._payload(
-                TestCacheDePrompt()._mensagens(),
+                TestPromptCache()._messages(),
                 tools=None,
                 temperature=None,
                 max_tokens=None,
@@ -656,25 +656,25 @@ class TestChaveDeCacheNosRoteadores:
         finally:
             prompt_cache_key.reset(token)
 
-    def test_9router_recebe_a_chave_da_conversa(self) -> None:
+    def test_9router_receives_thread_key(self) -> None:
         assert self._payload("nine_router")["prompt_cache_key"] == "thread-9"
 
-    def test_openrouter_recebe_session_id_para_o_sticky_routing(self) -> None:
+    def test_openrouter_receives_session_id_for_sticky_routing(self) -> None:
         corpo = self._payload("openrouter")
         assert corpo["session_id"] == "thread-9"
         assert "prompt_cache_key" not in corpo
 
-    def test_llamacpp_nao_recebe_chave_de_sessao(self) -> None:
+    def test_llamacpp_does_not_receive_session_key(self) -> None:
         corpo = self._payload("llamacpp")
         assert "prompt_cache_key" not in corpo
         assert "session_id" not in corpo
 
 
-class TestSessaoEUsoDosRoteadores:
+class TestRouterSessionAndUsage:
     def _client(self, origem: str):
-        return TestCacheDePrompt()._client("modelo", origem)
+        return TestPromptCache()._client("modelo", origem)
 
-    def _com_chave(self, origem: str):
+    def _with_key(self, origem: str):
         from backend.llm.prompt_cache import prompt_cache_key
 
         token = prompt_cache_key.set("thread-7")
@@ -683,15 +683,15 @@ class TestSessaoEUsoDosRoteadores:
         finally:
             prompt_cache_key.reset(token)
 
-    def test_header_de_sessao_para_openrouter_e_9router(self) -> None:
-        assert self._com_chave("openrouter") == {"x-session-id": "thread-7"}
-        assert self._com_chave("nine_router") == {"x-session-id": "thread-7"}
+    def test_session_header_for_openrouter_and_9router(self) -> None:
+        assert self._with_key("openrouter") == {"x-session-id": "thread-7"}
+        assert self._with_key("nine_router") == {"x-session-id": "thread-7"}
 
-    def test_sem_header_para_runtimes_locais_ou_sem_conversa(self) -> None:
-        assert self._com_chave("llamacpp") is None
+    def test_no_header_for_local_runtimes_or_without_thread(self) -> None:
+        assert self._with_key("llamacpp") is None
         assert self._client("openrouter")._session_headers() is None
 
-    def test_usage_le_leitura_e_escrita_de_cache_nos_dois_formatos(self) -> None:
+    def test_usage_reads_cache_read_and_write_in_both_formats(self) -> None:
         from backend.llm.openrouter.chat_client import _usage_metadata
 
         openrouter = _usage_metadata(
@@ -704,7 +704,7 @@ class TestSessaoEUsoDosRoteadores:
                 },
             }
         )
-        omniroute = _usage_metadata(
+        omniroute_usage = _usage_metadata(
             {
                 "prompt_tokens": 1000,
                 "completion_tokens": 10,
@@ -715,7 +715,7 @@ class TestSessaoEUsoDosRoteadores:
             }
         )
 
-        assert openrouter is not None and omniroute is not None
+        assert openrouter is not None and omniroute_usage is not None
         assert openrouter["cached_input_tokens"] == 800
         assert openrouter["cache_write_tokens"] == 50
-        assert omniroute["cache_write_tokens"] == 70
+        assert omniroute_usage["cache_write_tokens"] == 70

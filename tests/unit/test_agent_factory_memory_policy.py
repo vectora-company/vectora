@@ -5,12 +5,12 @@ from __future__ import annotations
 from backend.services.agent_factory import _ORCHESTRATOR_PROMPT
 
 
-def test_prompt_nao_manda_consultar_memoria_para_dado_do_chat() -> None:
+def test_prompt_does_not_tell_model_to_look_up_chat_data() -> None:
     assert "never call a memory tool to recall it" in _ORCHESTRATOR_PROMPT
     assert "before answering about the user" not in _ORCHESTRATOR_PROMPT
 
 
-def test_prompt_restringe_save_memory_a_fatos_duraveis() -> None:
+def test_prompt_limits_save_memory_to_durable_facts() -> None:
     assert "durable facts" in _ORCHESTRATOR_PROMPT
     assert (
         "immediately"

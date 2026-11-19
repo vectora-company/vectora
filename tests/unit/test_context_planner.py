@@ -792,7 +792,7 @@ def test_context_projection_evidence_keeps_preserved_items() -> None:
     assert evidence["preserved_approvals"] == ["Aprovação de run_build: aprovado"]
 
 
-def test_memoria_entra_depois_das_instrucoes_de_sistema() -> None:
+def test_memory_goes_after_system_instructions() -> None:
     """O prefixo de sistema fica no topo para o cache de prompt não quebrar."""
     from backend.services.context_planner import plan_context
     from backend.services.memory_store import MemoryRecord
@@ -819,7 +819,7 @@ def test_memoria_entra_depois_das_instrucoes_de_sistema() -> None:
     assert planned.messages[2].text() == "oi"
 
 
-def test_bloco_de_memoria_tem_limite_de_caracteres() -> None:
+def test_memory_block_has_character_limit() -> None:
     from backend.services.context_planner import plan_context
     from backend.services.memory_store import MemoryRecord
     from backend.vtypes.message import MessageRole, text_message
@@ -845,7 +845,7 @@ def test_bloco_de_memoria_tem_limite_de_caracteres() -> None:
     assert bloco.endswith("…")
 
 
-def test_compactacao_preserva_a_cauda_mais_recente_dentro_do_orcamento() -> None:
+def test_compaction_preserves_most_recent_tail_within_budget() -> None:
     from backend.services.context_planner import plan_context
     from backend.vtypes.message import MessageRole, text_message
 
@@ -855,8 +855,8 @@ def test_compactacao_preserva_a_cauda_mais_recente_dentro_do_orcamento() -> None
         mensagens.append(text_message(papel, f"turno {i} " + "palavra " * 60))
 
     planejado = plan_context(mensagens, max_tokens=800)
-    textos = [m.text() for m in planejado.messages]
+    texts = [m.text() for m in planejado.messages]
 
-    assert any("turno 39" in t for t in textos)
-    assert not any("turno 0 " in t for t in textos)
-    assert any("mensagens anteriores" in t for t in textos)
+    assert any("turno 39" in t for t in texts)
+    assert not any("turno 0 " in t for t in texts)
+    assert any("mensagens anteriores" in t for t in texts)

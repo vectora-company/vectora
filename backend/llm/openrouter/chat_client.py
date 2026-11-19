@@ -256,12 +256,12 @@ def _usage_metadata(usage: _UsagePayload | None) -> UsageSnapshot | None:
     """Executa a operação  usage metadata."""
     if not usage:
         return None
-    entrada = int(usage.get("prompt_tokens") or 0)
-    saida = int(usage.get("completion_tokens") or 0)
+    input_tokens = int(usage.get("prompt_tokens") or 0)
+    output_tokens = int(usage.get("completion_tokens") or 0)
     snapshot: UsageSnapshot = {
-        "input_tokens": entrada,
-        "output_tokens": saida,
-        "total_tokens": int(usage.get("total_tokens") or entrada + saida),
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "total_tokens": int(usage.get("total_tokens") or input_tokens + output_tokens),
     }
     details = usage.get("prompt_tokens_details") or {}
     cached = int(details.get("cached_tokens") or 0)
@@ -320,14 +320,14 @@ class OpenRouterChatClient:
         accepted: AcceptedMedia | None = None,
     ) -> dict:
         """Executa a operação  payload."""
-        corpo: dict[str, Any] = {
+        body: dict[str, Any] = {
             "model": self.model,
             "messages": _to_openrouter_messages(messages, accepted),
         }
         if self.compact_system_prompt:
             from backend.llm.prompt_projection import compact_small_model_system_prompt
 
-            for message in corpo["messages"]:
+            for message in body["messages"]:
                 if message.get("role") == "system" and isinstance(
                     message.get("content"), str
                 ):
@@ -340,15 +340,15 @@ class OpenRouterChatClient:
             # at temperature 0 when the prompt contains identity/tool rules.
             # A small floor keeps coding deterministic enough while avoiding
             # known repetition loops in tiny local models.
-            corpo["temperature"] = (
+            body["temperature"] = (
                 max(0.2, temperature) if self.compact_system_prompt else temperature
             )
         if max_tokens is not None:
-            corpo["max_tokens"] = max_tokens
+            body["max_tokens"] = max_tokens
         if tools:
-            corpo["tools"] = [t.openai_schema() for t in tools]
-        self._apply_prompt_cache(corpo)
-        return corpo
+            body["tools"] = [t.openai_schema() for t in tools]
+        self._apply_prompt_cache(body)
+        return body
 
     def _session_headers(self) -> dict[str, str] | None:
         """``x-session-id`` com o id da conversa para OpenRouter, 9Router e OmniRoute.
@@ -362,7 +362,7 @@ class OpenRouterChatClient:
         key = prompt_cache_key.get()
         return {"x-session-id": key[:256]} if key else None
 
-    def _apply_prompt_cache(self, corpo: dict[str, Any]) -> None:
+    def _apply_prompt_cache(self, body: dict[str, Any]) -> None:
         """Cache de prompt conforme o backend por trás deste client.
 
         - OpenRouter com modelo Anthropic ou Gemini: marca system e as duas
@@ -375,21 +375,21 @@ class OpenRouterChatClient:
             return
         origin = (self.media_model_id or "").partition(":")[0]
         if origin == "llamacpp":
-            corpo["cache_prompt"] = True
+            body["cache_prompt"] = True
         elif origin == "nine_router":
             # 9Router e OmniRoute leem `prompt_cache_key` como identidade da
             # conversa: mantém a sessão estável e manda o prefixo à mesma conta.
             cache_key = prompt_cache_key.get()
             if cache_key:
-                corpo["prompt_cache_key"] = cache_key
+                body["prompt_cache_key"] = cache_key
         elif origin == "openrouter":
             # `session_id` fixa a conversa num provedor (sticky routing, 60 min):
             # sem isso o acerto de cache depende de o roteador cair no mesmo lugar.
             session_id = prompt_cache_key.get()
             if session_id:
-                corpo["session_id"] = session_id
+                body["session_id"] = session_id
             if self.model.startswith(("anthropic/", "google/gemini")):
-                mark_cache_breakpoints(corpo["messages"])
+                mark_cache_breakpoints(body["messages"])
 
     @staticmethod
     def _primeira_escolha(corpo: dict) -> dict:
@@ -412,17 +412,17 @@ class OpenRouterChatClient:
         max_tokens: int | None = None,
     ) -> VMessage:
         """Executa a operação agenerate."""
-        corpo = self._payload(
+        body = self._payload(
             messages,
             tools=tools,
             temperature=temperature,
             max_tokens=max_tokens,
             accepted=await self._accepted_media(messages),
         )
-        resposta = await self.client.post_json(
-            "/chat/completions", corpo, headers=self._session_headers()
+        response = await self.client.post_json(
+            "/chat/completions", body, headers=self._session_headers()
         )
-        escolha = self._primeira_escolha(resposta)
+        escolha = self._primeira_escolha(response)
         mensagem = escolha.get("message") or {}
 
         chamadas = _parse_tool_calls(mensagem.get("tool_calls") or [])
@@ -450,7 +450,7 @@ class OpenRouterChatClient:
         max_tokens: int | None = None,
     ) -> AsyncIterator[VMessageChunk]:
         """Executa a operação astream."""
-        corpo = self._payload(
+        body = self._payload(
             messages,
             tools=tools,
             temperature=temperature,
@@ -458,17 +458,17 @@ class OpenRouterChatClient:
             accepted=await self._accepted_media(messages),
         )
 
-        async for evento in self.client.stream_sse(
-            "/chat/completions", corpo, headers=self._session_headers()
+        async for event in self.client.stream_sse(
+            "/chat/completions", body, headers=self._session_headers()
         ):
-            # O OpenRouter manda `usage` no último evento SSE do stream —
+            # O OpenRouter manda `usage` no último event SSE do stream —
             # às vezes junto de `choices` vazio, às vezes acompanhando o
             # chunk final com finish_reason. Captura nos dois casos.
-            usage = evento.get("usage")
+            usage = event.get("usage")
             if usage:
                 yield VMessageChunk(usage=_usage_metadata(usage))
 
-            escolhas = evento.get("choices") or []
+            escolhas = event.get("choices") or []
             if not escolhas:
                 continue
             delta = escolhas[0].get("delta") or {}

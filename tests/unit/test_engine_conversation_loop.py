@@ -163,9 +163,9 @@ def ctx() -> ToolContext:
     return ToolContext(user_id="alice", thread_id="thread-1")
 
 
-def _texto_chunk(texto: str) -> VMessageChunk:
+def _texto_chunk(text: str) -> VMessageChunk:
     """Executa a operação  texto chunk."""
-    return VMessageChunk(delta_text=texto)
+    return VMessageChunk(delta_text=text)
 
 
 @pytest.mark.parametrize(
@@ -2955,7 +2955,7 @@ async def test_plan_proposal_approval_and_stages_complete_through_harness(
     await db.close()
 
 
-def test_drop_terminal_notices_remove_avisos_sinteticos() -> None:
+def test_drop_terminal_notices_removes_synthetic_notices() -> None:
     from backend.engine.conversation_loop import _drop_terminal_notices
     from backend.vtypes.message import MessageRole, VMessage, text_message
 
@@ -2980,7 +2980,7 @@ def test_drop_terminal_notices_remove_avisos_sinteticos() -> None:
     assert resultado[1] == resposta
 
 
-def test_drop_terminal_notices_une_usuarios_seguidos() -> None:
+def test_drop_terminal_notices_merges_consecutive_users() -> None:
     from backend.engine.conversation_loop import _drop_terminal_notices
     from backend.vtypes.message import MessageRole, VMessage, text_message
 
@@ -3000,7 +3000,7 @@ def test_drop_terminal_notices_une_usuarios_seguidos() -> None:
 
 
 @pytest.mark.asyncio
-async def test_memorias_ficam_congeladas_por_conversa(monkeypatch) -> None:
+async def test_memories_stay_frozen_per_thread(monkeypatch) -> None:
     from backend.engine import conversation_loop as cl
     from backend.tools.context import ToolContext
 

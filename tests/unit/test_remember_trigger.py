@@ -285,7 +285,7 @@ async def test_exception_never_propagates(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_schedule_remember_nao_bloqueia_o_chamador(monkeypatch) -> None:
+async def test_schedule_remember_does_not_block_caller(monkeypatch) -> None:
     """A destilação roda em segundo plano: o agendamento volta na hora."""
     import asyncio
 
@@ -294,11 +294,11 @@ async def test_schedule_remember_nao_bloqueia_o_chamador(monkeypatch) -> None:
     started = asyncio.Event()
     release = asyncio.Event()
 
-    async def _lenta(thread_id: str, user_id: str) -> None:
+    async def _slow(thread_id: str, user_id: str) -> None:
         started.set()
         await release.wait()
 
-    monkeypatch.setattr(remember_trigger, "maybe_trigger_remember", _lenta)
+    monkeypatch.setattr(remember_trigger, "maybe_trigger_remember", _slow)
 
     remember_trigger.schedule_remember("t1", "u1")
 
@@ -311,7 +311,7 @@ async def test_schedule_remember_nao_bloqueia_o_chamador(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_destilacao_usa_o_trecho_mais_recente_da_conversa(monkeypatch) -> None:
+async def test_distillation_uses_most_recent_part_of_thread(monkeypatch) -> None:
     from backend.services import learning
 
     capturado: dict[str, str] = {}
@@ -338,7 +338,7 @@ async def test_destilacao_usa_o_trecho_mais_recente_da_conversa(monkeypatch) -> 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("texto", "esperado"),
+    ("text", "expected"),
     [
         ("Lembre que eu uso pnpm", True),
         ("por favor, não esqueça do prefixo", True),
@@ -346,8 +346,8 @@ async def test_destilacao_usa_o_trecho_mais_recente_da_conversa(monkeypatch) -> 
         ("qual é o clima hoje?", False),
     ],
 )
-async def test_pedido_explicito_de_lembrar_antecipa_a_revisao(
-    monkeypatch, texto, esperado
+async def test_explicit_remember_request_brings_review_forward(
+    monkeypatch, text, expected
 ) -> None:
     from backend.services import agent_factory
     from backend.services.remember_trigger import _explicit_cue
@@ -358,9 +358,9 @@ async def test_pedido_explicito_de_lembrar_antecipa_a_revisao(
         AsyncMock(
             return_value=[
                 ("assistant", "ok", None, None),
-                ("user", texto, None, None),
+                ("user", text, None, None),
             ]
         ),
     )
 
-    assert await _explicit_cue("t1") is esperado
+    assert await _explicit_cue("t1") is expected

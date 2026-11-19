@@ -19,7 +19,7 @@ class _Client:
         return {"name": f"cachedContents/{len(self.created)}"}
 
 
-def _grande() -> dict:
+def _large_payload() -> dict:
     return {
         "systemInstruction": {"parts": [{"text": "regra " * 4000}]},
         "tools": [{"functionDeclarations": []}],
@@ -28,81 +28,85 @@ def _grande() -> dict:
 
 
 @pytest.fixture(autouse=True)
-def _limpa() -> None:
+def _reset_state() -> None:
     pc.reset_state()
 
 
 @pytest.mark.asyncio
-async def test_prefixo_grande_vira_cached_content_e_e_reaproveitado() -> None:
+async def test_large_prefix_becomes_cached_content_and_is_reused() -> None:
     client = _Client()
-    corpo1, usou1 = await pc.apply_cached_content(client, "gemini-2.5-pro", _grande())
-    corpo2, usou2 = await pc.apply_cached_content(client, "gemini-2.5-pro", _grande())
+    body1, used1 = await pc.apply_cached_content(
+        client, "gemini-2.5-pro", _large_payload()
+    )
+    body2, used2 = await pc.apply_cached_content(
+        client, "gemini-2.5-pro", _large_payload()
+    )
 
-    assert usou1 and usou2
+    assert used1 and used2
     assert len(client.created) == 1
     assert client.created[0]["model"] == "models/gemini-2.5-pro"
-    assert corpo1["cachedContent"] == corpo2["cachedContent"] == "cachedContents/1"
-    assert "systemInstruction" not in corpo1
-    assert "tools" not in corpo1
-    assert corpo1["contents"][0]["parts"][0]["text"] == "oi"
+    assert body1["cachedContent"] == body2["cachedContent"] == "cachedContents/1"
+    assert "systemInstruction" not in body1
+    assert "tools" not in body1
+    assert body1["contents"][0]["parts"][0]["text"] == "oi"
 
 
 @pytest.mark.asyncio
-async def test_prefixo_pequeno_nao_usa_cache() -> None:
+async def test_small_prefix_does_not_use_cache() -> None:
     client = _Client()
     payload = {
         "systemInstruction": {"parts": [{"text": "curto"}]},
         "contents": [],
     }
 
-    corpo, usou = await pc.apply_cached_content(client, "gemini-2.5-pro", payload)
+    body, used = await pc.apply_cached_content(client, "gemini-2.5-pro", payload)
 
-    assert usou is False
-    assert corpo is payload
+    assert used is False
+    assert body is payload
     assert client.created == []
 
 
 @pytest.mark.asyncio
-async def test_falha_na_criacao_cai_no_envio_normal_e_nao_insiste() -> None:
+async def test_creation_failure_falls_back_and_does_not_retry_soon() -> None:
     client = _Client(fail=True)
-    payload = _grande()
+    payload = _large_payload()
 
-    corpo, usou = await pc.apply_cached_content(client, "m", payload, now=0.0)
-    assert usou is False and corpo is payload
+    body, used = await pc.apply_cached_content(client, "m", payload, now=0.0)
+    assert used is False and body is payload
 
     ok = _Client()
-    _, usou = await pc.apply_cached_content(ok, "m", payload, now=10.0)
-    assert usou is False and ok.created == []
-    _, usou = await pc.apply_cached_content(ok, "m", payload, now=400.0)
-    assert usou is True
+    _, used = await pc.apply_cached_content(ok, "m", payload, now=10.0)
+    assert used is False and ok.created == []
+    _, used = await pc.apply_cached_content(ok, "m", payload, now=400.0)
+    assert used is True
 
 
 @pytest.mark.asyncio
-async def test_cache_vencido_e_recriado() -> None:
+async def test_expired_cache_is_recreated() -> None:
     client = _Client()
-    await pc.apply_cached_content(client, "m", _grande(), now=0.0)
-    await pc.apply_cached_content(client, "m", _grande(), now=4000.0)
+    await pc.apply_cached_content(client, "m", _large_payload(), now=0.0)
+    await pc.apply_cached_content(client, "m", _large_payload(), now=4000.0)
     assert len(client.created) == 2
 
 
 @pytest.mark.asyncio
-async def test_desligado_em_settings(monkeypatch) -> None:
+async def test_disabled_in_settings(monkeypatch) -> None:
     from backend.settings import settings
 
     monkeypatch.setattr(settings, "prompt_cache_enabled", False)
     client = _Client()
-    payload = _grande()
+    payload = _large_payload()
 
-    corpo, usou = await pc.apply_cached_content(client, "m", payload)
+    body, used = await pc.apply_cached_content(client, "m", payload)
 
-    assert usou is False and corpo is payload and client.created == []
+    assert used is False and body is payload and client.created == []
 
 
 class _GeminiFake:
     """Client falso: recusa chamadas com cachedContent, aceita as sem."""
 
     def __init__(self) -> None:
-        self.chamadas: list[dict] = []
+        self.calls: list[dict] = []
 
     async def create_cached_content(self, payload: dict) -> dict:
         return {"name": "cachedContents/9"}
@@ -110,7 +114,7 @@ class _GeminiFake:
     async def generate_content(self, model: str, payload: dict) -> dict:
         from backend.llm.google.client import GoogleGenAIResponseError
 
-        self.chamadas.append(payload)
+        self.calls.append(payload)
         if "cachedContent" in payload:
             raise GoogleGenAIResponseError("cache expirado")
         return {"candidates": [{"content": {"parts": [{"text": "ok"}]}}]}
@@ -118,13 +122,13 @@ class _GeminiFake:
     async def stream_generate_content(self, model: str, payload: dict):
         from backend.llm.google.client import GoogleGenAIResponseError
 
-        self.chamadas.append(payload)
+        self.calls.append(payload)
         if "cachedContent" in payload:
             raise GoogleGenAIResponseError("cache expirado")
         yield {"candidates": [{"content": {"parts": [{"text": "ok"}]}}]}
 
 
-def _mensagens_grandes():
+def _large_messages():
     from backend.vtypes.message import MessageRole, text_message
 
     return [
@@ -134,33 +138,33 @@ def _mensagens_grandes():
 
 
 @pytest.mark.asyncio
-async def test_agenerate_refaz_sem_cache_quando_a_api_recusa() -> None:
+async def test_agenerate_retries_without_cache_when_api_rejects_it() -> None:
     from backend.llm.google.chat_client import GoogleChatClient
 
     fake = _GeminiFake()
     client = GoogleChatClient("gemini-2.5-pro", fake)  # ty: ignore[invalid-argument-type]
 
-    resposta = await client.agenerate(_mensagens_grandes())
+    response = await client.agenerate(_large_messages())
 
-    assert resposta.text() == "ok"
-    assert "cachedContent" in fake.chamadas[0]
-    assert "cachedContent" not in fake.chamadas[1]
-    assert "systemInstruction" in fake.chamadas[1]
+    assert response.text() == "ok"
+    assert "cachedContent" in fake.calls[0]
+    assert "cachedContent" not in fake.calls[1]
+    assert "systemInstruction" in fake.calls[1]
 
 
 @pytest.mark.asyncio
-async def test_astream_refaz_sem_cache_quando_a_api_recusa() -> None:
+async def test_astream_retries_without_cache_when_api_rejects_it() -> None:
     from backend.llm.google.chat_client import GoogleChatClient
 
     fake = _GeminiFake()
     client = GoogleChatClient("gemini-2.5-pro", fake)  # ty: ignore[invalid-argument-type]
 
-    textos = [
+    texts = [
         chunk.delta_text
-        async for chunk in client.astream(_mensagens_grandes())
+        async for chunk in client.astream(_large_messages())
         if chunk.delta_text
     ]
 
-    assert textos == ["ok"]
-    assert "cachedContent" in fake.chamadas[0]
-    assert "cachedContent" not in fake.chamadas[1]
+    assert texts == ["ok"]
+    assert "cachedContent" in fake.calls[0]
+    assert "cachedContent" not in fake.calls[1]
