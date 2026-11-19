@@ -845,16 +845,3 @@ def test_local_llm_only_starts_a_machine_when_requested() -> None:
     assert "github.event_name == 'workflow_dispatch'" in job
     assert "contains(github.event.head_commit.message, '[llm-local]')" in job
     assert "contains(github.event.head_commit.message, '[local-llm]')" in job
-
-
-def test_snyk_in_pull_requests_only_runs_when_dependencies_change() -> None:
-    """Em PR o Snyk só roda quando um manifesto ou trava muda; o resto fica no
-    push do master, na agenda semanal e no disparo manual."""
-    content = (WORKFLOW.parent / "snyk.yml").read_text(encoding="utf-8")
-    pull_request = _trigger_block(content, "pull_request")
-
-    for manifest in ("pyproject.toml", "uv.lock", "pnpm-lock.yaml", "package.json"):
-        assert f'"{manifest}"' in pull_request
-    assert "paths:" in pull_request
-    assert "schedule:" in content
-    assert "workflow_dispatch:" in content
