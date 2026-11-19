@@ -15,11 +15,11 @@
 import { Suspense, useMemo, useState } from "react";
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ResizableDialogContent } from "@/components/ui/resizable-dialog";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { useFeatureFlags } from "@/lib/hooks/use-feature-flags";
@@ -101,8 +101,13 @@ export function SettingsOverlay() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent
-        className="p-0 gap-0 w-[92vw] h-[88vh] max-w-6xl overflow-hidden flex flex-col sm:max-w-6xl"
+      <ResizableDialogContent
+        storageKey="settings"
+        defaultWidth={1152}
+        defaultHeight={760}
+        minWidth={720}
+        minHeight={480}
+        className="p-0 gap-0 overflow-hidden"
         showCloseButton
       >
         <DialogHeader className="sr-only">
@@ -205,7 +210,7 @@ export function SettingsOverlay() {
             </>
           )}
         </div>
-      </DialogContent>
+      </ResizableDialogContent>
     </Dialog>
   );
 }

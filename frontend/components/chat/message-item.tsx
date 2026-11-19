@@ -29,12 +29,12 @@ import {
 } from "@/components/ui/tooltip";
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ResizableDialogContent } from "@/components/ui/resizable-dialog";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
@@ -1103,7 +1103,14 @@ export const MessageItem = memo(
 
                 {workspaceId && humanMessageIndex !== undefined && (
                   <Dialog open={rewindOpen} onOpenChange={setRewindOpen}>
-                    <DialogContent>
+                    <ResizableDialogContent
+                      storageKey="chat-rewind"
+                      defaultWidth={480}
+                      defaultHeight={360}
+                      minWidth={360}
+                      minHeight={240}
+                      className="gap-4 p-6 overflow-y-auto"
+                    >
                       <DialogHeader>
                         <DialogTitle>{m.chat_rewind_title()}</DialogTitle>
                         <DialogDescription>
@@ -1131,7 +1138,7 @@ export const MessageItem = memo(
                           {m.chat_rewind_confirm()}
                         </Button>
                       </DialogFooter>
-                    </DialogContent>
+                    </ResizableDialogContent>
                   </Dialog>
                 )}
               </>
@@ -1141,7 +1148,14 @@ export const MessageItem = memo(
               open={lightboxImage !== null}
               onOpenChange={(v) => !v && setLightboxImage(null)}
             >
-              <DialogContent className="max-w-[90vw] max-h-[90vh] w-fit p-2 bg-background/95">
+              <ResizableDialogContent
+                storageKey="chat-lightbox"
+                defaultWidth={960}
+                defaultHeight={640}
+                minWidth={360}
+                minHeight={240}
+                className="gap-0 p-2 bg-background/95"
+              >
                 <DialogHeader className="sr-only">
                   <DialogTitle>
                     {lightboxImage?.name ?? m.chat_image_lightbox_title()}
@@ -1151,11 +1165,11 @@ export const MessageItem = memo(
                   </DialogDescription>
                 </DialogHeader>
                 {lightboxImage && (
-                  <div className="relative flex items-center justify-center">
+                  <div className="relative flex h-full min-h-0 w-full items-center justify-center">
                     <img
                       src={lightboxImage.src}
                       alt={lightboxImage.name}
-                      className="max-h-[85vh] max-w-[85vw] object-contain rounded"
+                      className="h-full w-full rounded object-contain"
                     />
                     <div className="absolute top-2 right-2 flex gap-1">
                       <a
@@ -1177,7 +1191,7 @@ export const MessageItem = memo(
                     </div>
                   </div>
                 )}
-              </DialogContent>
+              </ResizableDialogContent>
             </Dialog>
 
             {message.role === "assistant" && (

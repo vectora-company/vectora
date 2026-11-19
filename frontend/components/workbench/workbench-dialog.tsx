@@ -3,11 +3,11 @@
 import type { ReactNode, RefObject } from "react";
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ResizableDialogContent } from "@/components/ui/resizable-dialog";
 
 interface WorkbenchDialogProps {
   open: boolean;
@@ -33,9 +33,14 @@ export function WorkbenchDialog({
 }: WorkbenchDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
+      <ResizableDialogContent
+        storageKey="workbench-dialog"
+        defaultWidth={1248}
+        defaultHeight={832}
+        minWidth={640}
+        minHeight={420}
+        className="gap-0 p-0 overflow-hidden"
         data-testid={testId}
-        className="flex h-[min(85vh,52rem)] w-[min(92vw,78rem)] max-w-none flex-col gap-0 overflow-hidden p-0"
       >
         <DialogHeader className="shrink-0 border-b border-border/60 px-4 py-3 pr-12">
           <DialogTitle className="truncate text-sm">{title}</DialogTitle>
@@ -53,7 +58,7 @@ export function WorkbenchDialog({
         >
           {children}
         </div>
-      </DialogContent>
+      </ResizableDialogContent>
     </Dialog>
   );
 }

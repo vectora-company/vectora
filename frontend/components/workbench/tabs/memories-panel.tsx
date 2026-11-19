@@ -17,12 +17,12 @@ import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ResizableDialogContent } from "@/components/ui/resizable-dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useWorkspacesStore } from "@/lib/stores/workspaces-store";
@@ -385,7 +385,14 @@ export function MemoriesPanel() {
           }
         }}
       >
-        <DialogContent>
+        <ResizableDialogContent
+          storageKey="memory-add"
+          defaultWidth={520}
+          defaultHeight={400}
+          minWidth={380}
+          minHeight={280}
+          className="gap-4 p-6 overflow-y-auto"
+        >
           <DialogHeader>
             <DialogTitle>{m.memory_add_title()}</DialogTitle>
             <DialogDescription>{m.memory_add_desc()}</DialogDescription>
@@ -433,12 +440,16 @@ export function MemoriesPanel() {
               {m.memory_save()}
             </Button>
           </DialogFooter>
-        </DialogContent>
+        </ResizableDialogContent>
       </Dialog>
 
       {/* Dialog de confirmação — limpar tudo */}
       <Dialog open={clearConfirmOpen} onOpenChange={setClearConfirmOpen}>
-        <DialogContent>
+        <ResizableDialogContent
+          resizable={false}
+          defaultWidth={384}
+          className="gap-4 p-6"
+        >
           <DialogHeader>
             <DialogTitle>{m.memory_clear_title()}</DialogTitle>
             <DialogDescription>{m.memory_clear_desc()}</DialogDescription>
@@ -460,7 +471,7 @@ export function MemoriesPanel() {
               {m.memory_clear_all()}
             </Button>
           </DialogFooter>
-        </DialogContent>
+        </ResizableDialogContent>
       </Dialog>
     </div>
   );

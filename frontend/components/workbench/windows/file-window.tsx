@@ -20,12 +20,12 @@ import { EditorTab } from "@/components/workbench/windows/editor-tab";
 import { editorKey, useEditorRegistry } from "@/lib/stores/editor-registry";
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ResizableDialogContent } from "@/components/ui/resizable-dialog";
 import { Button } from "@/components/ui/button";
 
 export function FileWindow({ win }: { win: FileWindowState }) {
@@ -104,7 +104,11 @@ export function FileWindow({ win }: { win: FileWindowState }) {
         <FileEditor workspaceId={win.workspaceId} path={win.activeTab} />
       </FloatingFrame>
       <Dialog open={closeDialogOpen} onOpenChange={setCloseDialogOpen}>
-        <DialogContent className="max-w-sm">
+        <ResizableDialogContent
+          resizable={false}
+          defaultWidth={384}
+          className="gap-4 p-6"
+        >
           <DialogHeader>
             <DialogTitle>{m.workbench_files_discard_title()}</DialogTitle>
             <DialogDescription>
@@ -132,7 +136,7 @@ export function FileWindow({ win }: { win: FileWindowState }) {
               {m.workbench_files_save()}
             </Button>
           </DialogFooter>
-        </DialogContent>
+        </ResizableDialogContent>
       </Dialog>
     </>
   );

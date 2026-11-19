@@ -12,12 +12,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ResizableDialogContent } from "@/components/ui/resizable-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { m } from "@/lib/paraglide/messages";
@@ -136,7 +136,11 @@ export function EditorTab({
       </DropdownMenu>
 
       <Dialog open={saveAsOpen} onOpenChange={setSaveAsOpen}>
-        <DialogContent className="max-w-sm">
+        <ResizableDialogContent
+          resizable={false}
+          defaultWidth={384}
+          className="gap-4 p-6"
+        >
           <DialogHeader>
             <DialogTitle>{m.workbench_files_save_as_title()}</DialogTitle>
           </DialogHeader>
@@ -168,11 +172,15 @@ export function EditorTab({
               </Button>
             </DialogFooter>
           </form>
-        </DialogContent>
+        </ResizableDialogContent>
       </Dialog>
 
       <Dialog open={closeDialogOpen} onOpenChange={setCloseDialogOpen}>
-        <DialogContent className="max-w-sm">
+        <ResizableDialogContent
+          resizable={false}
+          defaultWidth={384}
+          className="gap-4 p-6"
+        >
           <DialogHeader>
             <DialogTitle>{m.workbench_files_discard_title()}</DialogTitle>
             <DialogDescription>
@@ -197,7 +205,7 @@ export function EditorTab({
               {m.workbench_files_save()}
             </Button>
           </DialogFooter>
-        </DialogContent>
+        </ResizableDialogContent>
       </Dialog>
     </>
   );

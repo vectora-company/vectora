@@ -12,12 +12,12 @@ import {
 
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ResizableDialogContent } from "@/components/ui/resizable-dialog";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useWorkspacesStore } from "@/lib/stores/workspaces-store";
@@ -80,7 +80,14 @@ export function NewChatDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-md">
+        <ResizableDialogContent
+          storageKey="new-chat"
+          defaultWidth={480}
+          defaultHeight={460}
+          minWidth={360}
+          minHeight={300}
+          className="gap-4 p-6 overflow-y-auto"
+        >
           <DialogHeader>
             <DialogTitle>{m.new_chat_dialog_title()}</DialogTitle>
             <DialogDescription>{m.new_chat_dialog_desc()}</DialogDescription>
@@ -171,7 +178,7 @@ export function NewChatDialog({
             </Button>
             <Button onClick={handleConfirm}>{m.new_chat_confirm()}</Button>
           </DialogFooter>
-        </DialogContent>
+        </ResizableDialogContent>
       </Dialog>
 
       <WorkspaceTrustDialog

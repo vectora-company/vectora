@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogTitle } from "@/components/ui/dialog";
+import { ResizableDialogContent } from "@/components/ui/resizable-dialog";
 import { extensionIcon } from "@/lib/extensions/icons";
 import { contributionsOfKind } from "@/lib/extensions/registry";
 import { useExtensionsStore } from "@/lib/stores/extensions-store";
@@ -45,10 +46,17 @@ export function ExtensionHeaderActions() {
         onOpenChange={(next) => !next && setOpenId(null)}
       >
         {open && (
-          <DialogContent className="h-[70vh] max-w-3xl">
+          <ResizableDialogContent
+            storageKey="extension-header"
+            defaultWidth={768}
+            defaultHeight={600}
+            minWidth={480}
+            minHeight={320}
+            className="gap-4 p-6 overflow-y-auto"
+          >
             <DialogTitle>{open.label}</DialogTitle>
             <ExtensionFrame contribution={open} />
-          </DialogContent>
+          </ResizableDialogContent>
         )}
       </Dialog>
     </>
