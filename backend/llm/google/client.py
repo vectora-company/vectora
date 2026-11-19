@@ -111,6 +111,24 @@ class GoogleGenAIClient:
             raise GoogleGenAIResponseError(msg)
         return corpo
 
+    async def create_cached_content(self, payload: dict) -> dict:
+        """``POST /cachedContents`` — cria um contexto reaproveitável."""
+        client = await self._ensure_client()
+        resp = await client.post(
+            f"{self._base_url}/cachedContents",
+            params={"key": self._api_key},
+            json=payload,
+        )
+        try:
+            corpo = resp.json()
+        except Exception:
+            corpo = None
+        self._raise_for_status(resp.status_code, corpo)
+        if not isinstance(corpo, dict):
+            msg = "Google Gemini devolveu corpo não-JSON ao criar o cache."
+            raise GoogleGenAIResponseError(msg)
+        return corpo
+
     async def embed_content(self, model: str, text: str, *, task_type: str) -> dict:
         """``POST /{model}:embedContent`` para documentos ou consultas."""
         client = await self._ensure_client()
