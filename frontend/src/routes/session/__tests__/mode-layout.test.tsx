@@ -649,7 +649,9 @@ describe("SessionPage — IDE e Kanban no tablet", () => {
 
     render(<SessionPage />);
 
-    expect(await screen.findByTestId("compact-sessions-rail")).toBeVisible();
+    await waitFor(() =>
+      expect(screen.getByTestId("compact-sessions-rail")).toBeVisible(),
+    );
     expect(screen.queryByTestId("compact-open-sessions")).toBeNull();
     fireEvent.click(screen.getByTestId("compact-rail-sessions"));
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
@@ -683,7 +685,9 @@ describe("SessionPage — tablet com faixas nas bordas", () => {
 
     render(<SessionPage />);
 
-    expect(await screen.findByTestId("compact-sessions-rail")).toBeVisible();
+    await waitFor(() =>
+      expect(screen.getByTestId("compact-sessions-rail")).toBeVisible(),
+    );
     expect(screen.getByTestId("workbench-navbar")).toBeInTheDocument();
     // Os botões do cabeçalho só existem quando não há faixas (celular).
     expect(screen.queryByTestId("compact-open-sessions")).toBeNull();
