@@ -52,7 +52,7 @@ import {
   markStreamStarted,
   markStreamEnded,
 } from "@/lib/utils/stream-interruption";
-import { m as msg } from "@/lib/paraglide/messages";
+import { m } from "@/lib/paraglide/messages";
 import { buildToolCall, parseToolOutput } from "@/lib/utils/chat/tool-call";
 
 // ============================================================================
@@ -117,32 +117,32 @@ export function isNetworkError(err: unknown): boolean {
 export function streamWarningMessage(code?: string): string {
   switch (code) {
     case "TOOL_CALL_REPEATED":
-      return msg.chat_warning_tool_call_repeated();
+      return m.chat_warning_tool_call_repeated();
     default:
-      return msg.chat_warning_generic();
+      return m.chat_warning_generic();
   }
 }
 
 export function streamErrorMessage(code?: string): string {
   switch (code) {
     case "RATE_LIMIT":
-      return msg.chat_error_rate_limit();
+      return m.chat_error_rate_limit();
     case "MISSING_KEYS":
-      return msg.chat_error_missing_keys();
+      return m.chat_error_missing_keys();
     case "AUTH":
-      return msg.chat_error_auth();
+      return m.chat_error_auth();
     case "TIMEOUT":
-      return msg.chat_error_timeout();
+      return m.chat_error_timeout();
     case "MODEL_NO_VISION":
-      return msg.chat_error_model_no_vision();
+      return m.chat_error_model_no_vision();
     case "MODEL_INCOMPATIBLE":
-      return msg.chat_error_model_incompatible();
+      return m.chat_error_model_incompatible();
     case "MODEL_NOT_ALLOWED":
-      return msg.chat_error_model_not_allowed();
+      return m.chat_error_model_not_allowed();
     case "ACCOUNT_CREDIT":
-      return msg.chat_error_account_credit();
+      return m.chat_error_account_credit();
     default:
-      return msg.chat_error_generic();
+      return m.chat_error_generic();
   }
 }
 
@@ -150,7 +150,7 @@ export function streamErrorMessage(code?: string): string {
 function announceSSEConnected(): void {
   const prev = useNetworkStore.getState().sseStatus;
   if (prev === "reconnecting" || prev === "failed") {
-    useToastStore.getState().success(msg.network_sse_reconnected());
+    useToastStore.getState().success(m.network_sse_reconnected());
   }
   if (prev !== "connected")
     useNetworkStore.getState().setSSEStatus("connected");
@@ -198,11 +198,13 @@ async function reconcileTruncatedMessage(
 ): Promise<void> {
   try {
     const { messages } = await getHistory(threadId);
-    const lastAssistant = messages.findLast((m) => m.role === "assistant");
+    const lastAssistant = messages.findLast(
+      (item) => item.role === "assistant",
+    );
     if (lastAssistant) {
       setMessages((prev) =>
-        updateMessageInList(prev, assistantMessageId, (m) => ({
-          ...m,
+        updateMessageInList(prev, assistantMessageId, (item) => ({
+          ...item,
           content: lastAssistant.content,
           isThinking: false,
         })),
@@ -265,8 +267,8 @@ async function reconcileTurnFiles(
     const files = snapshot.files;
     if (files.length === 0) return;
     setMessages((prev) =>
-      updateMessageInList(prev, assistantMessageId, (m) => ({
-        ...m,
+      updateMessageInList(prev, assistantMessageId, (item) => ({
+        ...item,
         editedFiles: files,
       })),
     );
@@ -513,9 +515,13 @@ export function useStreamHandler({
             const sep = needsSeparator ? "\n\n" : "";
             needsSeparator = false;
             setMessages((prev) =>
-              updateMessageInList(prev, activeId, (m) => {
-                const cur = typeof m.content === "string" ? m.content : "";
-                return { ...m, content: cur + (cur && sep ? sep : "") + token };
+              updateMessageInList(prev, activeId, (item) => {
+                const cur =
+                  typeof item.content === "string" ? item.content : "";
+                return {
+                  ...item,
+                  content: cur + (cur && sep ? sep : "") + token,
+                };
               }),
             );
             // Cede ao scheduler do browser para que o token apareça na tela
@@ -538,9 +544,10 @@ export function useStreamHandler({
           // na MESMA bolha — sem nova mensagem.
           if (event.type === "message_break") {
             setMessages((prev) =>
-              updateMessageInList(prev, activeId, (m) => {
-                const current = typeof m.content === "string" ? m.content : "";
-                return { ...m, content: stripMarkdownEnvelope(current) };
+              updateMessageInList(prev, activeId, (item) => {
+                const current =
+                  typeof item.content === "string" ? item.content : "";
+                return { ...item, content: stripMarkdownEnvelope(current) };
               }),
             );
             assistantContent = stripMarkdownEnvelope(assistantContent);
@@ -592,24 +599,25 @@ export function useStreamHandler({
             // throw — o catch fica reservado a quedas de transporte.
             const friendly = streamErrorMessage(event.code);
             setMessages((prev) =>
-              updateMessageInList(prev, activeId, (m) => {
+              updateMessageInList(prev, activeId, (item) => {
                 // Preserva qualquer conteúdo parcial real já gerado antes do
                 // erro (ex.: quota estourou no meio da execução de um
                 // subagente, depois do orquestrador já ter respondido algo)
                 // — nunca sobrescreve, senão o usuário só vê o aviso
                 // genérico e perde o trabalho parcial visível.
-                const existing = typeof m.content === "string" ? m.content : "";
+                const existing =
+                  typeof item.content === "string" ? item.content : "";
                 const content = existing.trim()
                   ? `${existing}\n\n---\n\n${friendly}`
                   : friendly;
                 return {
-                  ...m,
+                  ...item,
                   content,
                   isError: true,
                   isThinking: false,
                   thinkingDuration:
-                    m.thinkingStartTime !== undefined
-                      ? Date.now() - m.thinkingStartTime
+                    item.thinkingStartTime !== undefined
+                      ? Date.now() - item.thinkingStartTime
                       : undefined,
                 };
               }),
@@ -639,12 +647,12 @@ export function useStreamHandler({
           // Interrompido pelo usuário — não é um erro; encerra o thinking timer
           streamCompletedNormally = true;
           setMessages((prev) =>
-            updateMessageInList(prev, activeId, (m) => ({
-              ...m,
+            updateMessageInList(prev, activeId, (item) => ({
+              ...item,
               isThinking: false,
               thinkingDuration:
-                m.thinkingStartTime !== undefined
-                  ? Date.now() - m.thinkingStartTime
+                item.thinkingStartTime !== undefined
+                  ? Date.now() - item.thinkingStartTime
                   : undefined,
             })),
           );
@@ -663,14 +671,14 @@ export function useStreamHandler({
           // imediato (feedback rápido) — sem conteúdo, mensagem genérica
           // localizada e isError (retry), nunca o texto cru da exceção.
           setMessages((prev) =>
-            updateMessageInList(prev, activeId, (m) => ({
-              ...m,
+            updateMessageInList(prev, activeId, (item) => ({
+              ...item,
               content: assistantContent || streamErrorMessage(undefined),
               isError: !assistantContent,
               isThinking: false,
               thinkingDuration:
-                m.thinkingStartTime !== undefined
-                  ? Date.now() - m.thinkingStartTime
+                item.thinkingStartTime !== undefined
+                  ? Date.now() - item.thinkingStartTime
                   : undefined,
             })),
           );
@@ -709,17 +717,17 @@ export function useStreamHandler({
         }
         // Defesa em profundidade: garante que o spinner sempre encerra na bolha ativa
         setMessages((prev) =>
-          updateMessageInList(prev, activeId, (m) =>
-            m.isThinking
+          updateMessageInList(prev, activeId, (item) =>
+            item.isThinking
               ? {
-                  ...m,
+                  ...item,
                   isThinking: false,
                   thinkingDuration:
-                    m.thinkingStartTime !== undefined
-                      ? Date.now() - m.thinkingStartTime
+                    item.thinkingStartTime !== undefined
+                      ? Date.now() - item.thinkingStartTime
                       : undefined,
                 }
-              : m,
+              : item,
           ),
         );
       }
@@ -748,8 +756,8 @@ export function useStreamHandler({
     ): Promise<{ assistantContent: string }> => {
       // Limpa hitlPending e reativa o spinner de thinking
       setMessages((prev) =>
-        updateMessageInList(prev, assistantMessageId, (m) => ({
-          ...m,
+        updateMessageInList(prev, assistantMessageId, (item) => ({
+          ...item,
           hitlPending: undefined,
           isThinking: true,
           thinkingStartTime: Date.now(),
@@ -815,10 +823,11 @@ export function useStreamHandler({
             }
             assistantContent += token;
             setMessages((prev) =>
-              updateMessageInList(prev, assistantMessageId, (m) => ({
-                ...m,
+              updateMessageInList(prev, assistantMessageId, (item) => ({
+                ...item,
                 content:
-                  (typeof m.content === "string" ? m.content : "") + token,
+                  (typeof item.content === "string" ? item.content : "") +
+                  token,
               })),
             );
             await yieldToBrowser();
@@ -862,8 +871,8 @@ export function useStreamHandler({
           if (event.type === "error") {
             const friendly = streamErrorMessage(event.code);
             setMessages((prev) =>
-              updateMessageInList(prev, assistantMessageId, (m) => ({
-                ...m,
+              updateMessageInList(prev, assistantMessageId, (item) => ({
+                ...item,
                 content: friendly,
                 isError: true,
                 isThinking: false,
@@ -899,8 +908,8 @@ export function useStreamHandler({
           // Mesma distinção transporte vs. aplicação do processStream
           announceSSEDropped(err);
           setMessages((prev) =>
-            updateMessageInList(prev, assistantMessageId, (m) => ({
-              ...m,
+            updateMessageInList(prev, assistantMessageId, (item) => ({
+              ...item,
               content: assistantContent || streamErrorMessage(undefined),
               isError: !assistantContent,
               isThinking: false,
@@ -925,17 +934,17 @@ export function useStreamHandler({
           markStreamEnded(threadId);
         }
         setMessages((prev) =>
-          updateMessageInList(prev, assistantMessageId, (m) =>
-            m.isThinking
+          updateMessageInList(prev, assistantMessageId, (item) =>
+            item.isThinking
               ? {
-                  ...m,
+                  ...item,
                   isThinking: false,
                   thinkingDuration:
-                    m.thinkingStartTime !== undefined
-                      ? Date.now() - m.thinkingStartTime
+                    item.thinkingStartTime !== undefined
+                      ? Date.now() - item.thinkingStartTime
                       : undefined,
                 }
-              : m,
+              : item,
           ),
         );
       }
@@ -1013,9 +1022,9 @@ async function handleEvent(
       });
 
       setMessages((prev) =>
-        updateMessageInList(prev, assistantMessageId, (m) => ({
-          ...m,
-          toolCalls: [...(m.toolCalls ?? []), toolCall],
+        updateMessageInList(prev, assistantMessageId, (item) => ({
+          ...item,
+          toolCalls: [...(item.toolCalls ?? []), toolCall],
         })),
       );
       break;
@@ -1027,13 +1036,13 @@ async function handleEvent(
     // última tool call desse tipo que ainda não tem output.
     case "terminal_line": {
       setMessages((prev) =>
-        updateMessageInList(prev, assistantMessageId, (m) => {
-          const calls = m.toolCalls ?? [];
+        updateMessageInList(prev, assistantMessageId, (item) => {
+          const calls = item.toolCalls ?? [];
           const idx = calls.findLastIndex(
             (tc) =>
               tc.renderHint === "terminal_output" && tc.output === undefined,
           );
-          if (idx === -1) return m;
+          if (idx === -1) return item;
           const updated = [...calls];
           updated[idx] = {
             ...updated[idx],
@@ -1042,7 +1051,7 @@ async function handleEvent(
               event.line,
             ],
           };
-          return { ...m, toolCalls: updated };
+          return { ...item, toolCalls: updated };
         }),
       );
       break;
@@ -1053,9 +1062,9 @@ async function handleEvent(
 
       let resolvedToolName: string | undefined;
       setMessages((prev) =>
-        updateMessageInList(prev, assistantMessageId, (m) => ({
-          ...m,
-          toolCalls: (m.toolCalls ?? []).map((tc) => {
+        updateMessageInList(prev, assistantMessageId, (item) => ({
+          ...item,
+          toolCalls: (item.toolCalls ?? []).map((tc) => {
             if (tc.id !== event.tool_call_id) return tc;
             resolvedToolName = tc.name;
             return { ...tc, output, isError: event.is_error };
@@ -1079,8 +1088,8 @@ async function handleEvent(
     // resultado no mesmo card, sem duplicar.
     case "subagent_output": {
       setMessages((prev) =>
-        updateMessageInList(prev, assistantMessageId, (m) => {
-          const existing = m.subgraphOutputs ?? [];
+        updateMessageInList(prev, assistantMessageId, (item) => {
+          const existing = item.subgraphOutputs ?? [];
           const entry = {
             name: event.subagent_type,
             output: event.content,
@@ -1102,7 +1111,7 @@ async function handleEvent(
                   return { ...s, ...entry, output };
                 })
               : [...existing, entry];
-          return { ...m, subgraphOutputs };
+          return { ...item, subgraphOutputs };
         }),
       );
       break;
@@ -1112,8 +1121,8 @@ async function handleEvent(
     case "node": {
       if (event.status === "started" && event.node_label) {
         setMessages((prev) =>
-          updateMessageInList(prev, assistantMessageId, (m) => ({
-            ...m,
+          updateMessageInList(prev, assistantMessageId, (item) => ({
+            ...item,
             currentNodeLabel: event.node_label,
           })),
         );
@@ -1123,11 +1132,11 @@ async function handleEvent(
         event.duration_ms > 0
       ) {
         setMessages((prev) =>
-          updateMessageInList(prev, assistantMessageId, (m) => ({
-            ...m,
+          updateMessageInList(prev, assistantMessageId, (item) => ({
+            ...item,
             currentNodeLabel: undefined,
             nodeDurations: [
-              ...(m.nodeDurations ?? []),
+              ...(item.nodeDurations ?? []),
               {
                 node: event.node,
                 label: event.node_label ?? event.node,
@@ -1146,8 +1155,8 @@ async function handleEvent(
     // C.28 — RAG citations: armazena fontes para renderizar referências [N]
     case "rag_citations": {
       setMessages((prev) =>
-        updateMessageInList(prev, assistantMessageId, (m) => ({
-          ...m,
+        updateMessageInList(prev, assistantMessageId, (item) => ({
+          ...item,
           ragCitations: event.citations,
         })),
       );
@@ -1157,12 +1166,12 @@ async function handleEvent(
     // E1 — HITLEvent: pausa do stream para aprovação humana
     case "hitl": {
       setMessages((prev) =>
-        updateMessageInList(prev, assistantMessageId, (m) => ({
-          ...m,
+        updateMessageInList(prev, assistantMessageId, (item) => ({
+          ...item,
           isThinking: false,
           thinkingDuration:
-            m.thinkingStartTime !== undefined
-              ? Date.now() - m.thinkingStartTime
+            item.thinkingStartTime !== undefined
+              ? Date.now() - item.thinkingStartTime
               : undefined,
           hitlPending: {
             toolName: event.tool_name,
@@ -1186,8 +1195,8 @@ async function handleEvent(
 
     case "structured_question": {
       setMessages((prev) =>
-        updateMessageInList(prev, assistantMessageId, (m) => ({
-          ...m,
+        updateMessageInList(prev, assistantMessageId, (item) => ({
+          ...item,
           isThinking: false,
           structuredQuestionPending: {
             questionId: event.question_id,
@@ -1206,8 +1215,8 @@ async function handleEvent(
       if (event.elapsed_ms === null) {
         // Tool iniciou: mostrar na status line
         setMessages((prev) =>
-          updateMessageInList(prev, assistantMessageId, (m) => ({
-            ...m,
+          updateMessageInList(prev, assistantMessageId, (item) => ({
+            ...item,
             activeTool: {
               name: event.tool_name,
               argsPreview: event.args_preview,
@@ -1219,15 +1228,15 @@ async function handleEvent(
         const tcId = event.tool_call_id;
         // Tool terminou: enriquecer ToolCall com elapsed + atualizar status line
         setMessages((prev) =>
-          updateMessageInList(prev, assistantMessageId, (m) => ({
-            ...m,
+          updateMessageInList(prev, assistantMessageId, (item) => ({
+            ...item,
             activeTool: {
               name: event.tool_name,
               argsPreview: event.args_preview,
               elapsedMs,
             },
             // Enriquece o ToolCall correspondente com o elapsed_ms
-            toolCalls: (m.toolCalls ?? []).map((tc) =>
+            toolCalls: (item.toolCalls ?? []).map((tc) =>
               tc.id === tcId ? { ...tc, elapsedMs } : tc,
             ),
           })),
@@ -1235,10 +1244,10 @@ async function handleEvent(
         // Limpa o indicador após 800ms para o usuário ver o tempo
         setTimeout(() => {
           setMessages((prev) =>
-            updateMessageInList(prev, assistantMessageId, (m) =>
-              m.activeTool?.name === event.tool_name
-                ? { ...m, activeTool: null }
-                : m,
+            updateMessageInList(prev, assistantMessageId, (item) =>
+              item.activeTool?.name === event.tool_name
+                ? { ...item, activeTool: null }
+                : item,
             ),
           );
         }, 800);
@@ -1274,9 +1283,9 @@ async function handleEvent(
 
     case "reasoning": {
       setMessages((prev) =>
-        updateMessageInList(prev, assistantMessageId, (m) => ({
-          ...m,
-          reasoning: `${m.reasoning ?? ""}${event.content}`,
+        updateMessageInList(prev, assistantMessageId, (item) => ({
+          ...item,
+          reasoning: `${item.reasoning ?? ""}${event.content}`,
         })),
       );
       break;
@@ -1284,8 +1293,8 @@ async function handleEvent(
 
     case "turn_files_changed": {
       setMessages((prev) =>
-        updateMessageInList(prev, assistantMessageId, (m) => ({
-          ...m,
+        updateMessageInList(prev, assistantMessageId, (item) => ({
+          ...item,
           editedFiles: event.files,
         })),
       );
@@ -1300,8 +1309,8 @@ async function handleEvent(
         useWorkbenchStore.getState().setTodos(threadId, event.todos);
       }
       setMessages((prev) =>
-        updateMessageInList(prev, assistantMessageId, (m) => ({
-          ...m,
+        updateMessageInList(prev, assistantMessageId, (item) => ({
+          ...item,
           plan: event.todos,
         })),
       );
@@ -1310,8 +1319,8 @@ async function handleEvent(
 
     case "verification": {
       setMessages((prev) =>
-        updateMessageInList(prev, assistantMessageId, (m) => ({
-          ...m,
+        updateMessageInList(prev, assistantMessageId, (item) => ({
+          ...item,
           verification: {
             status: event.status,
             outcome: event.outcome,

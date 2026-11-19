@@ -35,6 +35,7 @@ import {
 import { WorkbenchSettingsSurface } from "@/components/workbench/settings/workbench-settings-surface";
 import { memorySettings } from "@/components/workbench/settings/workbench-settings-registry";
 import { m } from "@/lib/paraglide/messages";
+import { WorkbenchEmpty } from "../primitives";
 
 interface RagBucketEntry {
   id: string;
@@ -121,9 +122,9 @@ function BucketsPanel() {
         </button>
       </div>
       {buckets.length === 0 ? (
-        <p className="px-2.5 py-2 text-xs text-muted-foreground">
+        <WorkbenchEmpty compact>
           {m.workbench_memory_buckets_empty()}
-        </p>
+        </WorkbenchEmpty>
       ) : (
         buckets.map((bucket) => (
           <div
@@ -277,9 +278,9 @@ function JourneyPanel() {
         {m.workbench_memory_journey_title()}
       </h3>
       {facts.length === 0 && skills.length === 0 ? (
-        <p className="px-2.5 py-2 text-xs text-muted-foreground">
+        <WorkbenchEmpty compact>
           {m.workbench_memory_journey_empty()}
-        </p>
+        </WorkbenchEmpty>
       ) : (
         <>
           {facts.map((fact) => (

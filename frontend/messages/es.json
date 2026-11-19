@@ -2040,6 +2040,7 @@
   "workbench_library_mcp_label": "Mostrar servidores MCP",
   "workbench_library_skills_help": "Incluye Skills instaladas en la workbench Library.",
   "workbench_library_skills_label": "Mostrar Skills",
+  "workbench_loading": "Cargando…",
   "workbench_memory_activity": "Actividad",
   "workbench_memory_buckets_empty": "Ninguna carpeta indexada en este workspace todavía.",
   "workbench_memory_buckets_index_button": "Indexar carpeta",

@@ -21,6 +21,7 @@ import { WorkbenchSettingsSurface } from "@/components/workbench/settings/workbe
 import { contextGraphSettings } from "@/components/workbench/settings/workbench-settings-registry";
 import { ContextGraphViewer } from "@/components/workbench/tabs/context-graph-viewer";
 import { m } from "@/lib/paraglide/messages";
+import { WorkbenchError, WorkbenchToolbar } from "../primitives";
 
 interface ContextGraphTabProps {
   threadId: string;
@@ -192,7 +193,7 @@ export function ContextGraphTab({
   return (
     <div className="relative flex flex-col h-full overflow-hidden">
       {/* Barra de ação — alinhada à esquerda (padrão dos workbenches). */}
-      <div className="relative flex items-center justify-start gap-2 px-3 py-2 border-b border-border/60 shrink-0">
+      <WorkbenchToolbar>
         {isBuilt && !isRunning && (
           <button
             onClick={() => update({ mode: graphMode, fileTypes })}
@@ -282,7 +283,7 @@ export function ContextGraphTab({
         >
           <Settings2 className="h-3.5 w-3.5" />
         </button>
-      </div>
+      </WorkbenchToolbar>
 
       {exportError && (
         <p role="alert" className="px-3 py-1 text-xs text-destructive">
@@ -393,9 +394,9 @@ export function ContextGraphTab({
       <div className="flex-1 min-h-0 flex flex-col">
         {/* Status: error */}
         {status.status === "error" && (
-          <div className="overflow-y-auto px-3 py-2 text-sm text-destructive">
+          <WorkbenchError>
             {status.error ?? m.workbench_settings_unknown_error()}
-          </div>
+          </WorkbenchError>
         )}
 
         {/* Status: paused (quota esgotada em todos os providers) */}
