@@ -16,6 +16,7 @@ class _SnapshotMessage:
         self.role = MessageRole.ASSISTANT
         self.content = [ContentBlock(kind="text", text=text)]
         self.is_error = is_error
+        self.tool_calls: list[object] = []
 
     def text(self) -> str:
         """Expose the message text through the provider-shaped interface."""

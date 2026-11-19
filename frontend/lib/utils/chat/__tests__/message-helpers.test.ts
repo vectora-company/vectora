@@ -174,22 +174,88 @@ describe("historyMessageToMessage", () => {
   });
 });
 
-describe("historyMessageToMessage — raciocínio", () => {
+describe("historyMessageToMessage — partes", () => {
   it("devolve o raciocínio persistido na mensagem recarregada", () => {
     const message = historyMessageToMessage(
-      { role: "assistant", content: "Pronto", reasoning: "analisei o pedido" },
+      {
+        role: "assistant",
+        content: "Pronto",
+        parts: [{ kind: "reasoning", text: "analisei o pedido" }],
+      },
       "h1",
     );
 
     expect(message.reasoning).toBe("analisei o pedido");
+    expect(message.toolCalls).toBeUndefined();
   });
 
-  it("não cria o campo quando a mensagem não tem raciocínio", () => {
+  it("reconstrói a tool call com argumentos, saída e metadados da UI", () => {
     const message = historyMessageToMessage(
-      { role: "assistant", content: "Pronto" },
+      {
+        role: "assistant",
+        content: "",
+        parts: [
+          {
+            kind: "tool_call",
+            tool_call_id: "c1",
+            tool_name: "read_file",
+            args_json: '{"path":"a.py"}',
+            render_hint: "code_block",
+            category: "filesystem",
+            icon: "file",
+            result_json: '{"content":"print(1)"}',
+            is_error: false,
+          },
+        ],
+      },
       "h2",
     );
 
+    expect(message.toolCalls).toEqual([
+      {
+        id: "c1",
+        name: "read_file",
+        args: { path: "a.py" },
+        output: { content: "print(1)" },
+        isError: false,
+        renderHint: "code_block",
+        category: "filesystem",
+        destructive: false,
+        icon: "file",
+      },
+    ]);
+  });
+
+  it("deixa a saída em aberto quando a tool não terminou", () => {
+    const message = historyMessageToMessage(
+      {
+        role: "assistant",
+        content: "",
+        parts: [
+          {
+            kind: "tool_call",
+            tool_call_id: "c2",
+            tool_name: "terminal",
+            args_json: "not json",
+            result_json: null,
+          },
+        ],
+      },
+      "h3",
+    );
+
+    expect(message.toolCalls?.[0].output).toBeUndefined();
+    expect(message.toolCalls?.[0].args).toEqual({ _raw: "not json" });
+    expect(message.toolCalls?.[0].renderHint).toBe("json");
+  });
+
+  it("não cria campos quando a mensagem não tem partes", () => {
+    const message = historyMessageToMessage(
+      { role: "assistant", content: "Pronto" },
+      "h4",
+    );
+
     expect(message.reasoning).toBeUndefined();
+    expect(message.toolCalls).toBeUndefined();
   });
 });
