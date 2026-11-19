@@ -67,3 +67,74 @@ export function fitRectToViewport(rect: Rect, min: Size, viewport: Size): Rect {
     y: clamp(rect.y, 0, viewport.h - h),
   };
 }
+
+export type LayoutPreset =
+  | "center"
+  | "left"
+  | "right"
+  | "top"
+  | "bottom"
+  | "top-left"
+  | "top-right"
+  | "bottom-left"
+  | "bottom-right";
+
+/** Fração da tela (null = manter o tamanho atual) e âncora (0, 0,5 ou 1). */
+const PRESETS: Record<
+  LayoutPreset,
+  { fw: number | null; fh: number | null; ax: number; ay: number }
+> = {
+  center: { fw: null, fh: null, ax: 0.5, ay: 0.5 },
+  left: { fw: 0.5, fh: 1, ax: 0, ay: 0 },
+  right: { fw: 0.5, fh: 1, ax: 1, ay: 0 },
+  top: { fw: 1, fh: 0.5, ax: 0, ay: 0 },
+  bottom: { fw: 1, fh: 0.5, ax: 0, ay: 1 },
+  "top-left": { fw: 0.5, fh: 0.5, ax: 0, ay: 0 },
+  "top-right": { fw: 0.5, fh: 0.5, ax: 1, ay: 0 },
+  "bottom-left": { fw: 0.5, fh: 0.5, ax: 0, ay: 1 },
+  "bottom-right": { fw: 0.5, fh: 0.5, ax: 1, ay: 1 },
+};
+
+/** Ordem de exibição na grade 3x3 do menu de layout. */
+export const LAYOUT_GRID: LayoutPreset[] = [
+  "top-left",
+  "top",
+  "top-right",
+  "left",
+  "center",
+  "right",
+  "bottom-left",
+  "bottom",
+  "bottom-right",
+];
+
+/**
+ * Posição e tamanho de um encaixe (metade, quadrante ou centro). Respeita o
+ * tamanho mínimo e o máximo: se a metade da tela for menor que o mínimo, a
+ * janela fica no mínimo, ainda ancorada no lado pedido e dentro da tela.
+ */
+export function snapRect(
+  preset: LayoutPreset,
+  current: Rect,
+  min: Size,
+  viewport: Size,
+  max: Size = { w: Number.POSITIVE_INFINITY, h: Number.POSITIVE_INFINITY },
+): Rect {
+  const { fw, fh, ax, ay } = PRESETS[preset];
+  const w = clamp(
+    fw === null ? current.w : viewport.w * fw,
+    min.w,
+    Math.min(max.w, viewport.w),
+  );
+  const h = clamp(
+    fh === null ? current.h : viewport.h * fh,
+    min.h,
+    Math.min(max.h, viewport.h),
+  );
+  return {
+    w: Math.round(w),
+    h: Math.round(h),
+    x: Math.round((viewport.w - w) * ax),
+    y: Math.round((viewport.h - h) * ay),
+  };
+}

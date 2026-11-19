@@ -44,7 +44,7 @@ export function CanvasDocumentDialog({
         minimized={minimized}
         onMinimize={onMinimize}
       >
-        <DialogHeader className="shrink-0 border-b border-border/60 py-3 pr-28 pl-4">
+        <DialogHeader className="shrink-0 border-b border-border/60 py-3 pr-36 pl-4">
           <DialogTitle className={titleClassName ?? "truncate text-sm"}>
             {title}
           </DialogTitle>

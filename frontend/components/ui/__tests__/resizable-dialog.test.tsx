@@ -14,6 +14,16 @@ vi.mock("@/lib/paraglide/messages", () => ({
     window_minimize: () => "Minimizar",
     window_maximize: () => "Maximizar",
     window_restore: () => "Restaurar",
+    window_layout: () => "Layout",
+    window_layout_center: () => "Centralizar",
+    window_layout_left: () => "Esquerda",
+    window_layout_right: () => "Direita",
+    window_layout_top: () => "Topo",
+    window_layout_bottom: () => "Base",
+    window_layout_top_left: () => "Topo esquerdo",
+    window_layout_top_right: () => "Topo direito",
+    window_layout_bottom_left: () => "Base esquerda",
+    window_layout_bottom_right: () => "Base direita",
   },
 }));
 
@@ -284,5 +294,40 @@ describe("ResizableDialogContent", () => {
   it("só mostra o botão de minimizar quando quem usa o pede", () => {
     renderDialog();
     expect(screen.queryByRole("button", { name: "Minimizar" })).toBeNull();
+  });
+
+  it("o menu de layout encaixa a janela na metade da direita e persiste o tamanho", () => {
+    vi.stubGlobal("innerWidth", 1600);
+    vi.stubGlobal("innerHeight", 900);
+    renderDialog("layout-dialog", 2000, 2000);
+
+    fireEvent.click(screen.getByRole("button", { name: "Layout" }));
+    fireEvent.click(screen.getByTestId("window-layout-right"));
+
+    expect(content().style.left).toBe("800px");
+    expect(content().style.top).toBe("0px");
+    expect(content().style.width).toBe("800px");
+    expect(content().style.height).toBe("900px");
+    expect(useDialogSizeStore.getState().sizes["layout-dialog"]).toEqual({
+      w: 800,
+      h: 900,
+    });
+    vi.unstubAllGlobals();
+  });
+
+  it("centralizar mantém o tamanho e escolher um encaixe sai do modo maximizado", () => {
+    vi.stubGlobal("innerWidth", 1600);
+    vi.stubGlobal("innerHeight", 900);
+    renderDialog();
+
+    fireEvent.click(screen.getByRole("button", { name: "Maximizar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Layout" }));
+    fireEvent.click(screen.getByTestId("window-layout-center"));
+
+    expect(content().dataset.maximized).toBe("false");
+    expect(content().style.width).toBe("500px");
+    expect(content().style.left).toBe("550px");
+    expect(content().style.top).toBe("250px");
+    vi.unstubAllGlobals();
   });
 });
