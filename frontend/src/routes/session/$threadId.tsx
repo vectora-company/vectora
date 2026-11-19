@@ -1179,6 +1179,7 @@ function SessionPage() {
           onOpenChange={setIsMobileSidebarOpen}
           side={sidebarOnRight ? "right" : "left"}
           title={m.mobile_open_sessions()}
+          resizeId="sessions"
         >
           {cloneElement(sidebar, {
             inSheet: true,
@@ -1199,6 +1200,7 @@ function SessionPage() {
           size="wide"
           showCloseButton={false}
           title={m.layout_workbench_column()}
+          resizeId="workbench"
           data-testid="compact-workbench-overlay"
         >
           {assistantWorkbenchPanel}

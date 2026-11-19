@@ -223,6 +223,7 @@ export function IdeModeLayout({
           keepMounted
           showCloseButton={false}
           title={mDyn("workbench.title")}
+          resizeId="ide-workbench"
           data-testid="ide-tablet-workbench-drawer"
         >
           <WorkbenchHost
@@ -239,6 +240,7 @@ export function IdeModeLayout({
             size="wide"
             keepMounted
             title={m.layout_open_chat()}
+            resizeId="ide-chat"
             data-testid="ide-tablet-chat-drawer"
           >
             {chat}

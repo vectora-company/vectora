@@ -1427,6 +1427,7 @@
   "rag_reranker_help": "Reordena os trechos recuperados por relevância (Cohere/Voyage).",
   "rag_settings_title": "Configurações do RAG",
   "resize_chat": "Redimensionar chat",
+  "resize_drawer": "Redimensionar a gaveta",
   "resize_sidebar": "Redimensionar sidebar",
   "resize_workbench": "Redimensionar workbench",
   "route_error_title": "Não foi possível carregar esta página",

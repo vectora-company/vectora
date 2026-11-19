@@ -1427,6 +1427,7 @@
   "rag_reranker_help": "Reordena los fragmentos recuperados por relevancia (Cohere/Voyage).",
   "rag_settings_title": "Ajustes de RAG",
   "resize_chat": "Cambiar tamaño del chat",
+  "resize_drawer": "Cambiar el tamaño del panel",
   "resize_sidebar": "Cambiar tamaño de la barra lateral",
   "resize_workbench": "Cambiar tamaño del workbench",
   "route_error_title": "No se pudo cargar esta página",
