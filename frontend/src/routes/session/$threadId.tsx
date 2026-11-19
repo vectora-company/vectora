@@ -42,7 +42,7 @@ import { FileEditor } from "@/components/workbench/file-editor";
 import { CanvasFileDiff } from "@/components/workbench/canvas-file-diff";
 import { LibraryMcpPreview } from "@/components/workbench/library-mcp-preview";
 import { MarkdownView } from "@/components/workbench/markdown-view";
-import { CanvasDocumentDialog } from "@/components/workbench/canvas-document-dialog";
+import { CanvasDocumentWindows } from "@/components/workbench/canvas-document-windows";
 import {
   CommitDetails,
   type GitCommitDetailsState,
@@ -816,6 +816,15 @@ function SessionPage() {
           (document) => document.id === activeCanvasDocumentId,
         ) ?? null)
       : null;
+  // A ativa e as minimizadas na dock: só existem como janela no modo assistente.
+  const modalCanvasDocuments =
+    uiMode === "assistant" ? visibleCanvasDocuments : [];
+  const minimizedCanvasDocumentIds = useWindowsStore(
+    (s) => s.minimizedCanvasDocumentIds,
+  );
+  const minimizeCanvasDocument = useWindowsStore(
+    (s) => s.minimizeCanvasDocument,
+  );
   const [gitCommitDetailsById, setGitCommitDetailsById] = useState<
     Record<string, GitCommitDetailsState>
   >({});
@@ -1653,20 +1662,14 @@ function SessionPage() {
           onOpenChange={setShowNewChatDialog}
           onConfirm={(workspaceId) => void handleConfirmNewChat(workspaceId)}
         />
-        <CanvasDocumentDialog
-          open={modalCanvasDocument !== null}
-          onOpenChange={(open) => {
-            if (!open && modalCanvasDocument) {
-              closeCanvasDocumentModal(modalCanvasDocument.id);
-            }
-          }}
-          title={modalCanvasDocument?.title ?? "Documento"}
-          titleClassName="truncate font-mono text-sm"
-        >
-          {modalCanvasDocument
-            ? renderCanvasDocument(modalCanvasDocument)
-            : null}
-        </CanvasDocumentDialog>
+        <CanvasDocumentWindows
+          documents={modalCanvasDocuments}
+          activeId={modalCanvasDocument?.id ?? null}
+          minimizedIds={minimizedCanvasDocumentIds}
+          onClose={closeCanvasDocumentModal}
+          onMinimize={minimizeCanvasDocument}
+          renderDocument={renderCanvasDocument}
+        />
       </div>
     </div>
   );

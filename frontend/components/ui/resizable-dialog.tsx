@@ -134,6 +134,7 @@ export function ResizableDialogContent({
   const beginGesture = (
     event: React.PointerEvent<HTMLElement>,
     compute: (start: Rect, dx: number, dy: number) => Rect,
+    mode: "move" | "resize" = "resize",
   ) => {
     if (maximized || event.button !== 0) return;
     event.preventDefault();
@@ -152,7 +153,13 @@ export function ResizableDialogContent({
       );
       liveRef.current = next;
       cancelAnimationFrame(frameIdRef.current);
-      frameIdRef.current = requestAnimationFrame(() => paint(next));
+      frameIdRef.current = requestAnimationFrame(() => {
+        // Mover só desloca por transform (sem relayout do editor); redimensionar
+        // precisa de largura e altura novas.
+        if (mode === "move" && frameRef.current) {
+          frameRef.current.style.transform = `translate3d(${next.x - start.x}px, ${next.y - start.y}px, 0)`;
+        } else paint(next);
+      });
     };
 
     const finish = () => {
@@ -161,6 +168,7 @@ export function ResizableDialogContent({
       target.removeEventListener("pointercancel", finish);
       cancelAnimationFrame(frameIdRef.current);
       const final = liveRef.current;
+      if (frameRef.current) frameRef.current.style.transform = "";
       paint(final);
       setRect(final);
       setGesturing(false);
@@ -214,7 +222,11 @@ export function ResizableDialogContent({
     if (!handle || !event.currentTarget.contains(handle)) return;
     if (target.closest("button, a, input, textarea, select, [role='tab']"))
       return;
-    beginGesture(event, (start, dx, dy) => moveRect(start, dx, dy, viewport()));
+    beginGesture(
+      event,
+      (start, dx, dy) => moveRect(start, dx, dy, viewport()),
+      "move",
+    );
   };
 
   const onHeaderDoubleClick = (event: React.MouseEvent<HTMLElement>) => {
@@ -267,9 +279,10 @@ export function ResizableDialogContent({
       <DialogPrimitive.Content
         data-slot="dialog-content"
         data-maximized={maximized}
+        data-gesturing={gesturing}
         className={cn(
           "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
-          "fixed z-50",
+          "fixed z-50 data-[gesturing=true]:will-change-[transform,width,height] data-[gesturing=true]:transition-none",
           "flex flex-col border shadow-lg duration-150 overflow-hidden",
           maximized ? "rounded-none" : "rounded-lg",
           "[&_[data-slot=dialog-header]]:select-none",
