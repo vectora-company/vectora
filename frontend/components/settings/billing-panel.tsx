@@ -18,6 +18,8 @@ import {
 } from "@/lib/hooks/use-license-status";
 import { ServicesOffNotice } from "@/components/layout/services-off-notice";
 import { m } from "@/lib/paraglide/messages";
+import { settingsItemClass } from "@/components/settings/primitives";
+import { cn } from "@/lib/utils";
 
 function openUrl(url: string): Promise<void> {
   if (typeof window !== "undefined" && window.vectora?.openExternal) {
@@ -76,7 +78,7 @@ export function BillingPanel() {
           onClick={() =>
             void openUrl("https://vectora.company/dashboard/billing")
           }
-          className="text-xs px-3 py-1.5 rounded-md border border-border hover:bg-muted/50 transition-colors"
+          className="rounded-md border border-border px-3 py-1.5 text-xs transition-colors hover:bg-muted/50"
         >
           {m.billing_panel_upgrade_button()}
         </button>
@@ -87,7 +89,7 @@ export function BillingPanel() {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-2">
-        <div className="rounded-lg border bg-card p-2.5">
+        <div className={cn(settingsItemClass, "p-3")}>
           <p className="text-2xs text-muted-foreground">
             {m.billing_panel_plan_label()}
           </p>
@@ -95,7 +97,7 @@ export function BillingPanel() {
             {(status.tier && TIER_LABEL[status.tier]) || status.tier || "—"}
           </p>
         </div>
-        <div className="rounded-lg border bg-card p-2.5">
+        <div className={cn(settingsItemClass, "p-3")}>
           <p className="text-2xs text-muted-foreground">
             {m.billing_panel_status_label()}
           </p>

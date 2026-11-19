@@ -26,6 +26,10 @@ const VIOLATION = new RegExp(
   "g",
 );
 
+/** Card montado à mão: use `SettingsSection`, `settingsItemClass` ou `settingsRowClass`. */
+const HAND_MADE_CARD =
+  /rounded-lg border bg-card|rounded-md border border-border\/60|bg-card\/50|divide-border\/60|space-y-3 rounded-lg border/g;
+
 /** Arquivos ainda não migrados → ocorrências restantes. Só diminui. */
 const BASELINE: Record<string, number> = {};
 
@@ -46,6 +50,17 @@ for (const file of listTsx(ROOT)) {
 }
 
 describe("estilo das telas de Settings", () => {
+  it("nenhuma tela monta card, item ou linha à mão", () => {
+    const hand = listTsx(ROOT)
+      .filter((file) => !file.endsWith("primitives.tsx"))
+      .filter(
+        (file) =>
+          (readFileSync(file, "utf8").match(HAND_MADE_CARD)?.length ?? 0) > 0,
+      )
+      .map((file) => relative(ROOT, file).replaceAll("\\", "/"));
+    expect(hand).toEqual([]);
+  });
+
   it("não aumenta o uso de hex, text-[Npx] e cores cruas do Tailwind", () => {
     const worse = [...counts]
       .filter(([file, n]) => n > (BASELINE[file] ?? 0))

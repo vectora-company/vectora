@@ -35,6 +35,7 @@ import {
   settingsRowClass,
   settingsSectionClass,
 } from "@/components/settings/primitives";
+import { cn } from "@/lib/utils";
 
 interface OllamaModelInfo {
   name: string;
@@ -1514,7 +1515,7 @@ function HuggingFaceCatalogSection() {
         </div>
       )}
       {metadata && (
-        <div className="space-y-3 rounded-lg border bg-muted/20 p-4 text-sm">
+        <div className={cn(settingsSectionClass, "bg-muted/20 text-sm")}>
           <div>
             <p className="font-medium">{metadata.id}</p>
             <p className="text-xs text-muted-foreground">
@@ -3472,10 +3473,7 @@ function LlamaCppSection() {
         {filteredModels.map((item) => {
           const registeredModel = registeredByTag.get(item.id);
           return (
-            <div
-              key={item.id}
-              className="flex min-w-0 items-center justify-between gap-3 rounded-lg border bg-card px-3 py-2"
-            >
+            <div key={item.id} className={cn(settingsRowClass, "min-w-0")}>
               <span className="truncate font-mono text-sm">{item.id}</span>
               {registeredModel ? (
                 <div className="flex items-center gap-2">

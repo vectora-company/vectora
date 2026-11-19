@@ -19,6 +19,8 @@ interface Policy {
   available: string[];
   schemas?: Record<string, unknown>;
 }
+import { settingsItemClass } from "@/components/settings/primitives";
+import { cn } from "@/lib/utils";
 
 export function ToolPolicyPanel() {
   const [policy, setPolicy] = useState<Policy | null>(null);
@@ -120,7 +122,7 @@ export function ToolPolicyPanel() {
         </p>
       </div>
 
-      <div className="rounded-lg border bg-card/50 divide-y divide-border/60">
+      <div className={cn(settingsItemClass, "divide-y divide-border")}>
         {policy.available.map((name) => {
           const isEnabled = !disabled.has(name);
           const schema = policy.schemas?.[name];
