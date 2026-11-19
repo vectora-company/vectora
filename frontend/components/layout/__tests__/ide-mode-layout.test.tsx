@@ -301,6 +301,14 @@ describe("IdeModeLayout — tablet", () => {
     expect(screen.getByTestId("ide-tablet-chat-drawer")).not.toBeVisible();
   });
 
+  it("Esc fecha o workbench e a gaveta do chat", () => {
+    const { onCloseWorkbench } = renderTablet(true);
+
+    fireEvent.keyDown(window, { key: "Escape" });
+
+    expect(onCloseWorkbench).toHaveBeenCalled();
+  });
+
   it("com o workbench aberto, o fundo escurecido pede para fechá-lo", () => {
     const { onCloseWorkbench } = renderTablet(true);
 

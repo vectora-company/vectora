@@ -68,6 +68,14 @@ const DATE_FNS_LOCALES = { pt: ptBR, es: esLocale, en: enUS } as const;
 const WEB_TOOLS = new Set(["web_search", "fetch_url", "web_fetch"]);
 
 /** Chips de fonte (RAG + domínios web) para o painel de atividade (deep research). */
+/** Há raciocínio ou fontes para mostrar ao expandir o bloco de "pensando". */
+function hasThinkingContent(message: Message): boolean {
+  return (
+    (message.thinkingSteps?.length ?? 0) > 0 ||
+    activitySources(message).length > 0
+  );
+}
+
 function activitySources(message: Message): string[] {
   const out: string[] = [];
   const seen = new Set<string>();
@@ -700,8 +708,25 @@ export const MessageItem = memo(
                 (message.isThinking ||
                   (message.thinkingSteps &&
                     message.thinkingSteps.length > 0)) && (
-                  <details open className="mb-3 text-xs">
-                    <summary className="cursor-pointer flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
+                  <details
+                    data-testid="thinking-block"
+                    data-expandable={hasThinkingContent(message)}
+                    className="mb-3 text-xs"
+                  >
+                    <summary
+                      // Sem raciocínio nem fontes não há o que expandir: o
+                      // cabeçalho vira só um indicador de progresso.
+                      onClick={
+                        hasThinkingContent(message)
+                          ? undefined
+                          : (event) => event.preventDefault()
+                      }
+                      className={`flex items-center gap-2 text-muted-foreground transition-colors ${
+                        hasThinkingContent(message)
+                          ? "cursor-pointer hover:text-foreground"
+                          : "cursor-default list-none"
+                      }`}
+                    >
                       {message.isThinking && (
                         <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
                       )}
@@ -718,8 +743,9 @@ export const MessageItem = memo(
                           <span className="font-medium">
                             {m.chat_agent_steps()}
                           </span>
-                        )}{" "}
-                        ({message.thinkingSteps?.length || 0})
+                        )}
+                        {(message.thinkingSteps?.length ?? 0) > 0 &&
+                          ` (${message.thinkingSteps?.length})`}
                       </span>
                       {message.isThinking && (
                         <>
