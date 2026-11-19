@@ -35,6 +35,14 @@ def client() -> TestClient:
     return TestClient(app, raise_server_exceptions=False, follow_redirects=False)
 
 
+def _begin_state(provider: str) -> str:
+    """State de uma transação aberta para ``user-123``, como o início do fluxo."""
+    from backend.services import oauth_state
+
+    state, _challenge = oauth_state.begin("user-123", provider)
+    return state
+
+
 @pytest.fixture(autouse=True)
 def allow_legacy_local_oauth(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep provider unit tests focused on local compatibility handlers."""
@@ -60,7 +68,8 @@ class TestGitLabOAuth:
         loc = r.headers["location"]
         assert "gitlab.com/oauth/authorize" in loc
         assert "gl-client-id" in loc
-        assert "user-123" in loc
+        assert "code_challenge_method=S256" in loc
+        assert "user-123" not in loc
 
     def test_callback_sem_code(self, client: TestClient) -> None:
         with patch.dict("os.environ", self._env):
@@ -85,7 +94,8 @@ class TestGitLabOAuth:
             mock_ctx.post = AsyncMock(return_value=mock_response)
             mock_httpx.return_value = mock_ctx
 
-            r = client.get("/auth/gitlab/callback?code=abc&state=user-123")
+            state = _begin_state("gitlab")
+            r = client.get(f"/auth/gitlab/callback?code=abc&state={state}")
 
         assert r.status_code in {302, 307}
         assert "oauth_success=gitlab" in r.headers.get("location", "")
@@ -158,7 +168,8 @@ class TestGoogleOAuth:
             mock_ctx.post = AsyncMock(return_value=mock_response)
             mock_httpx.return_value = mock_ctx
 
-            r = client.get("/auth/google/callback?code=gcode&state=user-123")
+            state = _begin_state("google")
+            r = client.get(f"/auth/google/callback?code=gcode&state={state}")
 
         assert r.status_code in {302, 307}
         assert "oauth_success=google" in r.headers.get("location", "")

@@ -415,6 +415,38 @@ describe("IntegracoesTab", () => {
     });
   });
 
+  it("OAuth não validado em produção avisa e continua oferecendo o token manual", async () => {
+    mockFetch(
+      BASE_INTEGRATIONS.map((i) =>
+        i.id === "gitlab"
+          ? { ...i, oauth_configured: true, oauth_validated: false }
+          : i,
+      ),
+    );
+    const { IntegracoesTab } = await import("../integracoes-tab");
+    render(<IntegracoesTab />);
+
+    expect(
+      (await screen.findAllByTestId("oauth-unvalidated")).length,
+    ).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("Conectar via OAuth")).toBeInTheDocument();
+  });
+
+  it("OAuth validado em produção não mostra o aviso", async () => {
+    mockFetch(
+      BASE_INTEGRATIONS.map((i) =>
+        i.kind === "apikey"
+          ? i
+          : { ...i, oauth_configured: true, oauth_validated: true },
+      ),
+    );
+    const { IntegracoesTab } = await import("../integracoes-tab");
+    render(<IntegracoesTab />);
+
+    await screen.findAllByText("Conectar via OAuth");
+    expect(screen.queryByTestId("oauth-unvalidated")).toBeNull();
+  });
+
   it("Google Drive exibe card sem botão OAuth próprio (filho de Google)", async () => {
     const { IntegracoesTab } = await import("../integracoes-tab");
     render(<IntegracoesTab />);

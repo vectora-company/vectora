@@ -636,6 +636,13 @@
   },
   {
     "methods": [
+      "GET"
+    ],
+    "name": "list_channels_distribution_channels_get",
+    "path": "/distribution/channels"
+  },
+  {
+    "methods": [
       "GET",
       "POST"
     ],

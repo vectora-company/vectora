@@ -37,6 +37,7 @@ import logging
 import os
 import secrets
 import time
+import urllib.parse
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -44,7 +45,9 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse
 
+from backend.services import oauth_state
 from backend.services.availability import require_services, services_enabled
+from backend.services.integration_validation import is_oauth_validated
 from backend.services.license import get_license_token
 from backend.settings import settings
 
@@ -764,6 +767,13 @@ async def list_integrations(request: Request) -> dict:
                 "connected": connected,
                 "oauth_connected": oauth_connected,
                 # Nunca expõe o valor — apenas informa se existe
+                # Anunciar o OAuth como disponível exige validação de produção
+                # registrada em backend/services/integration_validation.py.
+                "oauth_validated": (
+                    is_oauth_validated(oauth_provider_id)
+                    if integ["kind"] in ("oauth", "hybrid")
+                    else False
+                ),
                 "oauth_configured": (
                     oauth_provider_id in broker_providers
                     or (
@@ -1019,15 +1029,18 @@ async def github_oauth_start(request: Request) -> RedirectResponse:
     scopes = ",".join(
         _REGISTRY_BY_ID["github"].get("oauth_scopes", ["repo", "user:email"])
     )
-    # state = user.id garante que só o user que iniciou pode finalizar o callback
-    state = user.id
-
-    url = (
-        "https://github.com/login/oauth/authorize"
-        f"?client_id={client_id}"
-        f"&redirect_uri={redirect_uri}"
-        f"&scope={scopes}"
-        f"&state={state}"
+    # O state é aleatório e de uso único; só o usuário que iniciou a transação
+    # consegue finalizá-la (ver backend/services/oauth_state.py).
+    state, challenge = oauth_state.begin(user.id, "github")
+    url = "https://github.com/login/oauth/authorize?" + urllib.parse.urlencode(
+        {
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "scope": scopes,
+            "state": state,
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+        }
     )
     return RedirectResponse(url=url, status_code=302)
 
@@ -1043,6 +1056,12 @@ async def github_oauth_callback(
         raise HTTPException(status_code=400, detail="Parâmetro 'code' ausente")
 
     client_id, client_secret, redirect_uri = _github_cfg()
+    try:
+        transaction = oauth_state.consume(state, "github")
+    except oauth_state.OAuthStateError:
+        return RedirectResponse(
+            url="/?oauth_error=github_invalid_state", status_code=302
+        )
 
     # Troca o code pelo access_token
     import httpx
@@ -1055,6 +1074,7 @@ async def github_oauth_callback(
                 "client_secret": client_secret,
                 "code": code,
                 "redirect_uri": redirect_uri,
+                "code_verifier": transaction.code_verifier,
             },
             headers={"Accept": "application/json"},
         )
@@ -1072,7 +1092,7 @@ async def github_oauth_callback(
         return RedirectResponse(url="/?oauth_error=github_no_token", status_code=302)
 
     # Salva como env_override do usuário identificado pelo state
-    user_id = state
+    user_id = transaction.user_id
     try:
         from backend.rbac import auth as auth_svc
 
@@ -1170,13 +1190,17 @@ async def gitlab_oauth_start(request: Request) -> RedirectResponse:
     scopes = " ".join(
         _REGISTRY_BY_ID["gitlab"].get("oauth_scopes", ["api", "read_user"])
     )
-    url = (
-        f"{base_url}/oauth/authorize"
-        f"?client_id={client_id}"
-        f"&redirect_uri={redirect_uri}"
-        f"&response_type=code"
-        f"&scope={scopes}"
-        f"&state={user.id}"
+    state, challenge = oauth_state.begin(user.id, "gitlab")
+    url = f"{base_url}/oauth/authorize?" + urllib.parse.urlencode(
+        {
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "response_type": "code",
+            "scope": scopes,
+            "state": state,
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+        }
     )
     return RedirectResponse(url=url, status_code=302)
 
@@ -1191,6 +1215,12 @@ async def gitlab_oauth_callback(
     if not code:
         raise HTTPException(status_code=400, detail="Parâmetro 'code' ausente")
     client_id, client_secret, base_url, redirect_uri = _gitlab_cfg()
+    try:
+        transaction = oauth_state.consume(state, "gitlab")
+    except oauth_state.OAuthStateError:
+        return RedirectResponse(
+            url="/?oauth_error=gitlab_invalid_state", status_code=302
+        )
 
     import httpx
 
@@ -1203,6 +1233,7 @@ async def gitlab_oauth_callback(
                 "code": code,
                 "grant_type": "authorization_code",
                 "redirect_uri": redirect_uri,
+                "code_verifier": transaction.code_verifier,
             },
         )
 
@@ -1220,9 +1251,9 @@ async def gitlab_oauth_callback(
         from backend.rbac import auth as auth_svc
 
         await auth_svc.set_env_override(
-            state, "GITLAB_TOKEN", access_token, source="oauth"
+            transaction.user_id, "GITLAB_TOKEN", access_token, source="oauth"
         )
-        logger.info("GitLab OAuth: token salvo para user_id=%s", state)
+        logger.info("GitLab OAuth: token salvo para user_id=%s", transaction.user_id)
     except Exception as exc:
         logger.exception("GitLab OAuth: falha ao salvar token: %s", exc)
         return RedirectResponse(url="/?oauth_error=gitlab_save_failed", status_code=302)
@@ -1310,17 +1341,19 @@ async def google_oauth_start(request: Request) -> RedirectResponse:
         "https://www.googleapis.com/auth/drive.readonly "
         "https://www.googleapis.com/auth/gmail.readonly"
     )
-    import urllib.parse
-
-    url = (
-        "https://accounts.google.com/o/oauth2/v2/auth"
-        f"?client_id={client_id}"
-        f"&redirect_uri={urllib.parse.quote(redirect_uri)}"
-        "&response_type=code"
-        f"&scope={urllib.parse.quote(scopes)}"
-        "&access_type=offline"
-        "&prompt=consent"
-        f"&state={user.id}"
+    state, challenge = oauth_state.begin(user.id, "google")
+    url = "https://accounts.google.com/o/oauth2/v2/auth?" + urllib.parse.urlencode(
+        {
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "response_type": "code",
+            "scope": scopes,
+            "access_type": "offline",
+            "prompt": "consent",
+            "state": state,
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+        }
     )
     return RedirectResponse(url=url, status_code=302)
 
@@ -1335,6 +1368,12 @@ async def google_oauth_callback(
     if not code:
         raise HTTPException(status_code=400, detail="Parâmetro 'code' ausente")
     client_id, client_secret, redirect_uri = _google_cfg()
+    try:
+        transaction = oauth_state.consume(state, "google")
+    except oauth_state.OAuthStateError:
+        return RedirectResponse(
+            url="/?oauth_error=google_invalid_state", status_code=302
+        )
 
     import httpx
 
@@ -1347,6 +1386,7 @@ async def google_oauth_callback(
                 "code": code,
                 "grant_type": "authorization_code",
                 "redirect_uri": redirect_uri,
+                "code_verifier": transaction.code_verifier,
             },
         )
 
@@ -1366,13 +1406,16 @@ async def google_oauth_callback(
         from backend.rbac import auth as auth_svc
 
         await auth_svc.set_env_override(
-            state, "GOOGLE_ACCESS_TOKEN", access_token, source="oauth"
+            transaction.user_id, "GOOGLE_ACCESS_TOKEN", access_token, source="oauth"
         )
         if refresh_token:
             await auth_svc.set_env_override(
-                state, "GOOGLE_REFRESH_TOKEN", refresh_token, source="oauth"
+                transaction.user_id,
+                "GOOGLE_REFRESH_TOKEN",
+                refresh_token,
+                source="oauth",
             )
-        logger.info("Google OAuth: token salvo para user_id=%s", state)
+        logger.info("Google OAuth: token salvo para user_id=%s", transaction.user_id)
     except Exception as exc:
         logger.exception("Google OAuth: falha ao salvar token: %s", exc)
         return RedirectResponse(url="/?oauth_error=google_save_failed", status_code=302)
