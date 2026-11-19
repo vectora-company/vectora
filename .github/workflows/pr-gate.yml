@@ -1,0 +1,443 @@
+name: PR Gate
+
+# Fila única de verificações de pull request. Um workflow, jobs encadeados que
+# compartilham o checkout e o ambiente, no lugar de quatro workflows em
+# máquinas separadas (título, labels, milestone, segredos, pre-commit,
+# contratos e testes de release).
+#
+#   metadata ─┬─ pr-adjustments ─┐
+#             └─ comment-metadata │  (comenta só em falha, job à parte)
+#                                 └─ code        (opened/synchronize/reopened)
+#   secrets-push                                  (push em master/release/**)
+#
+# O título vira o commit de squash-merge que o release-please lê; o gate de
+# título e de milestone segue o mesmo padrão do lancedb/.github/workflows/dev.yml.
+# Roda a versão do próprio PR: uma correção de CI no PR vale já nele.
+
+on:
+  pull_request:
+    types:
+      [
+        opened,
+        edited,
+        synchronize,
+        reopened,
+        milestoned,
+        demilestoned,
+        labeled,
+        unlabeled,
+      ]
+    branches: ["**"]
+  push:
+    branches: [master, "release/**"]
+  workflow_dispatch:
+
+# Eventos de metadado (label, milestone, descrição) cancelam só outra execução
+# de metadado: nunca derrubam as verificações de código em andamento.
+concurrency:
+  group: pr-gate-${{ github.event.pull_request.number || github.ref }}-${{ contains(fromJSON('["edited","milestoned","demilestoned","labeled","unlabeled"]'), github.event.action) && 'metadata' || 'code' }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  GITLEAKS_VERSION: v8.30.1
+
+jobs:
+  metadata:
+    name: Título e descrição do PR sem proveniência de processo
+    if: github.event_name == 'pull_request'
+    # Sem permissão de escrita aqui de propósito: este job lê título e corpo do
+    # PR (dado potencialmente hostil, ex. fork). Quem comenta é o job
+    # `comment-metadata`, que não lê nada do PR.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - run: python utils/checks.py pr-metadata
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+
+  comment-metadata:
+    name: Comenta a reprovação de título/descrição no PR
+    needs: metadata
+    # PR de fork recebe token somente leitura: lá a falha aparece só no check.
+    if: failure() && needs.metadata.result == 'failure' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Comenta no PR
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const message = `**Título/descrição do PR com proveniência de processo**
+
+              Título e descrição não podem referenciar Sprint/Bloco/Fase nem ferramenta/revisor de IA (CodeRabbit, Claude, Copilot, etc) — mesma regra dos comentários de código (CLAUDE.md §1, que cobre também mensagens de PR).
+
+              Descreva só o que a mudança faz; histórico de planejamento deve ficar em \`.claude/plans/\` ou na issue/discussão apropriada.`;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            if (!comments.some((c) => c.body === message)) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: message,
+              });
+            }
+
+  pr-adjustments:
+    name: Título (Conventional Commits), labels e milestone
+    if: github.event_name == 'pull_request'
+    needs: metadata
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - if: ${{ !cancelled() }}
+        uses: actions/setup-node@v6
+        with:
+          node-version: "26"
+      # Versões exatas: o passo roda num job com `pull-requests: write`, então
+      # nada de instalar a última versão publicada a cada execução.
+      - if: ${{ !cancelled() }}
+        run: >-
+          npm install --no-save --no-audit --no-fund
+          @commitlint/cli@21.2.4
+          @commitlint/config-conventional@21.2.4
+      # body-max-line-length/footer-max-line-length/body-leading-blank
+      # desligadas: o GitHub sempre garante linha em branco entre título e
+      # corpo, e quebra o corpo em linhas curtas — essas regras dariam falso
+      # positivo em qualquer PR com descrição normal.
+      - if: ${{ !cancelled() }}
+        run: >
+          echo 'module.exports = {
+            extends: ["@commitlint/config-conventional"],
+            rules: {
+              "body-max-line-length": [0, "always", Infinity],
+              "footer-max-line-length": [0, "always", Infinity],
+              "body-leading-blank": [0, "always"]
+            }
+          }' > .commitlintrc.js
+      # Sem `--edit`: essa flag espera um COMMIT_EDITMSG de verdade dentro
+      # de um repo git ("Could not find git root" sem checkout) — pra
+      # validar uma string solta (o título do PR, não um commit real),
+      # o jeito certo é ler de stdin sem flag nenhuma.
+      - if: ${{ !cancelled() }}
+        run: npx commitlint --verbose <<< "$PR_TITLE"
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+      - if: failure()
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const message = `**Título do PR fora do padrão**
+
+              Este repositório segue [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) — o título do PR vira o commit de squash-merge e alimenta o versionamento e o changelog automáticos (release-please).
+
+              Exemplos válidos: \`feat: adiciona X\`, \`fix(frontend): corrige Y\`, \`docs: atualiza Z\`.
+
+              Ajuste o título do PR pra corrigir.`;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const already = comments.some((c) => c.body === message);
+            if (!already) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: message,
+              });
+            }
+            core.setFailed(message);
+      - if: ${{ !cancelled() && github.event.pull_request.head.repo.full_name == github.repository }}
+        uses: actions/labeler@v6
+        with:
+          repo-token: ${{ github.token }}
+      - name: Reconcile Conventional Commit labels
+        if: ${{ !cancelled() && github.event.pull_request.head.repo.full_name == github.repository }}
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const title = context.payload.pull_request.title;
+            const body = context.payload.pull_request.body || "";
+            const managed = new Set(["breaking-change", "enhancement", "bug", "documentation", "performance", "ci", "chore"]);
+            // Labels aplicadas pelas regras de caminho do labeler.yml: a
+            // reconciliação pelo título não pode removê-las.
+            const pathOwned = new Set(["ci"]);
+            const desired = new Set();
+            if (/BREAKING CHANGE/.test(body) || /^[a-z]+(?:\([^)]*\))?!:/.test(title)) desired.add("breaking-change");
+            const match = title.match(/^(feat|fix|docs|perf|ci|chore|test|build|style|refactor)(?:\([^)]*\))?!?:/);
+            const byKind = { feat: "enhancement", fix: "bug", docs: "documentation", perf: "performance", ci: "ci", chore: "chore", test: "chore", build: "chore", style: "chore", refactor: "chore" };
+            if (match) desired.add(byKind[match[1]]);
+            const current = await github.paginate(github.rest.issues.listLabelsOnIssue, {
+              owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number,
+            });
+            for (const label of current) {
+              if (managed.has(label.name) && !desired.has(label.name) && !pathOwned.has(label.name)) {
+                await github.rest.issues.removeLabel({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, name: label.name });
+              }
+            }
+            if (desired.size) {
+              await github.rest.issues.addLabels({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, labels: [...desired] });
+            }
+      - name: Ensure release milestone matches base branch
+        id: assign-milestone
+        if: ${{ !cancelled() && github.event.pull_request != null && github.event.pull_request.head.repo.full_name == github.repository }}
+        uses: actions/github-script@v8
+        with:
+          # O token dedicado continua preferido, mas o GITHUB_TOKEN com
+          # permissões explícitas evita que a atribuição dependa de um secret
+          # ausente em PRs comuns.
+          github-token: ${{ github.token }}
+          script: |
+            const fs = require("fs");
+            const config = JSON.parse(
+              fs.readFileSync(".github/release-lines.json", "utf8"),
+            );
+            const base = context.payload.pull_request.base.ref;
+            const lines = [config.development, config.maintenance];
+            let line = lines.find(({ branch }) => branch === base);
+            let stackRoot = "";
+
+            // PR empilhada: a base é a branch de outra PR aberta. Segue as
+            // bases pelas PRs abertas do repositório até chegar a uma linha de
+            // release; a milestone é a da linha que fica na raiz da pilha.
+            if (!line) {
+              const { owner: repoOwner, repo: repoName } = context.repo;
+              const open = await github.paginate(github.rest.pulls.list, {
+                owner: repoOwner,
+                repo: repoName,
+                state: "open",
+                per_page: 100,
+              });
+              const seen = new Set();
+              let cursor = base;
+              // `paginate` carrega todas as PRs abertas. O conjunto `seen`
+              // encerra ciclos; o tamanho da lista limita a busca sem truncar
+              // uma pilha válida por um teto fixo de profundidade.
+              while (cursor && !seen.has(cursor) && seen.size < open.length) {
+                seen.add(cursor);
+                const parent = open.find(
+                  (pr) =>
+                    pr.head.ref === cursor &&
+                    pr.head.repo?.full_name === `${repoOwner}/${repoName}`,
+                );
+                if (!parent) break;
+                cursor = parent.base.ref;
+                line = lines.find(({ branch }) => branch === cursor);
+                if (line) {
+                  stackRoot = cursor;
+                  break;
+                }
+              }
+            }
+            core.setOutput("stack_root", stackRoot);
+
+            if (!line) {
+              core.info(`Skipping unsupported pull-request base: ${base}`);
+              return;
+            }
+            const milestoneTitle = line.milestone;
+
+            // Eventos de sincronização e edição já carregam a milestone atual
+            // no payload. Evita uma chamada autenticada desnecessária quando
+            // o PR já está correto, inclusive em reexecuções sem credencial de
+            // escrita disponível.
+            const payloadMilestone =
+              context.payload.pull_request.milestone?.title ?? "";
+            if (payloadMilestone === milestoneTitle) {
+              core.info(
+                `Pull request already uses milestone ${milestoneTitle} from the event payload.`,
+              );
+              core.setOutput("milestone", milestoneTitle);
+              core.setOutput("current_milestone", payloadMilestone);
+              core.setOutput("current_base", base);
+              return;
+            }
+
+            const { owner, repo } = context.repo;
+            const currentPullRequest = await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number: context.issue.number,
+            });
+            const milestones = await github.paginate(
+              github.rest.issues.listMilestones,
+              { owner, repo, state: "open", per_page: 100 },
+            );
+            let milestone = milestones.find(
+              ({ title }) => title === milestoneTitle,
+            );
+            if (!milestone) {
+              try {
+                const created = await github.rest.issues.createMilestone({
+                  owner,
+                  repo,
+                  title: milestoneTitle,
+                  description: `Release line ${line.branch}`,
+                });
+                milestone = created.data;
+                core.info(`Created release milestone ${milestoneTitle}.`);
+              } catch (error) {
+                if (error.status !== 422) throw error;
+                const refreshed = await github.paginate(
+                  github.rest.issues.listMilestones,
+                  { owner, repo, state: "open", per_page: 100 },
+                );
+                milestone = refreshed.find(
+                  ({ title }) => title === milestoneTitle,
+                );
+                if (!milestone) throw error;
+                core.info(`Reused concurrently created milestone ${milestoneTitle}.`);
+              }
+            }
+
+            core.setOutput("milestone", milestoneTitle);
+            const current = currentPullRequest.data.milestone?.title;
+            if (current === milestoneTitle) {
+              core.info(`Pull request already uses milestone ${milestoneTitle}.`);
+            } else {
+              await github.rest.issues.update({
+                owner,
+                repo,
+                issue_number: context.issue.number,
+                milestone: milestone.number,
+              });
+              core.info(`Assigned milestone ${milestoneTitle} for base ${base}.`);
+            }
+
+            const refreshedPullRequest = await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number: context.issue.number,
+            });
+            core.setOutput(
+              "current_milestone",
+              refreshedPullRequest.data.milestone?.title ?? "",
+            );
+            core.setOutput("current_base", refreshedPullRequest.data.base.ref);
+
+      - if: ${{ !cancelled() }}
+        uses: ./.github/actions/setup-uv
+        with:
+          python-version: "3.13"
+          all-extras: "false"
+          working-directory: .
+      - if: ${{ !cancelled() }}
+        name: Validate milestone and base branch
+        run: uv run python utils/release.py validate-milestone
+        env:
+          GITHUB_EVENT_PATH: ${{ github.event_path }}
+          CURRENT_RELEASE_MILESTONE: ${{ steps.assign-milestone.outputs.current_milestone || github.event.pull_request.milestone.title }}
+          CURRENT_PR_BASE: ${{ steps.assign-milestone.outputs.current_base || github.event.pull_request.base.ref }}
+          CURRENT_STACK_ROOT_BASE: ${{ steps.assign-milestone.outputs.stack_root }}
+          CURRENT_PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          CURRENT_PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+
+  code:
+    name: Código (pre-commit, contratos, testes de release, segredos)
+    needs: [metadata, pr-adjustments]
+    if: github.event_name == 'pull_request' && (github.event.action == 'opened' || github.event.action == 'synchronize' || github.event.action == 'reopened')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup-uv
+        with:
+          python-version: "3.13"
+          all-extras: "false"
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "26"
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.5.0
+      - name: Instala as dependências do frontend
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+          cache: false
+      - name: Install gitleaks
+        run: go install github.com/zricethezav/gitleaks/v8@${{ env.GITLEAKS_VERSION }}
+      # Roda os mesmos hooks do commit local, só nos arquivos que o PR altera.
+      - name: Executa o pre-commit
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: >-
+          uv run --no-project --with pre-commit pre-commit run
+          --show-diff-on-failure --color=always
+          --from-ref "$BASE_SHA" --to-ref "$HEAD_SHA"
+      # Falha quando backend/contracts ou frontend/lib/contracts/index.ts não
+      # correspondem ao código: rode `uv run python -m backend.contracts export`.
+      - name: Verifica o drift dos contratos
+        if: ${{ !cancelled() }}
+        env:
+          GITHUB_BASE_REF: ${{ github.event.pull_request.base.ref }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: uv run python -m backend.contracts check
+      - name: Executa testes das utilidades de release
+        if: ${{ !cancelled() }}
+        run: >-
+          uv run pytest -q utils/test_release.py utils/test_checks.py utils/test_release_assets.py utils/test_release_notes.py
+      - name: Scan the working tree
+        if: ${{ !cancelled() }}
+        run: gitleaks dir . --redact --no-banner --verbose
+      - name: Scan the commits of the pull request
+        if: ${{ !cancelled() }}
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: gitleaks git . --redact --no-banner --verbose --log-opts="$BASE_SHA..$HEAD_SHA"
+
+  secrets-push:
+    name: Varredura de segredos dos commits enviados
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+          cache: false
+      - name: Install gitleaks
+        run: go install github.com/zricethezav/gitleaks/v8@${{ env.GITLEAKS_VERSION }}
+      - name: Scan the working tree
+        run: gitleaks dir . --redact --no-banner --verbose
+      - name: Scan the pushed commits
+        if: github.event_name == 'push'
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          AFTER_SHA: ${{ github.sha }}
+        run: |
+          if [ "$BEFORE_SHA" = "0000000000000000000000000000000000000000" ]; then
+            gitleaks git . --redact --no-banner --verbose --log-opts="-1 $AFTER_SHA"
+          else
+            gitleaks git . --redact --no-banner --verbose --log-opts="$BEFORE_SHA..$AFTER_SHA"
+          fi

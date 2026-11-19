@@ -68,4 +68,4 @@ Estas proteções reduzem o risco, mas não o eliminam:
 - Mantenha segredos fora do git; confira o `.gitignore` antes de commitar.
 - Ferramentas operam com o menor escopo necessário.
 - Atenção redobrada a `backend/services/security.py`, a qualquer código que receba caminhos e a toda execução de subprocesso.
-- Dependências: `pip-audit`, `bandit` e a varredura de segurança do CI (Snyk) acompanham advisories conhecidos.
+- Dependências: `pip-audit`, `bandit` e o gitleaks do CI acompanham advisories conhecidos.
