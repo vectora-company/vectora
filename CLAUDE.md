@@ -49,7 +49,7 @@ O runtime de agentes usa o loop de conversa nativo (`backend/engine/conversation
 
 ### 3.2.1. Idioma do código
 
-Todo identificador (variáveis, funções, métodos, classes, constantes, parâmetros e nomes de testes) é escrito em inglês. Somente comentários e docstrings podem ser em português; textos visíveis ao usuário seguem a regra de i18n da seção 3.4.
+Todo código é escrito somente em inglês: variáveis, funções, métodos, classes, constantes, parâmetros, campos, chaves de dados internas e nomes de testes. Comentários e docstrings podem ser em português ou em inglês, e o normal neste repositório é português. Não traduza um comentário só para acompanhar uma renomeação, e nunca altere comentários, docstrings ou textos visíveis ao usuário ao renomear identificadores por regex; revise o diff antes de commitar. Textos visíveis ao usuário seguem a regra de i18n da seção 3.4.
 
 ### 3.3. I/O e erros
 
