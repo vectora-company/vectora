@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   buildContextMenuTemplate,
+  buildPopupTemplate,
   contextMenuLabels,
+  sanitizePopupItems,
   type ContextMenuActions,
   type ContextMenuParams,
 } from "../context-menu";
@@ -216,5 +218,111 @@ describe("contextMenuLabels", () => {
     expect(contextMenuLabels("en-US").paste).toBe("Paste");
     expect(contextMenuLabels("fr-FR").paste).toBe("Paste");
     expect(contextMenuLabels("").paste).toBe("Paste");
+  });
+});
+
+describe("buildContextMenuTemplate — clique sem nada para copiar", () => {
+  it("oferece recarregar e, no desenvolvimento, inspecionar, em vez de ficar mudo", () => {
+    const reload = vi.fn();
+    const inspect = vi.fn();
+    const items = buildContextMenuTemplate(params(), labels, {
+      ...actions(),
+      reload,
+      inspect,
+    });
+
+    expect(items.map((item) => item.label)).toEqual([
+      "Recarregar",
+      "Inspecionar elemento",
+    ]);
+    items[0]?.click?.({} as never, undefined, {} as never);
+    expect(reload).toHaveBeenCalledOnce();
+  });
+
+  it("no app instalado só oferece recarregar", () => {
+    const items = buildContextMenuTemplate(params(), labels, {
+      ...actions(),
+      reload: vi.fn(),
+    });
+
+    expect(items.map((item) => item.label)).toEqual(["Recarregar"]);
+  });
+
+  it("sem as ações de reserva continua sem menu (ex.: páginas embutidas)", () => {
+    expect(buildContextMenuTemplate(params(), labels, actions())).toEqual([]);
+  });
+
+  it("o menu de reserva não aparece quando já há o que mostrar", () => {
+    const items = buildContextMenuTemplate(
+      params({ selectionText: "texto" }),
+      labels,
+      { ...actions(), reload: vi.fn() },
+    );
+
+    expect(items.map((item) => item.label)).not.toContain("Recarregar");
+  });
+
+  it.each(["pt", "en", "es"])("tem os dois rótulos em %s", (language) => {
+    const text = contextMenuLabels(language);
+    expect(text.reload).toBeTruthy();
+    expect(text.inspect).toBeTruthy();
+  });
+});
+
+describe("sanitizePopupItems", () => {
+  it("aceita uma lista de itens com id e rótulo", () => {
+    expect(
+      sanitizePopupItems([
+        { id: "0", label: "Fechar" },
+        { id: "1", label: "Fechar as outras", enabled: false },
+      ]),
+    ).toEqual([
+      { id: "0", label: "Fechar", enabled: true },
+      { id: "1", label: "Fechar as outras", enabled: false },
+    ]);
+  });
+
+  it.each([
+    ["não é lista", "texto"],
+    ["lista vazia", []],
+    ["item que não é objeto", ["x"]],
+    ["id vazio", [{ id: "", label: "A" }]],
+    [
+      "id repetido",
+      [
+        { id: "0", label: "A" },
+        { id: "0", label: "B" },
+      ],
+    ],
+    ["rótulo vazio", [{ id: "0", label: "" }]],
+    ["rótulo que não é texto", [{ id: "0", label: 5 }]],
+    ["rótulo enorme", [{ id: "0", label: "x".repeat(500) }]],
+    [
+      "lista longa demais",
+      Array.from({ length: 41 }, (_, index) => ({
+        id: String(index),
+        label: "A",
+      })),
+    ],
+  ])("recusa %s", (_name, raw) => {
+    expect(sanitizePopupItems(raw)).toBeNull();
+  });
+});
+
+describe("buildPopupTemplate", () => {
+  it("cada item devolve o próprio id ao ser escolhido", () => {
+    const picked: string[] = [];
+    const template = buildPopupTemplate(
+      [
+        { id: "a", label: "A" },
+        { id: "b", label: "B", enabled: false },
+      ],
+      (id) => picked.push(id),
+    );
+
+    template[0]?.click?.({} as never, undefined, {} as never);
+
+    expect(picked).toEqual(["a"]);
+    expect(template.map((item) => item.enabled)).toEqual([true, false]);
   });
 });

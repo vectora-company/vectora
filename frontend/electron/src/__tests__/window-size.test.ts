@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeDefaultWindowSize } from "../window-size";
+import { computeDefaultWindowSize, fitBoundsToWorkArea } from "../window-size";
 
 describe("computeDefaultWindowSize", () => {
   it("escala pra ~62% de uma tela 1080p, bem menor que a tela cheia", () => {
@@ -15,5 +15,40 @@ describe("computeDefaultWindowSize", () => {
 
     const huge = computeDefaultWindowSize({ width: 3840, height: 2160 });
     expect(huge).toEqual({ width: 1280, height: 720 });
+  });
+});
+
+describe("fitBoundsToWorkArea", () => {
+  const workArea = { x: 0, y: 0, width: 1920, height: 1040 };
+
+  it("não mexe numa janela que já cabe", () => {
+    expect(
+      fitBoundsToWorkArea({ x: 0, y: 0, width: 1920, height: 1040 }, workArea),
+    ).toBeNull();
+    expect(
+      fitBoundsToWorkArea({ x: 100, y: 80, width: 800, height: 600 }, workArea),
+    ).toBeNull();
+  });
+
+  it("encolhe uma janela maximizada que sobrou além da tela (botão de fechar fora)", () => {
+    expect(
+      fitBoundsToWorkArea({ x: 0, y: 0, width: 1956, height: 1040 }, workArea),
+    ).toEqual({ x: 0, y: 0, width: 1920, height: 1040 });
+  });
+
+  it("puxa de volta uma janela que ficou deslocada para a direita ou para baixo", () => {
+    expect(
+      fitBoundsToWorkArea(
+        { x: 40, y: 30, width: 1920, height: 1040 },
+        workArea,
+      ),
+    ).toEqual({ x: 0, y: 0, width: 1920, height: 1040 });
+  });
+
+  it("respeita a origem da área útil em monitores deslocados", () => {
+    const second = { x: 1920, y: 24, width: 1366, height: 744 };
+    expect(
+      fitBoundsToWorkArea({ x: 1900, y: 0, width: 1400, height: 800 }, second),
+    ).toEqual({ x: 1920, y: 24, width: 1366, height: 744 });
   });
 });

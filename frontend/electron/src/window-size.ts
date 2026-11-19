@@ -22,3 +22,34 @@ export function computeDefaultWindowSize(screenSize: WindowSize): WindowSize {
     height: Math.round(Math.min(Math.max(screenSize.height * 0.62, 600), 720)),
   };
 }
+
+export interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Bounds da janela encaixados na área útil da tela. Uma janela sem moldura que o
+ * gerenciador de janelas maximiza pode sobrar além da tela (os botões de fechar
+ * ficam para fora); devolve `null` quando já cabe.
+ */
+export function fitBoundsToWorkArea(bounds: Rect, workArea: Rect): Rect | null {
+  const width = Math.min(bounds.width, workArea.width);
+  const height = Math.min(bounds.height, workArea.height);
+  const x = Math.min(
+    Math.max(bounds.x, workArea.x),
+    workArea.x + workArea.width - width,
+  );
+  const y = Math.min(
+    Math.max(bounds.y, workArea.y),
+    workArea.y + workArea.height - height,
+  );
+  const fits =
+    width === bounds.width &&
+    height === bounds.height &&
+    x === bounds.x &&
+    y === bounds.y;
+  return fits ? null : { x, y, width, height };
+}

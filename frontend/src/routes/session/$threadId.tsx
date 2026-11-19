@@ -22,6 +22,7 @@ import {
 } from "@/components/workbench/workbench-panel";
 import { IdeModeLayout } from "@/components/layout/ide-mode-layout";
 import { CenterCanvas } from "@/components/layout/center-canvas";
+import { buildCanvasTabMenu } from "@/lib/layout/canvas-tab-menu";
 import { getModeComposition } from "@/components/layout/mode-composition";
 import { CompactDrawer } from "@/components/layout/compact-drawer";
 import { ExtensionModeSurface } from "@/components/extensions/extension-mode-surface";
@@ -1436,6 +1437,15 @@ function SessionPage() {
                       activeTab={visibleActiveCanvasDocumentId}
                       onTabChange={activateCanvasDocument}
                       onTabClose={closeCanvasDocument}
+                      getTabMenu={(tab, tabs, index) =>
+                        buildCanvasTabMenu(tab, tabs, index, {
+                          close: closeCanvasDocument,
+                          openInWindow: (workspaceId, path) =>
+                            useWindowsStore.getState().open(workspaceId, path),
+                          copyText: (text) =>
+                            void navigator.clipboard?.writeText(text),
+                        })
+                      }
                       renderDocument={renderCanvasDocument}
                     >
                       <DockedEditor activeWorkspaceId={activeWorkspaceId} />
