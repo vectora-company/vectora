@@ -123,10 +123,44 @@ async def test_run_verification_profile_empty(test_workspace: Path) -> None:
     )
     res = await run_verification("test_ws", test_workspace, profile=profile)
     assert res.passed is True
-    assert res.status == "passed"
+    assert res.status == "degraded"
     assert res.outcome == "not_run"
     assert len(res.snapshot_sha256) == 64
     assert res.gate_results == []
+    assert "não foi verificada" in res.detail
+
+
+@pytest.mark.asyncio
+async def test_run_verification_disabled_profile_is_not_verified(
+    test_workspace: Path,
+) -> None:
+    profile = WorkspaceVerificationProfile(workspace_id="test_ws", enabled=False)
+    res = await run_verification("test_ws", test_workspace, profile=profile)
+    assert (res.passed, res.status, res.outcome) == (True, "degraded", "not_run")
+
+
+@pytest.mark.asyncio
+async def test_run_verification_no_applicable_gate_is_not_verified(
+    test_workspace: Path,
+) -> None:
+    profile = WorkspaceVerificationProfile(
+        workspace_id="test_ws",
+        enabled=True,
+        gates=[
+            QualityGateSpec(
+                id="py",
+                name="Python",
+                command=["true"],
+                file_patterns=["**/*.py"],
+            )
+        ],
+    )
+    res = await run_verification(
+        "test_ws", test_workspace, profile=profile, files_touched=["README.md"]
+    )
+    assert (res.passed, res.status, res.outcome) == (True, "degraded", "not_run")
+    assert res.gate_results == []
+    assert res.to_evidence_entry()["gates_evaluated"] == 0
 
 
 @pytest.mark.asyncio

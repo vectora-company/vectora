@@ -831,6 +831,43 @@ class TestParadaNormal:
         assert stored.status == "passed"
         assert stored.evidence[-1]["snapshot_sha256"] == "snapshot"
 
+    async def test_run_sem_gates_termina_nao_verificado(
+        self, session_store, ctx, monkeypatch, tmp_path
+    ):
+        """Sem quality gates, o motor real devolve ``not_run`` e o loop grava o
+        run como ``degraded``, sem a mensagem de verificação bem-sucedida."""
+        from backend.contracts.models import WorkspaceVerificationProfile
+        from backend.persistence.native.agent_run import AgentRun
+
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(
+            "backend.services.verification.engine.get_verification_profile",
+            lambda workspace_id: WorkspaceVerificationProfile(
+                workspace_id=workspace_id or "default", enabled=True, gates=[]
+            ),
+        )
+        await session_store.upsert_agent_run(
+            AgentRun(run_id="run-no-gates", thread_id="thread-1", status="running")
+        )
+
+        resultado = await run_conversation(
+            session_store=session_store,
+            chat_client=_ScriptedChatClient([[_texto_chunk("ok")]]),
+            tool_registry=ToolRegistry(),
+            ctx=ctx,
+            thread_id="thread-1",
+            config=LoopConfig(run_id="run-no-gates"),
+        )
+
+        assert resultado.stopped_reason == "stop"
+        stored = await session_store.get_agent_run("run-no-gates")
+        assert stored is not None
+        assert stored.status == "degraded"
+        assert "Nenhum quality gate" in (stored.detail or "")
+        assert "sucesso" not in (stored.detail or "")
+        assert stored.evidence[-1]["outcome"] == "not_run"
+        assert stored.evidence[-1]["gates_evaluated"] == 0
+
     async def test_checkpoint_de_tool_impede_reexecucao_cego(self, session_store, ctx):
         """Verifica o comportamento de checkpoint de tool impede reexecucao cego."""
         from backend.persistence.native.agent_run import AgentRun
