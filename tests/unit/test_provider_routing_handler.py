@@ -57,7 +57,7 @@ def decision_model_settings() -> Settings:
             "systemone_laya_base_url": "http://127.0.0.1:8000",
             "systemone_laya_model": "laya",
             "systemone_clef_api_model": "@cf/clef",
-            "systemone_jev_api_model": "jev-fast",
+            "systemone_jev_api_model": "jev-1.14.0",
             "systemone_risk_assessment_timeout_s": 7.0,
             "clef_api_key": "valid-secret",
             "jev_api_key": "present-but-unverified",
@@ -72,7 +72,7 @@ async def test_decision_model_readiness_reports_missing_remote_credential(monkey
     monkeypatch.setattr(
         "backend.settings.settings",
         SimpleNamespace(
-            systemone_enabled=True, jev_api_key="", systemone_jev_api_model="jev-fast"
+            systemone_enabled=True, jev_api_key="", systemone_jev_api_model="jev-1.14.0"
         ),
     )
     probe = AsyncMock()
@@ -81,7 +81,7 @@ async def test_decision_model_readiness_reports_missing_remote_credential(monkey
     result = await get_decision_model_readiness("jev-api")
 
     assert result.provider == "jev-api"
-    assert result.model == "jev-fast"
+    assert result.model == "jev-1.14.0"
     assert result.configured is True
     assert result.credential_valid is False
     assert result.healthy is False
@@ -107,8 +107,8 @@ async def test_decision_model_readiness_uses_remote_credentials_from_environment
             "systemone_laya_api_key": None,
             "systemone_clef_api_base_url": "https://api.cloudflare.com/client/v4/accounts",
             "systemone_clef_api_model": "@cf/clef",
-            "systemone_jev_api_base_url": "https://api.jev.ai",
-            "systemone_jev_api_model": "jev-fast",
+            "systemone_jev_api_base_url": "https://api.typesafe.ai",
+            "systemone_jev_api_model": "jev-1.14.0",
             "systemone_confidence_threshold_hitl": 0.7,
             "systemone_risk_assessment_timeout_s": 10.0,
             "clef_api_key": "",
@@ -2792,6 +2792,48 @@ class TestNineRouterDiscovery:
             "openai/gpt-4o",
         ]
 
+    def test_only_chat_models_are_listed_with_their_provider(
+        self, client, clean_nine_router_config, tmp_path
+    ):
+        """O OmniRoute lista imagem, áudio e embedding junto: só chat sai, e o
+        provider de origem acompanha cada modelo. Pede `kind=chat` ao roteador."""
+        with patch(
+            "backend.api.handlers.provider_routing._env_file",
+            return_value=tmp_path / ".env",
+        ):
+            client.post(
+                "/provider-routing/nine-router/config",
+                json={"base_url": "http://localhost:20128/v1", "api_key": "9r-key"},
+            )
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.return_value = {
+            "data": [
+                {"id": "cc/claude-opus-4-7", "owned_by": "claude"},
+                {"id": "openai/gpt-4o", "type": "chat", "owned_by": "openai"},
+                {"id": "aihorde/Juggernaut XL", "type": "image", "owned_by": "aihorde"},
+                {"id": "openai/tts-1", "type": "audio", "owned_by": "openai"},
+                {"id": "voyage/embed", "type": "embedding", "owned_by": "voyage"},
+                {"id": "x/rerank", "type": "rerank", "owned_by": "x"},
+            ]
+        }
+        with patch("httpx.AsyncClient") as mock_httpx:
+            mock_ctx = AsyncMock()
+            mock_ctx.__aenter__ = AsyncMock(return_value=mock_ctx)
+            mock_ctx.__aexit__ = AsyncMock(return_value=False)
+            mock_ctx.get = AsyncMock(return_value=mock_response)
+            mock_httpx.return_value = mock_ctx
+
+            resp = client.get("/provider-routing/nine-router/models")
+
+        body = resp.json()
+        assert [(m["id"], m["provider"]) for m in body["models"]] == [
+            ("cc/claude-opus-4-7", "claude"),
+            ("openai/gpt-4o", "openai"),
+        ]
+        assert mock_ctx.get.await_args is not None
+        assert mock_ctx.get.await_args.kwargs["params"] == {"kind": "chat"}
+
 
 class TestNineRouterRegisteredModels:
     def test_register_list_and_delete(self, client):
@@ -3161,7 +3203,7 @@ def test_decision_model_status_with_empty_local_model(
     entries = {
         entry["provider"]: entry for entry in response.json()["capability_matrix"]
     }
-    assert len(entries) == 4
+    assert len(entries) == 5
     assert entries["clef-local"]["model"] == "unconfigured"
     assert entries["clef-local"]["discovered"] is (not capabilities_fail)
     assert entries["clef-local"]["ready"] is (not capabilities_fail)
@@ -3170,3 +3212,58 @@ def test_decision_model_status_with_empty_local_model(
     assert all(
         entry["discovered"] for name, entry in entries.items() if name != "clef-local"
     )
+
+
+@pytest.mark.asyncio
+async def test_decision_model_readiness_openrouter_sem_chave(monkeypatch):
+    """O OpenRouter usa a chave do próprio OpenRouter; sem ela nada é sondado."""
+    from backend.api.handlers import provider_routing
+
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.setattr(
+        "backend.settings.settings",
+        SimpleNamespace(
+            systemone_enabled=True,
+            openrouter_api_key=None,
+            systemone_openrouter_model="typesafe/jev-1.14",
+        ),
+    )
+    probe = AsyncMock()
+    monkeypatch.setattr(provider_routing, "get_systemone_provider", probe)
+
+    result = await get_decision_model_readiness("openrouter-api")
+
+    assert result.provider == "openrouter-api"
+    assert result.model == "typesafe/jev-1.14"
+    assert result.credential_valid is False
+    assert result.ready is False
+    probe.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_decision_model_readiness_openrouter_com_chave_sonda_o_provider(
+    monkeypatch, decision_model_settings
+):
+    from backend.api.handlers import provider_routing
+
+    config = decision_model_settings.model_copy(
+        update={
+            "openrouter_api_key": "sk-or-teste",
+            "systemone_openrouter_model": "liquid/d1.1",
+        }
+    )
+    monkeypatch.setattr("backend.settings.settings", config)
+    adapter = SimpleNamespace(
+        capabilities=AsyncMock(), health=AsyncMock(return_value=True)
+    )
+    factory = MagicMock(return_value=adapter)
+    monkeypatch.setattr(provider_routing, "get_systemone_provider", factory)
+
+    result = await get_decision_model_readiness("openrouter-api")
+
+    assert (result.configured, result.credential_valid, result.ready) == (
+        True,
+        True,
+        True,
+    )
+    assert factory.call_args.kwargs["openrouter_api_key"] == "sk-or-teste"
