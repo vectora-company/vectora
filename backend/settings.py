@@ -333,6 +333,9 @@ class Settings(BaseSettings):
     max_context_tokens: int = 8000
     """Maximum tokens to keep in message history (sliding window)."""
 
+    context_summary_enabled: bool = True
+    """Resume por LLM o que a compactação descartou, em vez de deixar só um marcador."""
+
     max_embedding_queue_size: int = 1000
     """Maximum documents pending embedding before throttling."""
 
