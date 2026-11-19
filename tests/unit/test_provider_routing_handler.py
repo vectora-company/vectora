@@ -57,7 +57,7 @@ def decision_model_settings() -> Settings:
             "systemone_laya_base_url": "http://127.0.0.1:8000",
             "systemone_laya_model": "laya",
             "systemone_clef_api_model": "@cf/clef",
-            "systemone_jev_api_model": "jev-fast",
+            "systemone_jev_api_model": "jev-1.14.0",
             "systemone_risk_assessment_timeout_s": 7.0,
             "clef_api_key": "valid-secret",
             "jev_api_key": "present-but-unverified",
@@ -72,7 +72,7 @@ async def test_decision_model_readiness_reports_missing_remote_credential(monkey
     monkeypatch.setattr(
         "backend.settings.settings",
         SimpleNamespace(
-            systemone_enabled=True, jev_api_key="", systemone_jev_api_model="jev-fast"
+            systemone_enabled=True, jev_api_key="", systemone_jev_api_model="jev-1.14.0"
         ),
     )
     probe = AsyncMock()
@@ -81,7 +81,7 @@ async def test_decision_model_readiness_reports_missing_remote_credential(monkey
     result = await get_decision_model_readiness("jev-api")
 
     assert result.provider == "jev-api"
-    assert result.model == "jev-fast"
+    assert result.model == "jev-1.14.0"
     assert result.configured is True
     assert result.credential_valid is False
     assert result.healthy is False
@@ -107,8 +107,8 @@ async def test_decision_model_readiness_uses_remote_credentials_from_environment
             "systemone_laya_api_key": None,
             "systemone_clef_api_base_url": "https://api.cloudflare.com/client/v4/accounts",
             "systemone_clef_api_model": "@cf/clef",
-            "systemone_jev_api_base_url": "https://api.jev.ai",
-            "systemone_jev_api_model": "jev-fast",
+            "systemone_jev_api_base_url": "https://api.typesafe.ai",
+            "systemone_jev_api_model": "jev-1.14.0",
             "systemone_confidence_threshold_hitl": 0.7,
             "systemone_risk_assessment_timeout_s": 10.0,
             "clef_api_key": "",

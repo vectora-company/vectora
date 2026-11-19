@@ -213,7 +213,7 @@ class SystemOneRequest(BaseModel):
     """Requisição canônica enviada para um provedor de Decision Models."""
 
     model: str = Field(
-        ..., description="Identificador do modelo (ex: clef-flash, jev-1)."
+        ..., description="Identificador do modelo (ex: clef-flash, jev-1.14.0)."
     )
     state: str = Field(
         ...,

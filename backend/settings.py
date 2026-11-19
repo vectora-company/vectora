@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any, Literal, cast
 
 from dotenv import dotenv_values, load_dotenv
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from backend.runtime_profile import resolve_runtime_home
@@ -481,11 +481,25 @@ class Settings(BaseSettings):
     systemone_clef_api_model: str = "@cf/cloudflare/clef-flash"
     """Identificador do modelo na API Clef."""
 
-    systemone_jev_api_base_url: str = "https://api.jev.ai"
-    """Endpoint da API remota JEV."""
+    systemone_jev_api_base_url: str = "https://api.typesafe.ai"
+    """Endpoint da API remota JEV (TypeSafe)."""
 
-    systemone_jev_api_model: str = "jev-fast"
-    """Identificador do modelo na API JEV."""
+    systemone_jev_api_model: str = "jev-latest"
+    """Identificador do modelo na API JEV (`jev-latest`, `jev-1.14.0`, `jev-1.13.0`)."""
+
+    @field_validator("systemone_jev_api_base_url")
+    @classmethod
+    def _migrate_jev_base_url(cls, value: str) -> str:
+        from backend.llm.systemone.endpoints import normalize_jev_base_url
+
+        return normalize_jev_base_url(value)
+
+    @field_validator("systemone_jev_api_model")
+    @classmethod
+    def _migrate_jev_model(cls, value: str) -> str:
+        from backend.llm.systemone.endpoints import normalize_jev_model
+
+        return normalize_jev_model(value)
 
     systemone_allow_remote_fallback: bool = False
     """Permite fallback para API remota se local falhar (requer consentimento explícito)."""

@@ -5,10 +5,16 @@ from __future__ import annotations
 import hashlib
 import os
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from backend.llm.systemone.api_adapters import ClefApiAdapter, JevApiAdapter
 from backend.llm.systemone.clef_local import ClefLocalAdapter
+from backend.llm.systemone.endpoints import (
+    JEV_API_BASE_URL,
+    JEV_DEFAULT_MODEL,
+    normalize_jev_base_url,
+    normalize_jev_model,
+)
 from backend.llm.systemone.laya_local import LayaLocalAdapter
 from backend.llm.systemone.protocol import SystemOneProvider
 from backend.llm.systemone.types import DecisionProviderType
@@ -55,13 +61,23 @@ class SystemOneSettings(BaseModel):
 
     # JEV API
     jev_api_base_url: str = Field(
-        default="https://api.jev.ai",
-        description="Base URL para JEV Cloud.",
+        default=JEV_API_BASE_URL,
+        description="Base URL da API JEV (TypeSafe).",
     )
     jev_api_model: str = Field(
-        default="jev-fast",
-        description="Identificador do modelo na API JEV.",
+        default=JEV_DEFAULT_MODEL,
+        description="Identificador do modelo na API JEV (`jev-latest`, `jev-1.14.0`, `jev-1.13.0`).",
     )
+
+    @field_validator("jev_api_base_url")
+    @classmethod
+    def _migrate_jev_base_url(cls, value: str) -> str:
+        return normalize_jev_base_url(value)
+
+    @field_validator("jev_api_model")
+    @classmethod
+    def _migrate_jev_model(cls, value: str) -> str:
+        return normalize_jev_model(value)
 
     # Fallback e políticas de execução
     allow_remote_fallback: bool = Field(
