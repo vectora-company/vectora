@@ -27,6 +27,14 @@ import { Label } from "@/components/ui/label";
 import { m } from "@/lib/paraglide/messages";
 import { mDyn } from "@/lib/i18n-dyn";
 import type { VectoraDmrOperation } from "@/lib/types/vectora-bridge";
+import {
+  SettingsMessage,
+  SettingsSectionHeader,
+  SettingsStack,
+  SettingsStatus,
+  settingsRowClass,
+  settingsSectionClass,
+} from "@/components/settings/primitives";
 
 interface OllamaModelInfo {
   name: string;
@@ -802,19 +810,12 @@ function DmrSection() {
   }
 
   return (
-    <div className="space-y-3 rounded-lg border p-4">
-      <div>
-        <h3 className="flex items-center gap-1.5 font-medium">
-          <ProviderIcon
-            provider="dmr"
-            className="size-3.5 text-muted-foreground"
-          />
-          {m.provider_routing_dmr_title()}
-        </h3>
-        <p className="text-xs text-muted-foreground">
-          {m.provider_routing_dmr_subtitle()}
-        </p>
-      </div>
+    <div className={settingsSectionClass}>
+      <SettingsSectionHeader
+        icon={<ProviderIcon provider="dmr" className="size-3.5" />}
+        title={m.provider_routing_dmr_title()}
+        description={m.provider_routing_dmr_subtitle()}
+      />
       <div className="grid gap-2 md:grid-cols-[1fr_1fr_1fr_auto]">
         <Input
           aria-label={m.provider_routing_dmr_endpoint()}
@@ -837,12 +838,18 @@ function DmrSection() {
           onChange={(event) => setContextSize(event.target.value)}
           placeholder={m.provider_routing_hf_ctx_size()}
         />
-        <Button type="button" disabled={busy} onClick={() => void save()}>
+        <Button
+          size="sm"
+          type="button"
+          disabled={busy}
+          onClick={() => void save()}
+        >
           {m.provider_routing_dmr_save()}
         </Button>
       </div>
       <div className="flex flex-wrap gap-2">
         <Button
+          size="sm"
           type="button"
           variant="outline"
           disabled={busy}
@@ -854,6 +861,7 @@ function DmrSection() {
           status?.cli_available &&
           !status.runner_available && (
             <Button
+              size="sm"
               type="button"
               variant="outline"
               disabled={busy}
@@ -870,6 +878,7 @@ function DmrSection() {
           status?.state === "plugin_unavailable" &&
           status.plugin_install_supported && (
             <Button
+              size="sm"
               type="button"
               variant="outline"
               disabled={busy}
@@ -882,6 +891,7 @@ function DmrSection() {
           (runtimeOperation.status === "queued" ||
             runtimeOperation.status === "running") && (
             <Button
+              size="sm"
               type="button"
               variant="outline"
               onClick={() => void cancelRunnerInstall()}
@@ -905,6 +915,7 @@ function DmrSection() {
         job &&
         (job.status === "queued" || job.status === "running") ? (
           <Button
+            size="sm"
             type="button"
             variant="outline"
             onClick={() => void cancelPrepare()}
@@ -913,6 +924,7 @@ function DmrSection() {
           </Button>
         ) : canManageDocker && job?.status === "interrupted" ? (
           <Button
+            size="sm"
             type="button"
             disabled={busy}
             onClick={() => void retryPrepare()}
@@ -921,6 +933,7 @@ function DmrSection() {
           </Button>
         ) : canManageDocker ? (
           <Button
+            size="sm"
             type="button"
             disabled={busy || !model.trim() || !status?.runner_available}
             onClick={() => void prepare()}
@@ -930,6 +943,7 @@ function DmrSection() {
         ) : null}
         {canManageDocker && (
           <Button
+            size="sm"
             type="button"
             variant="outline"
             disabled={busy || !model.trim() || status?.state !== "ready"}
@@ -940,6 +954,7 @@ function DmrSection() {
         )}
         {canManageDocker && (
           <Button
+            size="sm"
             type="button"
             variant="ghost"
             disabled={busy || !model.trim()}
@@ -990,6 +1005,7 @@ function DmrSection() {
             />
           </div>
           <Button
+            size="sm"
             type="button"
             variant="outline"
             disabled={discovering || busy}
@@ -1415,19 +1431,12 @@ function HuggingFaceCatalogSection() {
   }
 
   return (
-    <div className="space-y-3 rounded-lg border p-4">
-      <div>
-        <h3 className="flex items-center gap-1.5 font-medium">
-          <ProviderIcon
-            provider="huggingface"
-            className="size-3.5 text-muted-foreground"
-          />
-          {m.provider_routing_hf_title()}
-        </h3>
-        <p className="text-xs text-muted-foreground">
-          {m.provider_routing_hf_subtitle()}
-        </p>
-      </div>
+    <div className={settingsSectionClass}>
+      <SettingsSectionHeader
+        icon={<ProviderIcon provider="huggingface" className="size-3.5" />}
+        title={m.provider_routing_hf_title()}
+        description={m.provider_routing_hf_subtitle()}
+      />
       <div className="flex flex-wrap gap-2">
         <Input
           aria-label={m.provider_routing_hf_query_placeholder()}
@@ -1450,7 +1459,12 @@ function HuggingFaceCatalogSection() {
           <option value="ollama">{m.provider_routing_ollama_title()}</option>
           <option value="dmr">{m.provider_routing_dmr_title()}</option>
         </select>
-        <Button type="button" onClick={() => void search()} disabled={loading}>
+        <Button
+          size="sm"
+          type="button"
+          onClick={() => void search()}
+          disabled={loading}
+        >
           <Search className="mr-2 size-4" /> {m.provider_routing_hf_search()}
         </Button>
       </div>
@@ -1644,6 +1658,7 @@ function HuggingFaceCatalogSection() {
           )}
           <div className="flex justify-end gap-2">
             <Button
+              size="sm"
               type="button"
               variant="ghost"
               disabled={installing}
@@ -1653,6 +1668,7 @@ function HuggingFaceCatalogSection() {
             </Button>
             {installing ? (
               <Button
+                size="sm"
                 type="button"
                 variant="outline"
                 onClick={() => {
@@ -1684,6 +1700,7 @@ function HuggingFaceCatalogSection() {
               </Button>
             ) : (
               <Button
+                size="sm"
                 type="button"
                 onClick={() => void installSelectedModel()}
                 disabled={
@@ -1860,15 +1877,12 @@ function RegisteredModelsList({
           className={`space-y-1.5 ${registered.length > 6 ? "max-h-[26rem] overflow-y-auto pr-1" : ""}`}
         >
           {registered.map((model) => (
-            <div
-              key={model.id}
-              className="flex items-center justify-between gap-3 rounded-lg border bg-card px-3 py-2"
-            >
+            <div key={model.id} className={settingsRowClass}>
               <span className="text-sm font-mono truncate">{model.tag}</span>
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive shrink-0"
+                className="px-2 text-muted-foreground hover:text-destructive shrink-0"
                 onClick={() => onRemove(model.id)}
                 disabled={removingId === model.id}
               >
@@ -2130,25 +2144,14 @@ function OllamaSection() {
   );
 
   return (
-    <div className="space-y-3 rounded-lg border p-4">
-      <div className="space-y-0.5">
-        <h3 className="text-sm font-medium flex items-center gap-1.5">
-          <ProviderIcon
-            provider="ollama"
-            className="w-3.5 h-3.5 text-muted-foreground"
-          />
-          {m.provider_routing_ollama_title()}
-        </h3>
-        <p className="text-xs text-muted-foreground max-w-[360px]">
-          {m.provider_routing_ollama_subtitle()}
-        </p>
-      </div>
+    <div className={settingsSectionClass}>
+      <SettingsSectionHeader
+        icon={<ProviderIcon provider="ollama" className="size-3.5" />}
+        title={m.provider_routing_ollama_title()}
+        description={m.provider_routing_ollama_subtitle()}
+      />
 
-      {error && (
-        <p className="text-xs text-destructive bg-destructive/10 px-3 py-2 rounded-md">
-          {error}
-        </p>
-      )}
+      {error && <SettingsMessage tone="danger">{error}</SettingsMessage>}
 
       <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/20 px-3 py-2 text-xs">
         <span>
@@ -2251,6 +2254,7 @@ function OllamaSection() {
           }
         />
         <Button
+          size="sm"
           type="button"
           disabled={savingConfig || testingConnection}
           onClick={() => void handleSaveConfig()}
@@ -2270,6 +2274,7 @@ function OllamaSection() {
           placeholder={m.provider_routing_ollama_endpoint_placeholder()}
         />
         <Button
+          size="sm"
           type="button"
           variant="outline"
           disabled={testingConnection || savingConfig}
@@ -2329,17 +2334,14 @@ function OllamaSection() {
             {filteredDiscovered.map((model) => {
               const already = registeredTags.has(model.name);
               return (
-                <div
-                  key={model.name}
-                  className="flex items-center justify-between gap-3 rounded-lg border bg-card px-3 py-2"
-                >
+                <div key={model.name} className={settingsRowClass}>
                   <span className="text-sm font-mono truncate">
                     {model.name}
                   </span>
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-7 px-2 text-xs shrink-0"
+                    className="px-2 shrink-0"
                     onClick={() => void handleRegister(model.name)}
                     disabled={already || registeringTag === model.name}
                   >
@@ -2503,35 +2505,24 @@ function OpenRouterSection() {
   const registeredTags = new Set(registered.map((model) => model.tag));
 
   return (
-    <div className="space-y-3 rounded-lg border p-4">
-      <div className="space-y-0.5">
-        <h3 className="text-sm font-medium flex items-center gap-1.5">
-          <ProviderIcon
-            provider="openrouter"
-            className="w-3.5 h-3.5 text-muted-foreground"
-          />
-          {m.provider_routing_openrouter_title()}
-        </h3>
-        <p className="text-xs text-muted-foreground max-w-[360px]">
-          {m.provider_routing_openrouter_subtitle()}
-        </p>
-      </div>
+    <div className={settingsSectionClass}>
+      <SettingsSectionHeader
+        icon={<ProviderIcon provider="openrouter" className="size-3.5" />}
+        title={m.provider_routing_openrouter_title()}
+        description={m.provider_routing_openrouter_subtitle()}
+      />
 
-      {error && (
-        <p className="text-xs text-destructive bg-destructive/10 px-3 py-2 rounded-md">
-          {error}
-        </p>
-      )}
+      {error && <SettingsMessage tone="danger">{error}</SettingsMessage>}
 
       {/* Key */}
       {loadingStatus ? (
         <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
       ) : status?.configured ? (
-        <div className="flex items-center justify-between gap-3 rounded-lg border bg-card px-3 py-2">
+        <div className={settingsRowClass}>
           <div className="flex items-center gap-1.5 text-xs">
-            <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
+            <SettingsStatus tone="success">
               {m.provider_routing_openrouter_key_configured()}
-            </span>
+            </SettingsStatus>
             <span className="font-mono text-muted-foreground">
               {status.masked}
             </span>
@@ -2539,7 +2530,7 @@ function OpenRouterSection() {
           <Button
             variant="ghost"
             size="sm"
-            className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive shrink-0"
+            className="px-2 text-muted-foreground hover:text-destructive shrink-0"
             onClick={() => void handleRemoveKey()}
             disabled={removingKey}
           >
@@ -2562,7 +2553,6 @@ function OpenRouterSection() {
           />
           <Button
             size="sm"
-            className="h-8"
             onClick={() => void handleSaveKey()}
             disabled={savingKey || !keyInput.trim()}
           >
@@ -2614,17 +2604,14 @@ function OpenRouterSection() {
               {catalog.map((model) => {
                 const already = registeredTags.has(model.id);
                 return (
-                  <div
-                    key={model.id}
-                    className="flex items-center justify-between gap-3 rounded-lg border bg-card px-3 py-2"
-                  >
+                  <div key={model.id} className={settingsRowClass}>
                     <span className="text-sm font-mono truncate">
                       {model.id}
                     </span>
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-7 px-2 text-xs shrink-0"
+                      className="px-2 shrink-0"
                       onClick={() => void handleRegister(model.id)}
                       disabled={already || registeringId === model.id}
                     >
@@ -2814,35 +2801,24 @@ function NineRouterSection() {
     ) ?? null;
 
   return (
-    <div className="space-y-3 rounded-lg border p-4">
-      <div className="space-y-0.5">
-        <h3 className="text-sm font-medium flex items-center gap-1.5">
-          <ProviderIcon
-            provider="nine_router"
-            className="w-3.5 h-3.5 text-muted-foreground"
-          />
-          {m.provider_routing_nine_router_title()}
-        </h3>
-        <p className="text-xs text-muted-foreground max-w-[360px]">
-          {m.provider_routing_nine_router_subtitle()}
-        </p>
-      </div>
+    <div className={settingsSectionClass}>
+      <SettingsSectionHeader
+        icon={<ProviderIcon provider="nine_router" className="size-3.5" />}
+        title={m.provider_routing_nine_router_title()}
+        description={m.provider_routing_nine_router_subtitle()}
+      />
 
-      {error && (
-        <p className="text-xs text-destructive bg-destructive/10 px-3 py-2 rounded-md">
-          {error}
-        </p>
-      )}
+      {error && <SettingsMessage tone="danger">{error}</SettingsMessage>}
 
       {/* Endpoint + key */}
       {loadingStatus ? (
         <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
       ) : status?.configured ? (
-        <div className="flex items-center justify-between gap-3 rounded-lg border bg-card px-3 py-2">
+        <div className={settingsRowClass}>
           <div className="flex items-center gap-1.5 text-xs min-w-0">
-            <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 shrink-0">
+            <SettingsStatus tone="success" className="shrink-0">
               {m.provider_routing_nine_router_configured()}
-            </span>
+            </SettingsStatus>
             <span className="font-mono text-muted-foreground truncate">
               {status.base_url} · {status.masked}
             </span>
@@ -2850,7 +2826,7 @@ function NineRouterSection() {
           <Button
             variant="ghost"
             size="sm"
-            className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive shrink-0"
+            className="px-2 text-muted-foreground hover:text-destructive shrink-0"
             onClick={() => void handleRemoveConfig()}
             disabled={removingConfig}
           >
@@ -2881,7 +2857,6 @@ function NineRouterSection() {
             />
             <Button
               size="sm"
-              className="h-8"
               onClick={() => void handleSaveConfig()}
               disabled={
                 savingConfig || !baseUrlInput.trim() || !keyInput.trim()
@@ -2943,17 +2918,14 @@ function NineRouterSection() {
                   {(filteredDiscovered ?? discovered).map((model) => {
                     const already = registeredTags.has(model.id);
                     return (
-                      <div
-                        key={model.id}
-                        className="flex items-center justify-between gap-3 rounded-lg border bg-card px-3 py-2"
-                      >
+                      <div key={model.id} className={settingsRowClass}>
                         <span className="text-sm font-mono truncate">
                           {model.id}
                         </span>
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-7 px-2 text-xs shrink-0"
+                          className="px-2 shrink-0"
                           onClick={() => void handleRegister(model.id)}
                           disabled={already || registeringId === model.id}
                         >
@@ -3336,19 +3308,12 @@ function LlamaCppSection() {
   );
 
   return (
-    <div className="space-y-3 rounded-lg border p-4">
-      <div>
-        <h3 className="flex items-center gap-1.5 font-medium">
-          <ProviderIcon
-            provider="llamacpp"
-            className="size-3.5 text-muted-foreground"
-          />
-          {m.provider_routing_llamacpp_title()}
-        </h3>
-        <p className="text-xs text-muted-foreground">
-          {m.provider_routing_llamacpp_subtitle()}
-        </p>
-      </div>
+    <div className={settingsSectionClass}>
+      <SettingsSectionHeader
+        icon={<ProviderIcon provider="llamacpp" className="size-3.5" />}
+        title={m.provider_routing_llamacpp_title()}
+        description={m.provider_routing_llamacpp_subtitle()}
+      />
       <div className="flex items-center justify-between gap-2">
         <span className="text-base text-muted-foreground">
           {m.provider_routing_llamacpp_status({
@@ -3362,6 +3327,7 @@ function LlamaCppSection() {
         <div className="flex gap-2">
           {!runtime?.installed && (
             <Button
+              size="sm"
               type="button"
               variant="outline"
               disabled={installingRuntime}
@@ -3377,6 +3343,7 @@ function LlamaCppSection() {
             !runtime.reachable &&
             runtime.external !== true && (
               <Button
+                size="sm"
                 type="button"
                 variant="outline"
                 disabled={runtimeBusy}
@@ -3387,6 +3354,7 @@ function LlamaCppSection() {
             )}
           {runtime?.installed && runtime.external !== true && (
             <Button
+              size="sm"
               type="button"
               variant="outline"
               disabled={runtimeBusy}
@@ -3397,6 +3365,7 @@ function LlamaCppSection() {
           )}
           {runtime?.reachable && runtime.external !== true && (
             <Button
+              size="sm"
               type="button"
               variant="outline"
               disabled={runtimeBusy}
@@ -3442,7 +3411,7 @@ function LlamaCppSection() {
           onChange={(event) => setApiKey(event.target.value)}
           placeholder={m.provider_routing_llamacpp_key_placeholder()}
         />
-        <Button type="button" onClick={() => void saveConfig()}>
+        <Button size="sm" type="button" onClick={() => void saveConfig()}>
           {m.provider_routing_dmr_save()}
         </Button>
       </div>
@@ -3454,6 +3423,7 @@ function LlamaCppSection() {
           placeholder={m.provider_routing_llamacpp_endpoint_placeholder()}
         />
         <Button
+          size="sm"
           type="button"
           variant="outline"
           disabled={loading}
@@ -3473,6 +3443,7 @@ function LlamaCppSection() {
           />
         </div>
         <Button
+          size="sm"
           type="button"
           variant="outline"
           disabled={loading}
@@ -3559,13 +3530,13 @@ function LlamaCppSection() {
 
 export function ProviderRoutingTab() {
   return (
-    <div className="space-y-6 [&_button]:!h-8 [&_button]:!px-3 [&_button]:!text-sm">
+    <SettingsStack>
       <LlamaCppSection />
       <OllamaSection />
       <DmrSection />
       <HuggingFaceCatalogSection />
       <OpenRouterSection />
       <NineRouterSection />
-    </div>
+    </SettingsStack>
   );
 }
