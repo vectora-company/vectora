@@ -56,6 +56,13 @@ async def get_policy(request: Request) -> dict:
         "disabled": tool_policy.get_disabled(uid),
         "available": _all_tool_names(),
         "schemas": schemas,
+        # Bloqueadas pelo admin (kill-switch ou role): o usuário vê, mas não
+        # consegue liberar de volta, só remover o que ainda tem.
+        "locked": sorted(
+            set(tool_policy.get_disabled(tool_policy.GLOBAL_SCOPE))
+            | tool_policy.role_denied(uid)
+        ),
+        "role": tool_policy.user_role(uid),
     }
 
 
