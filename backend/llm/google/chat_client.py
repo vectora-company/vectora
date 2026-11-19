@@ -305,15 +305,15 @@ class GoogleChatClient:
             # Cache vencido ou recusado: refaz a chamada sem ele.
             invalidate(original, self.model)
             response = await self.client.generate_content(self.model, original)
-        candidatos = response.get("candidates")
-        if not isinstance(candidatos, list) or not candidatos:
+        candidates = response.get("candidates")
+        if not isinstance(candidates, list) or not candidates:
             msg = (
                 "Google Gemini respondeu sem `candidates` — resposta bloqueada "
                 f"(safety filter?) ou inutilizável: {response.get('promptFeedback')!r}"
             )
             raise GoogleGenAIResponseError(msg)
 
-        candidato = candidatos[0]
+        candidato = candidates[0]
         parts = (candidato.get("content") or {}).get("parts") or []
         texto, chamadas = _parse_candidate_parts(parts)
 
@@ -327,7 +327,7 @@ class GoogleChatClient:
     async def _stream_events(self, original: dict) -> AsyncIterator[dict]:
         """Eventos do stream, usando o cache de contexto quando disponível.
 
-        Se a API recusar o cache antes de o primeiro event chegar, refaz a
+        Se a API recusar o cache antes de o primeiro evento chegar, refaz a
         chamada sem ele.
         """
         body, cached = await apply_cached_content(self.client, self.model, original)
@@ -363,15 +363,15 @@ class GoogleChatClient:
         ultimo_usage: dict | None = None
 
         async for event in self._stream_events(original):
-            candidatos = event.get("candidates")
-            if not isinstance(candidatos, list) or not candidatos:
+            candidates = event.get("candidates")
+            if not isinstance(candidates, list) or not candidates:
                 feedback = event.get("promptFeedback")
                 if feedback:
                     msg = f"Google Gemini bloqueou o stream: {feedback!r}"
                     raise GoogleGenAIResponseError(msg)
                 continue
 
-            candidato = candidatos[0]
+            candidato = candidates[0]
             parts = (candidato.get("content") or {}).get("parts") or []
             texto, chamadas = _parse_candidate_parts(parts)
 

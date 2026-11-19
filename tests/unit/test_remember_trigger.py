@@ -314,11 +314,11 @@ async def test_schedule_remember_does_not_block_caller(monkeypatch) -> None:
 async def test_distillation_uses_most_recent_part_of_thread(monkeypatch) -> None:
     from backend.services import learning
 
-    capturado: dict[str, str] = {}
+    captured: dict[str, str] = {}
 
     class _Llm:
         async def agenerate(self, messages):
-            capturado["user"] = messages[-1].text()
+            captured["user"] = messages[-1].text()
 
             class _R:
                 @staticmethod
@@ -332,8 +332,8 @@ async def test_distillation_uses_most_recent_part_of_thread(monkeypatch) -> None
 
     await learning.distill_transcript(transcript)
 
-    assert capturado["user"].endswith("FIM")
-    assert "INICIO" not in capturado["user"]
+    assert captured["user"].endswith("FIM")
+    assert "INICIO" not in captured["user"]
 
 
 @pytest.mark.asyncio

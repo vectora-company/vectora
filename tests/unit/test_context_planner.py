@@ -840,22 +840,22 @@ def test_memory_block_has_character_limit() -> None:
         persistent_memory_records=records,
     )
 
-    bloco = planned.messages[0].text()
-    assert len(bloco) <= 2210
-    assert bloco.endswith("…")
+    block = planned.messages[0].text()
+    assert len(block) <= 2210
+    assert block.endswith("…")
 
 
 def test_compaction_preserves_most_recent_tail_within_budget() -> None:
     from backend.services.context_planner import plan_context
     from backend.vtypes.message import MessageRole, text_message
 
-    mensagens = []
+    messages = []
     for i in range(40):
-        papel = MessageRole.USER if i % 2 == 0 else MessageRole.ASSISTANT
-        mensagens.append(text_message(papel, f"turno {i} " + "palavra " * 60))
+        role = MessageRole.USER if i % 2 == 0 else MessageRole.ASSISTANT
+        messages.append(text_message(role, f"turno {i} " + "palavra " * 60))
 
-    planejado = plan_context(mensagens, max_tokens=800)
-    texts = [m.text() for m in planejado.messages]
+    planned = plan_context(messages, max_tokens=800)
+    texts = [m.text() for m in planned.messages]
 
     assert any("turno 39" in t for t in texts)
     assert not any("turno 0 " in t for t in texts)

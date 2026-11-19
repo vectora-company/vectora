@@ -180,7 +180,7 @@ def _with_prompt_cache(body: dict[str, Any]) -> dict[str, Any]:
     """Marca o prefixo estável para o cache de prompt da Anthropic.
 
     Até 4 pontos: última tool, system e as duas últimas mensagens. O que está
-    antes de cada ponto é cache_read do cache nas chamadas seguintes do loop.
+    antes de cada ponto é lido do cache nas chamadas seguintes do loop.
     """
     from backend.settings import settings
 

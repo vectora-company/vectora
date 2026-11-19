@@ -392,16 +392,16 @@ class OpenRouterChatClient:
                 mark_cache_breakpoints(body["messages"])
 
     @staticmethod
-    def _primeira_escolha(corpo: dict) -> dict:
+    def _first_choice(body: dict) -> dict:
         """Executa a operação  primeira escolha."""
-        escolhas = corpo.get("choices")
-        if not isinstance(escolhas, list) or not escolhas:
+        choices = body.get("choices")
+        if not isinstance(choices, list) or not choices:
             msg = (
                 "OpenRouter respondeu sem `choices` — resposta inutilizável "
-                f"(id={corpo.get('id')!r})"
+                f"(id={body.get('id')!r})"
             )
             raise OpenRouterResponseError(msg)
-        return escolhas[0]
+        return choices[0]
 
     async def agenerate(
         self,
@@ -422,7 +422,7 @@ class OpenRouterChatClient:
         response = await self.client.post_json(
             "/chat/completions", body, headers=self._session_headers()
         )
-        escolha = self._primeira_escolha(response)
+        escolha = self._first_choice(response)
         mensagem = escolha.get("message") or {}
 
         chamadas = _parse_tool_calls(mensagem.get("tool_calls") or [])
@@ -461,17 +461,17 @@ class OpenRouterChatClient:
         async for event in self.client.stream_sse(
             "/chat/completions", body, headers=self._session_headers()
         ):
-            # O OpenRouter manda `usage` no último event SSE do stream —
+            # O OpenRouter manda `usage` no último evento SSE do stream —
             # às vezes junto de `choices` vazio, às vezes acompanhando o
             # chunk final com finish_reason. Captura nos dois casos.
             usage = event.get("usage")
             if usage:
                 yield VMessageChunk(usage=_usage_metadata(usage))
 
-            escolhas = event.get("choices") or []
-            if not escolhas:
+            choices = event.get("choices") or []
+            if not choices:
                 continue
-            delta = escolhas[0].get("delta") or {}
+            delta = choices[0].get("delta") or {}
 
             raciocinio = delta.get("reasoning")
             if raciocinio:

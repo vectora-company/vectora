@@ -146,14 +146,14 @@ describe("UsagePopover — consumo da conversa", () => {
       fireEvent.click(screen.getByRole("button"));
     });
 
-    const bloco = await screen.findByTestId("thread-usage");
-    expect(bloco.textContent).toContain("Consumo da conversa");
-    expect(bloco.textContent).toContain("1.5k");
-    expect(bloco.textContent).toContain("1.8k");
-    expect(bloco.textContent).toContain("Entrada em cache");
-    expect(bloco.textContent).toContain("1.2k");
-    expect(bloco.textContent).toContain("Gravado no cache");
-    expect(bloco.textContent).toContain("400");
+    const block = await screen.findByTestId("thread-usage");
+    expect(block.textContent).toContain("Consumo da conversa");
+    expect(block.textContent).toContain("1.5k");
+    expect(block.textContent).toContain("1.8k");
+    expect(block.textContent).toContain("Entrada em cache");
+    expect(block.textContent).toContain("1.2k");
+    expect(block.textContent).toContain("Gravado no cache");
+    expect(block.textContent).toContain("400");
   });
 
   it("não mostra o bloco sem execuções", async () => {

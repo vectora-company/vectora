@@ -54,7 +54,7 @@ function gen(events: StreamEvent[]): AsyncGenerator<StreamEvent> {
 
 const seq = (n: number) => ({ seq: n, event_id: `run-1:${n}` });
 
-async function* turnoComArquivosTardios() {
+async function* turnWithLateFiles() {
   yield { type: "thread", thread_id: "t1" };
   yield { type: "token", content: "Pronto" };
   yield { type: "done", thread_id: "t1", run_id: "run-1" };
@@ -116,7 +116,7 @@ describe("useStreamHandler.processStream", () => {
   });
 
   it("encerra o turno no done e anexa os arquivos editados que chegam depois", async () => {
-    streamChatMock.mockReturnValue(turnoComArquivosTardios());
+    streamChatMock.mockReturnValue(turnWithLateFiles());
 
     const { result } = run();
     const out = await result.current.processStream("oi", "a1");

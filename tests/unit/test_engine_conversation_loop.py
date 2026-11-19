@@ -163,7 +163,7 @@ def ctx() -> ToolContext:
     return ToolContext(user_id="alice", thread_id="thread-1")
 
 
-def _texto_chunk(text: str) -> VMessageChunk:
+def _text_chunk(text: str) -> VMessageChunk:
     """Executa a operação  texto chunk."""
     return VMessageChunk(delta_text=text)
 
@@ -440,7 +440,7 @@ async def test_disabled_decision_surface_reaches_executor_without_model_call(
                             args='{"value":"expected","server_name":"fixture-server"}',
                         )
                     ],
-                    [_texto_chunk("done")],
+                    [_text_chunk("done")],
                 ]
             ),
             tool_registry=registry,
@@ -815,16 +815,16 @@ class TestParadaNormal:
             "backend.services.verification.run_verification", fake_verification
         )
 
-        resultado = await run_conversation(
+        result = await run_conversation(
             session_store=session_store,
-            chat_client=_ScriptedChatClient([[_texto_chunk("ok")]]),
+            chat_client=_ScriptedChatClient([[_text_chunk("ok")]]),
             tool_registry=ToolRegistry(),
             ctx=ctx,
             thread_id="thread-1",
             config=LoopConfig(run_id="run-gate-order"),
         )
 
-        assert resultado.stopped_reason == "stop"
+        assert result.stopped_reason == "stop"
         assert statuses_seen == ["verifying"]
         stored = await session_store.get_agent_run("run-gate-order")
         assert stored is not None
@@ -850,16 +850,16 @@ class TestParadaNormal:
             AgentRun(run_id="run-no-gates", thread_id="thread-1", status="running")
         )
 
-        resultado = await run_conversation(
+        result = await run_conversation(
             session_store=session_store,
-            chat_client=_ScriptedChatClient([[_texto_chunk("ok")]]),
+            chat_client=_ScriptedChatClient([[_text_chunk("ok")]]),
             tool_registry=ToolRegistry(),
             ctx=ctx,
             thread_id="thread-1",
             config=LoopConfig(run_id="run-no-gates"),
         )
 
-        assert resultado.stopped_reason == "stop"
+        assert result.stopped_reason == "stop"
         stored = await session_store.get_agent_run("run-no-gates")
         assert stored is not None
         assert stored.status == "degraded"
@@ -889,9 +889,9 @@ class TestParadaNormal:
                 },
             },
         )
-        client = _ScriptedChatClient([[_texto_chunk("não deveria chamar")]])
+        client = _ScriptedChatClient([[_text_chunk("não deveria chamar")]])
 
-        resultado = await run_conversation(
+        result = await run_conversation(
             session_store=session_store,
             chat_client=client,
             tool_registry=ToolRegistry(),
@@ -900,7 +900,7 @@ class TestParadaNormal:
             config=LoopConfig(run_id="run-recovery"),
         )
 
-        assert resultado.stopped_reason == "recovery_required"
+        assert result.stopped_reason == "recovery_required"
         assert client.chamadas == 0
         stored = await session_store.get_agent_run("run-recovery")
         assert stored is not None
@@ -909,8 +909,8 @@ class TestParadaNormal:
 
     async def test_sem_tool_calls_para_no_primeiro_turno(self, session_store, ctx):
         """Verifica o comportamento de sem tool calls para no primeiro turno."""
-        client = _ScriptedChatClient([[_texto_chunk("olá!")]])
-        resultado = await run_conversation(
+        client = _ScriptedChatClient([[_text_chunk("olá!")]])
+        result = await run_conversation(
             session_store=session_store,
             chat_client=client,
             tool_registry=ToolRegistry(),
@@ -919,9 +919,9 @@ class TestParadaNormal:
             config=LoopConfig(),
         )
 
-        assert resultado.stopped_reason == "stop"
-        assert resultado.final_message is not None
-        assert resultado.final_message.text() == "olá!"
+        assert result.stopped_reason == "stop"
+        assert result.final_message is not None
+        assert result.final_message.text() == "olá!"
         assert client.chamadas == 1
 
         historico = await session_store.get_history("thread-1")
@@ -935,14 +935,14 @@ class TestParadaNormal:
     ) -> None:
         """Verifica o comportamento de resposta vazia emite erro diagnosticavel."""
         client = _ScriptedChatClient([[]])
-        eventos: list[EngineEvent] = []
+        events: list[EngineEvent] = []
 
         async def on_event(event: EngineEvent) -> None:
             """Executa a operação on event."""
-            eventos.append(event)
+            events.append(event)
 
         with caplog.at_level("INFO", logger="backend.engine.conversation_loop"):
-            resultado = await run_conversation(
+            result = await run_conversation(
                 session_store=session_store,
                 chat_client=client,
                 tool_registry=ToolRegistry(),
@@ -952,9 +952,9 @@ class TestParadaNormal:
                 on_event=on_event,
             )
 
-        assert resultado.stopped_reason == "stop"
-        assert resultado.final_message is None
-        sinais = [event for event in eventos if isinstance(event, ErrorSignal)]
+        assert result.stopped_reason == "stop"
+        assert result.final_message is None
+        sinais = [event for event in events if isinstance(event, ErrorSignal)]
         assert [(event.code, event.message) for event in sinais] == [
             (
                 "EMPTY_MODEL_RESPONSE",
@@ -984,7 +984,7 @@ class TestParadaNormal:
         turn = [_tool_call_chunk(index=0, id="", name="lembrar", args="{}")]
 
         for _ in range(2):
-            client = _ScriptedChatClient([turn, [_texto_chunk("fim")]])
+            client = _ScriptedChatClient([turn, [_text_chunk("fim")]])
             result = await run_conversation(
                 session_store=session_store,
                 chat_client=client,
@@ -1021,13 +1021,13 @@ class TestMaxIterations:
 
         turno = [_tool_call_chunk(index=0, id="call_1", name="loop_tool", args="{}")]
         client = _ScriptedChatClient([turno, turno, turno])
-        eventos: list[EngineEvent] = []
+        events: list[EngineEvent] = []
 
         async def on_event(event: EngineEvent) -> None:
             """Executa a operação on event."""
-            eventos.append(event)
+            events.append(event)
 
-        resultado = await run_conversation(
+        result = await run_conversation(
             session_store=session_store,
             chat_client=client,
             tool_registry=registry,
@@ -1037,9 +1037,9 @@ class TestMaxIterations:
             on_event=on_event,
         )
 
-        assert resultado.stopped_reason == "max_iterations"
+        assert result.stopped_reason == "max_iterations"
         assert client.chamadas == 3
-        sinais = [e for e in eventos if isinstance(e, ErrorSignal)]
+        sinais = [e for e in events if isinstance(e, ErrorSignal)]
         assert any(e.code == "RECURSION_LIMIT" for e in sinais)
 
 
@@ -1061,17 +1061,17 @@ class TestGuardrailDeRepeticao:
         _register(registry, "buscar")
 
         # Caminho feliz: 3 chamadas seguidas com args idênticos disparam o aviso.
-        turno_repetido = [
+        repeated_turn = [
             _tool_call_chunk(index=0, id="call_1", name="buscar", args='{"query":"x"}')
         ]
         client = _ScriptedChatClient(
-            [turno_repetido, turno_repetido, turno_repetido, [_texto_chunk("fim")]]
+            [repeated_turn, repeated_turn, repeated_turn, [_text_chunk("fim")]]
         )
-        eventos: list[EngineEvent] = []
+        events: list[EngineEvent] = []
 
         async def on_event(event: EngineEvent) -> None:
             """Executa a operação on event."""
-            eventos.append(event)
+            events.append(event)
 
         await run_conversation(
             session_store=session_store,
@@ -1082,7 +1082,7 @@ class TestGuardrailDeRepeticao:
             config=LoopConfig(),
             on_event=on_event,
         )
-        sinais = [e for e in eventos if isinstance(e, ErrorSignal)]
+        sinais = [e for e in events if isinstance(e, ErrorSignal)]
         assert any(e.code == "TOOL_CALL_REPEATED" for e in sinais)
         # O primeiro limiar é um aviso: o turno segue até a resposta final.
         assert [e.severity for e in sinais if e.code == "TOOL_CALL_REPEATED"] == [
@@ -1108,7 +1108,7 @@ class TestGuardrailDeRepeticao:
                         index=0, id="c3", name="buscar", args='{"query":"c"}'
                     )
                 ],
-                [_texto_chunk("fim")],
+                [_text_chunk("fim")],
             ]
         )
         eventos2: list[EngineEvent] = []
@@ -1153,7 +1153,7 @@ class TestGuardrailDeRepeticao:
             for i in range(6)
         ]
         client = _ScriptedChatClient(chamadas)
-        eventos: list[EngineEvent] = []
+        events: list[EngineEvent] = []
 
         await session_store.create_session(
             "thread-repeated-hard-limit", user_id=ctx.user_id
@@ -1161,9 +1161,9 @@ class TestGuardrailDeRepeticao:
 
         async def on_event(event: EngineEvent) -> None:
             """Executa a operação on event."""
-            eventos.append(event)
+            events.append(event)
 
-        resultado = await run_conversation(
+        result = await run_conversation(
             session_store=session_store,
             chat_client=client,
             tool_registry=registry,
@@ -1173,10 +1173,10 @@ class TestGuardrailDeRepeticao:
             on_event=on_event,
         )
 
-        assert resultado.stopped_reason == "loop_cap_exceeded"
+        assert result.stopped_reason == "loop_cap_exceeded"
         repetidos = [
             event
-            for event in eventos
+            for event in events
             if isinstance(event, ErrorSignal) and event.code == "TOOL_CALL_REPEATED"
         ]
         assert repetidos
@@ -1213,11 +1213,11 @@ class TestToolCallsSequenciais:
                         index=0, id="call_1", name="somar", args='{"a":1,"b":2}'
                     )
                 ],
-                [_texto_chunk("a soma é 3")],
+                [_text_chunk("a soma é 3")],
             ]
         )
 
-        resultado = await run_conversation(
+        result = await run_conversation(
             session_store=session_store,
             chat_client=client,
             tool_registry=registry,
@@ -1226,9 +1226,9 @@ class TestToolCallsSequenciais:
             config=LoopConfig(),
         )
 
-        assert resultado.stopped_reason == "stop"
-        assert resultado.final_message is not None
-        assert resultado.final_message.text() == "a soma é 3"
+        assert result.stopped_reason == "stop"
+        assert result.final_message is not None
+        assert result.final_message.text() == "a soma é 3"
         assert client.chamadas == 2
 
         historico = await session_store.get_history("thread-1")
@@ -1264,11 +1264,11 @@ class TestToolCallsParalelos:
                     _tool_call_chunk(index=0, id="call_1", name="ler_a", args="{}"),
                     _tool_call_chunk(index=1, id="call_2", name="ler_b", args="{}"),
                 ],
-                [_texto_chunk("terminei")],
+                [_text_chunk("terminei")],
             ]
         )
 
-        resultado = await run_conversation(
+        result = await run_conversation(
             session_store=session_store,
             chat_client=client,
             tool_registry=registry,
@@ -1277,7 +1277,7 @@ class TestToolCallsParalelos:
             config=LoopConfig(),
         )
 
-        assert resultado.stopped_reason == "stop"
+        assert result.stopped_reason == "stop"
         historico = await session_store.get_history("thread-1")
         resultados_tool = [m.text() for m in historico if m.role.value == "tool"]
         assert set(resultados_tool) == {"conteudo-a", "conteudo-b"}
@@ -1320,7 +1320,7 @@ class TestHitl:
             """Executa a operação should require approval."""
             return nome == "escrever_arquivo"
 
-        resultado = await run_conversation(
+        result = await run_conversation(
             session_store=session_store,
             chat_client=client,
             tool_registry=registry,
@@ -1330,7 +1330,7 @@ class TestHitl:
             should_require_approval=should_require_approval,
         )
 
-        assert resultado.stopped_reason == "interrupted"
+        assert result.stopped_reason == "interrupted"
         # Nenhuma tool do lote foi executada — só a mensagem do assistente
         # (com as tool_calls propostas) está no histórico.
         historico = await session_store.get_history("thread-1")
@@ -1351,11 +1351,11 @@ class TestHitl:
         client = _ScriptedChatClient(
             [
                 [_tool_call_chunk(index=0, id="call_1", name="deletar", args="{}")],
-                [_texto_chunk("feito")],
+                [_text_chunk("feito")],
             ]
         )
 
-        resultado = await run_conversation(
+        result = await run_conversation(
             session_store=session_store,
             chat_client=client,
             tool_registry=registry,
@@ -1364,19 +1364,19 @@ class TestHitl:
             config=LoopConfig(),
         )
 
-        assert resultado.stopped_reason == "stop"
+        assert result.stopped_reason == "stop"
         assert client.chamadas == 2
 
 
 class TestEmissaoDeEventos:
     async def test_token_e_message_break_emitidos_na_ordem(self, session_store, ctx):
         """Verifica o comportamento de token e message break emitidos na ordem."""
-        client = _ScriptedChatClient([[_texto_chunk("oi"), _texto_chunk(" tudo bem")]])
-        eventos: list[EngineEvent] = []
+        client = _ScriptedChatClient([[_text_chunk("oi"), _text_chunk(" tudo bem")]])
+        events: list[EngineEvent] = []
 
         async def on_event(event: EngineEvent) -> None:
             """Executa a operação on event."""
-            eventos.append(event)
+            events.append(event)
 
         await run_conversation(
             session_store=session_store,
@@ -1388,7 +1388,7 @@ class TestEmissaoDeEventos:
             on_event=on_event,
         )
 
-        assert eventos == [
+        assert events == [
             MessageChunk(content="oi"),
             MessageChunk(content=" tudo bem"),
             MessageBreak(),
@@ -1416,14 +1416,14 @@ class TestEmissaoDeEventos:
                         index=0, id="call_1", name="adicionar", args='{"a":1,"b":2}'
                     )
                 ],
-                [_texto_chunk("pronto")],
+                [_text_chunk("pronto")],
             ]
         )
-        eventos: list[EngineEvent] = []
+        events: list[EngineEvent] = []
 
         async def on_event(event: EngineEvent) -> None:
             """Executa a operação on event."""
-            eventos.append(event)
+            events.append(event)
 
         await run_conversation(
             session_store=session_store,
@@ -1435,7 +1435,7 @@ class TestEmissaoDeEventos:
             on_event=on_event,
         )
 
-        resultados_tool = [e for e in eventos if isinstance(e, ToolResult)]
+        resultados_tool = [e for e in events if isinstance(e, ToolResult)]
         assert resultados_tool == [
             ToolResult(tool_call_id="call_1", content_json="3", is_error=False)
         ]
@@ -1456,11 +1456,11 @@ class TestEmissaoDeEventos:
         client = _ScriptedChatClient(
             [[_tool_call_chunk(index=0, id="call_1", name="escrever", args="{}")]]
         )
-        eventos: list[EngineEvent] = []
+        events: list[EngineEvent] = []
 
         async def on_event(event: EngineEvent) -> None:
             """Executa a operação on event."""
-            eventos.append(event)
+            events.append(event)
 
         await run_conversation(
             session_store=session_store,
@@ -1475,7 +1475,7 @@ class TestEmissaoDeEventos:
             ),
         )
 
-        hitl_eventos = [e for e in eventos if isinstance(e, HitlRequested)]
+        hitl_eventos = [e for e in events if isinstance(e, HitlRequested)]
         assert len(hitl_eventos) == 1
         assert hitl_eventos[0].tool_name == "escrever"
         assert hitl_eventos[0].args_json == "{}"
@@ -1590,14 +1590,14 @@ class TestEmissaoDeEventos:
                         index=0, id="call_1", name="somar3", args='{"a":1,"b":2}'
                     )
                 ],
-                [_texto_chunk("pronto")],
+                [_text_chunk("pronto")],
             ]
         )
-        eventos: list[EngineEvent] = []
+        events: list[EngineEvent] = []
 
         async def on_event(event: EngineEvent) -> None:
             """Executa a operação on event."""
-            eventos.append(event)
+            events.append(event)
 
         await run_conversation(
             session_store=session_store,
@@ -1609,7 +1609,7 @@ class TestEmissaoDeEventos:
             on_event=on_event,
         )
 
-        started = [e for e in eventos if isinstance(e, ToolCallStarted)]
+        started = [e for e in events if isinstance(e, ToolCallStarted)]
         assert started == [
             ToolCallStarted(
                 tool_name="somar3",
@@ -1621,14 +1621,14 @@ class TestEmissaoDeEventos:
                 icon="wrench",
             )
         ]
-        activities = [e for e in eventos if isinstance(e, ToolActivity)]
+        activities = [e for e in events if isinstance(e, ToolActivity)]
         # Um ToolActivity de início (sem elapsed_ms) e um de fim (com elapsed_ms).
         assert len(activities) == 2
         assert activities[0].elapsed_ms is None
         assert activities[1].elapsed_ms is not None
 
         # A tool não declara `invalidates` — nenhum WorkbenchInvalidate emitido.
-        assert not [e for e in eventos if isinstance(e, WorkbenchInvalidate)]
+        assert not [e for e in events if isinstance(e, WorkbenchInvalidate)]
 
     async def test_tool_com_invalidates_emite_workbench_invalidate(
         self, session_store, ctx
@@ -1646,14 +1646,14 @@ class TestEmissaoDeEventos:
         client = _ScriptedChatClient(
             [
                 [_tool_call_chunk(index=0, id="call_1", name="escrever2", args="{}")],
-                [_texto_chunk("pronto")],
+                [_text_chunk("pronto")],
             ]
         )
-        eventos: list[EngineEvent] = []
+        events: list[EngineEvent] = []
 
         async def on_event(event: EngineEvent) -> None:
             """Executa a operação on event."""
-            eventos.append(event)
+            events.append(event)
 
         await run_conversation(
             session_store=session_store,
@@ -1665,7 +1665,7 @@ class TestEmissaoDeEventos:
             on_event=on_event,
         )
 
-        invalidates = [e for e in eventos if isinstance(e, WorkbenchInvalidate)]
+        invalidates = [e for e in events if isinstance(e, WorkbenchInvalidate)]
         assert invalidates == [
             WorkbenchInvalidate(tabs=["files", "git"], tool_name="escrever2")
         ]
@@ -1698,14 +1698,14 @@ class TestArgsPreview:
                         args='{"path":"backend/auth.py"}',
                     )
                 ],
-                [_texto_chunk("pronto")],
+                [_text_chunk("pronto")],
             ]
         )
-        eventos: list[EngineEvent] = []
+        events: list[EngineEvent] = []
 
         async def on_event(event: EngineEvent) -> None:
             """Executa a operação on event."""
-            eventos.append(event)
+            events.append(event)
 
         await run_conversation(
             session_store=session_store,
@@ -1717,7 +1717,7 @@ class TestArgsPreview:
             on_event=on_event,
         )
 
-        activities = [e for e in eventos if isinstance(e, ToolActivity)]
+        activities = [e for e in events if isinstance(e, ToolActivity)]
         assert len(activities) == 2
         assert activities[0].args_preview == "backend/auth.py"
         assert activities[1].args_preview == "backend/auth.py"
@@ -1747,14 +1747,14 @@ class TestArgsPreview:
                         args=json.dumps({"query": termo_longo}),
                     )
                 ],
-                [_texto_chunk("pronto")],
+                [_text_chunk("pronto")],
             ]
         )
-        eventos: list[EngineEvent] = []
+        events: list[EngineEvent] = []
 
         async def on_event(event: EngineEvent) -> None:
             """Executa a operação on event."""
-            eventos.append(event)
+            events.append(event)
 
         await run_conversation(
             session_store=session_store,
@@ -1766,7 +1766,7 @@ class TestArgsPreview:
             on_event=on_event,
         )
 
-        activities = [e for e in eventos if isinstance(e, ToolActivity)]
+        activities = [e for e in events if isinstance(e, ToolActivity)]
         assert all(len(a.args_preview) == 80 for a in activities)
         assert activities[0].args_preview == "x" * 80
 
@@ -1792,14 +1792,14 @@ class TestArgsPreview:
                         index=0, id="call_1", name="somar4", args='{"a":1,"b":2}'
                     )
                 ],
-                [_texto_chunk("pronto")],
+                [_text_chunk("pronto")],
             ]
         )
-        eventos: list[EngineEvent] = []
+        events: list[EngineEvent] = []
 
         async def on_event(event: EngineEvent) -> None:
             """Executa a operação on event."""
-            eventos.append(event)
+            events.append(event)
 
         await run_conversation(
             session_store=session_store,
@@ -1811,7 +1811,7 @@ class TestArgsPreview:
             on_event=on_event,
         )
 
-        activities = [e for e in eventos if isinstance(e, ToolActivity)]
+        activities = [e for e in events if isinstance(e, ToolActivity)]
         assert activities[0].args_preview == "a=1, b=2"
 
 
@@ -1853,7 +1853,7 @@ class TestTodosUpdated:
                         ),
                     )
                 ],
-                [_texto_chunk("plano pronto")],
+                [_text_chunk("plano pronto")],
             ]
         )
 
@@ -1903,14 +1903,14 @@ class TestTodosUpdated:
                         ),
                     )
                 ],
-                [_texto_chunk("pronto")],
+                [_text_chunk("pronto")],
             ]
         )
-        eventos: list[EngineEvent] = []
+        events: list[EngineEvent] = []
 
         async def on_event(event: EngineEvent) -> None:
             """Executa a operação on event."""
-            eventos.append(event)
+            events.append(event)
 
         await run_conversation(
             session_store=session_store,
@@ -1922,7 +1922,7 @@ class TestTodosUpdated:
             on_event=on_event,
         )
 
-        todos_eventos = [e for e in eventos if isinstance(e, TodosUpdated)]
+        todos_eventos = [e for e in events if isinstance(e, TodosUpdated)]
         assert len(todos_eventos) == 1
         assert [(t.content, t.status) for t in todos_eventos[0].todos] == [
             ("passo 1", "completed"),
@@ -1945,14 +1945,14 @@ class TestTodosUpdated:
         client = _ScriptedChatClient(
             [
                 [_tool_call_chunk(index=0, id="call_1", name="outra_tool", args="{}")],
-                [_texto_chunk("pronto")],
+                [_text_chunk("pronto")],
             ]
         )
-        eventos: list[EngineEvent] = []
+        events: list[EngineEvent] = []
 
         async def on_event(event: EngineEvent) -> None:
             """Executa a operação on event."""
-            eventos.append(event)
+            events.append(event)
 
         await run_conversation(
             session_store=session_store,
@@ -1964,7 +1964,7 @@ class TestTodosUpdated:
             on_event=on_event,
         )
 
-        assert not [e for e in eventos if isinstance(e, TodosUpdated)]
+        assert not [e for e in events if isinstance(e, TodosUpdated)]
 
     async def test_write_todos_com_args_invalidos_nao_emite_todos_updated(
         self, session_store, ctx
@@ -1987,14 +1987,14 @@ class TestTodosUpdated:
                         ),
                     )
                 ],
-                [_texto_chunk("pronto")],
+                [_text_chunk("pronto")],
             ]
         )
-        eventos: list[EngineEvent] = []
+        events: list[EngineEvent] = []
 
         async def on_event(event: EngineEvent) -> None:
             """Executa a operação on event."""
-            eventos.append(event)
+            events.append(event)
 
         await run_conversation(
             session_store=session_store,
@@ -2006,9 +2006,9 @@ class TestTodosUpdated:
             on_event=on_event,
         )
 
-        resultados_tool = [e for e in eventos if isinstance(e, ToolResult)]
+        resultados_tool = [e for e in events if isinstance(e, ToolResult)]
         assert resultados_tool[0].is_error
-        assert not [e for e in eventos if isinstance(e, TodosUpdated)]
+        assert not [e for e in events if isinstance(e, TodosUpdated)]
 
 
 class TestLoopCapGuardrail:
@@ -2036,13 +2036,13 @@ class TestLoopCapGuardrail:
             for i in range(5)
         ]
         client = _ScriptedChatClient(turnos)
-        eventos: list[EngineEvent] = []
+        events: list[EngineEvent] = []
 
         async def on_event(event: EngineEvent) -> None:
             """Executa a operação on event."""
-            eventos.append(event)
+            events.append(event)
 
-        resultado = await run_conversation(
+        result = await run_conversation(
             session_store=session_store,
             chat_client=client,
             tool_registry=registry,
@@ -2055,10 +2055,10 @@ class TestLoopCapGuardrail:
             on_event=on_event,
         )
 
-        assert resultado.stopped_reason == "loop_cap_exceeded"
+        assert result.stopped_reason == "loop_cap_exceeded"
         # Encerrou muito antes de esgotar as 50 iterações permitidas.
         assert client.chamadas < 5
-        sinais = [e for e in eventos if isinstance(e, ErrorSignal)]
+        sinais = [e for e in events if isinstance(e, ErrorSignal)]
         assert any(e.code == "LOOP_CAP_EXCEEDED" for e in sinais)
 
     async def test_dentro_do_teto_nunca_dispara_o_guardrail(self, session_store, ctx):
@@ -2078,15 +2078,15 @@ class TestLoopCapGuardrail:
         turnos = [
             [_tool_call_chunk(index=0, id=f"c{i}", name="contar2", args=f'{{"n":{i}}}')]
             for i in range(2)
-        ] + [[_texto_chunk("fim")]]
+        ] + [[_text_chunk("fim")]]
         client = _ScriptedChatClient(turnos)
-        eventos: list[EngineEvent] = []
+        events: list[EngineEvent] = []
 
         async def on_event(event: EngineEvent) -> None:
             """Executa a operação on event."""
-            eventos.append(event)
+            events.append(event)
 
-        resultado = await run_conversation(
+        result = await run_conversation(
             session_store=session_store,
             chat_client=client,
             tool_registry=registry,
@@ -2096,8 +2096,8 @@ class TestLoopCapGuardrail:
             on_event=on_event,
         )
 
-        assert resultado.stopped_reason == "stop"
-        sinais = [e for e in eventos if isinstance(e, ErrorSignal)]
+        assert result.stopped_reason == "stop"
+        sinais = [e for e in events if isinstance(e, ErrorSignal)]
         assert not any(e.code == "LOOP_CAP_EXCEEDED" for e in sinais)
 
 
@@ -2193,7 +2193,7 @@ class TestResumeConversation:
             ]
         )
         gate = ApprovalGate(session_store)
-        resultado = await run_conversation(
+        result = await run_conversation(
             session_store=session_store,
             chat_client=client,
             tool_registry=registry,
@@ -2203,7 +2203,7 @@ class TestResumeConversation:
             should_require_approval=lambda *_a: True,
             approval_gate=gate,
         )
-        assert resultado.stopped_reason == "interrupted"
+        assert result.stopped_reason == "interrupted"
         assert await session_store.get_pending_approval("thread-1") is not None
 
         from backend.engine.hitl import _risk_assessment_key
@@ -2213,11 +2213,11 @@ class TestResumeConversation:
             risk_key: {"decision": "requires_human", "reason": "risk_threshold"}
         }
 
-        eventos: list[EngineEvent] = []
+        events: list[EngineEvent] = []
 
         async def on_event(event: EngineEvent) -> None:
             """Executa a operação on event."""
-            eventos.append(event)
+            events.append(event)
 
         resumiu = await resume_conversation(
             session_store=session_store,
@@ -2238,7 +2238,7 @@ class TestResumeConversation:
         assert (
             ctx._extra["systemone_decisions"][risk_key]["decision"] == "requires_human"
         )
-        resultados = [e for e in eventos if isinstance(e, ToolResult)]
+        resultados = [e for e in events if isinstance(e, ToolResult)]
         assert resultados == [
             ToolResult(tool_call_id="call_1", content_json="escrito!", is_error=False)
         ]
@@ -2285,11 +2285,11 @@ class TestResumeConversation:
             approval_gate=gate,
         )
 
-        eventos: list[EngineEvent] = []
+        events: list[EngineEvent] = []
 
         async def on_event(event: EngineEvent) -> None:
             """Executa a operação on event."""
-            eventos.append(event)
+            events.append(event)
 
         assert await resume_conversation(
             session_store=session_store,
@@ -2301,8 +2301,8 @@ class TestResumeConversation:
             on_event=on_event,
         )
 
-        resultado = next(event for event in eventos if isinstance(event, ToolResult))
-        assert resultado.is_error is True
+        result = next(event for event in events if isinstance(event, ToolResult))
+        assert result.is_error is True
         assert chamadas == [(ctx.user_id, "falhar_mcp", "error")]
 
     async def test_rejeitar_nao_executa_a_tool_e_persiste_mensagem_de_erro(
@@ -2414,7 +2414,7 @@ class TestResumeConversation:
         )
         gate = ApprovalGate(session_store)
 
-        resultado = await run_conversation(
+        result = await run_conversation(
             session_store=session_store,
             chat_client=client,
             tool_registry=registry,
@@ -2425,7 +2425,7 @@ class TestResumeConversation:
             approval_gate=gate,
         )
 
-        assert resultado.stopped_reason == "interrupted"
+        assert result.stopped_reason == "interrupted"
         historico = await session_store.get_history("thread-1")
         persisted_calls = [
             call.args for message in historico for call in message.tool_calls
@@ -2563,12 +2563,12 @@ class TestResumeConversation:
             )
         )
 
-        client = _ScriptedChatClient([[_texto_chunk("olá")]])
+        client = _ScriptedChatClient([[_text_chunk("olá")]])
         registry = ToolRegistry()
 
         assert "untrusted_content" not in ctx._extra
 
-        resultado = await run_conversation(
+        result = await run_conversation(
             session_store=session_store,
             chat_client=client,
             tool_registry=registry,
@@ -2577,7 +2577,7 @@ class TestResumeConversation:
             config=LoopConfig(),
         )
 
-        assert resultado.stopped_reason == "stop"
+        assert result.stopped_reason == "stop"
         assert ctx._extra.get("untrusted_content") is True
 
 
@@ -2747,7 +2747,7 @@ async def test_plan_sandbox_write_does_not_authorize_push_and_human_approval_sur
         chat_client=_ScriptedChatClient(
             [
                 [_tool_call_chunk(index=0, id="push-next", name="git_push", args="{}")],
-                [_texto_chunk("done")],
+                [_text_chunk("done")],
             ]
         ),
         tool_registry=registry,
@@ -2882,7 +2882,7 @@ async def test_plan_proposal_approval_and_stages_complete_through_harness(
                     ),
                 )
             ],
-            [_texto_chunk("proposta concluída")],
+            [_text_chunk("proposta concluída")],
         ]
     )
     await run_conversation(
@@ -2959,25 +2959,25 @@ def test_drop_terminal_notices_removes_synthetic_notices() -> None:
     from backend.engine.conversation_loop import _drop_terminal_notices
     from backend.vtypes.message import MessageRole, VMessage, text_message
 
-    pergunta = text_message(MessageRole.USER, "qual o meu github?")
-    cancelado = VMessage(
+    question = text_message(MessageRole.USER, "qual o meu github?")
+    cancelled = VMessage(
         role=MessageRole.ASSISTANT,
         content=text_message(
             MessageRole.ASSISTANT, "[cancelado] A execução foi cancelada."
         ).content,
         is_error=True,
     )
-    falha = VMessage(
+    failure = VMessage(
         role=MessageRole.ASSISTANT,
         content=text_message(MessageRole.ASSISTANT, "[falha] erro").content,
         is_error=True,
     )
-    resposta = text_message(MessageRole.ASSISTANT, "[cancelado] é só texto do modelo")
+    response = text_message(MessageRole.ASSISTANT, "[cancelado] é só texto do modelo")
 
-    resultado = _drop_terminal_notices([pergunta, cancelado, pergunta, falha, resposta])
+    result = _drop_terminal_notices([question, cancelled, question, failure, response])
 
-    assert [m.role for m in resultado] == [MessageRole.USER, MessageRole.ASSISTANT]
-    assert resultado[1] == resposta
+    assert [m.role for m in result] == [MessageRole.USER, MessageRole.ASSISTANT]
+    assert result[1] == response
 
 
 def test_drop_terminal_notices_merges_consecutive_users() -> None:
@@ -2986,17 +2986,17 @@ def test_drop_terminal_notices_merges_consecutive_users() -> None:
 
     a = text_message(MessageRole.USER, "primeira")
     b = text_message(MessageRole.USER, "segunda")
-    cancelado = VMessage(
+    cancelled = VMessage(
         role=MessageRole.ASSISTANT,
         content=text_message(MessageRole.ASSISTANT, "[cancelado] x").content,
         is_error=True,
     )
 
-    resultado = _drop_terminal_notices([a, cancelado, b])
+    result = _drop_terminal_notices([a, cancelled, b])
 
-    assert len(resultado) == 1
-    assert "primeira" in resultado[0].text()
-    assert "segunda" in resultado[0].text()
+    assert len(result) == 1
+    assert "primeira" in result[0].text()
+    assert "segunda" in result[0].text()
 
 
 @pytest.mark.asyncio
@@ -3005,10 +3005,10 @@ async def test_memories_stay_frozen_per_thread(monkeypatch) -> None:
     from backend.tools.context import ToolContext
 
     cl._frozen_memories.clear()
-    leituras = iter([["primeira"], ["segunda"]])
+    reads = iter([["primeira"], ["segunda"]])
 
     async def _ler(ctx):
-        return next(leituras)
+        return next(reads)
 
     monkeypatch.setattr(cl, "_read_persistent_context_memories", _ler)
     ctx = ToolContext(thread_id="t-congelada")
