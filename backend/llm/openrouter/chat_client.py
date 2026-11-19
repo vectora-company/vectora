@@ -362,10 +362,14 @@ class OpenRouterChatClient:
             cache_key = prompt_cache_key.get()
             if cache_key:
                 corpo["prompt_cache_key"] = cache_key
-        elif origin == "openrouter" and self.model.startswith(
-            ("anthropic/", "google/gemini")
-        ):
-            mark_cache_breakpoints(corpo["messages"])
+        elif origin == "openrouter":
+            # `session_id` fixa a conversa num provedor (sticky routing, 60 min):
+            # sem isso o acerto de cache depende de o roteador cair no mesmo lugar.
+            session_id = prompt_cache_key.get()
+            if session_id:
+                corpo["session_id"] = session_id
+            if self.model.startswith(("anthropic/", "google/gemini")):
+                mark_cache_breakpoints(corpo["messages"])
 
     @staticmethod
     def _primeira_escolha(corpo: dict) -> dict:

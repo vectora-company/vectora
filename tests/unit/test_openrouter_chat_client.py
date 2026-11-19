@@ -659,6 +659,12 @@ class TestChaveDeCacheNosRoteadores:
     def test_9router_recebe_a_chave_da_conversa(self) -> None:
         assert self._payload("nine_router")["prompt_cache_key"] == "thread-9"
 
-    def test_openrouter_e_llamacpp_nao_recebem_a_chave(self) -> None:
-        assert "prompt_cache_key" not in self._payload("openrouter")
-        assert "prompt_cache_key" not in self._payload("llamacpp")
+    def test_openrouter_recebe_session_id_para_o_sticky_routing(self) -> None:
+        corpo = self._payload("openrouter")
+        assert corpo["session_id"] == "thread-9"
+        assert "prompt_cache_key" not in corpo
+
+    def test_llamacpp_nao_recebe_chave_de_sessao(self) -> None:
+        corpo = self._payload("llamacpp")
+        assert "prompt_cache_key" not in corpo
+        assert "session_id" not in corpo
