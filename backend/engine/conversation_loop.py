@@ -1085,10 +1085,16 @@ async def run_conversation(  # noqa: PLR0911
             await _hydrate_plan_approvals(
                 session_store, ctx, config.run_id, raw_history
             )
-        effective_max_tokens = (
-            config.context_max_tokens
-            if config.context_max_tokens is not None
-            else _default_context_tokens()
+        from backend.services.context_budget import (
+            estimate_tools_tokens,
+            resolve_history_budget,
+        )
+
+        effective_max_tokens = resolve_history_budget(
+            model=str(ctx.model) if ctx.model else None,
+            override=config.context_max_tokens,
+            default=_default_context_tokens(),
+            tools_tokens=estimate_tools_tokens(tools),
         )
         from backend.services.context_planner import plan_context_with_fallback
 
