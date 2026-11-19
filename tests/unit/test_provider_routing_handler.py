@@ -2792,6 +2792,48 @@ class TestNineRouterDiscovery:
             "openai/gpt-4o",
         ]
 
+    def test_only_chat_models_are_listed_with_their_provider(
+        self, client, clean_nine_router_config, tmp_path
+    ):
+        """O OmniRoute lista imagem, áudio e embedding junto: só chat sai, e o
+        provider de origem acompanha cada modelo. Pede `kind=chat` ao roteador."""
+        with patch(
+            "backend.api.handlers.provider_routing._env_file",
+            return_value=tmp_path / ".env",
+        ):
+            client.post(
+                "/provider-routing/nine-router/config",
+                json={"base_url": "http://localhost:20128/v1", "api_key": "9r-key"},
+            )
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.return_value = {
+            "data": [
+                {"id": "cc/claude-opus-4-7", "owned_by": "claude"},
+                {"id": "openai/gpt-4o", "type": "chat", "owned_by": "openai"},
+                {"id": "aihorde/Juggernaut XL", "type": "image", "owned_by": "aihorde"},
+                {"id": "openai/tts-1", "type": "audio", "owned_by": "openai"},
+                {"id": "voyage/embed", "type": "embedding", "owned_by": "voyage"},
+                {"id": "x/rerank", "type": "rerank", "owned_by": "x"},
+            ]
+        }
+        with patch("httpx.AsyncClient") as mock_httpx:
+            mock_ctx = AsyncMock()
+            mock_ctx.__aenter__ = AsyncMock(return_value=mock_ctx)
+            mock_ctx.__aexit__ = AsyncMock(return_value=False)
+            mock_ctx.get = AsyncMock(return_value=mock_response)
+            mock_httpx.return_value = mock_ctx
+
+            resp = client.get("/provider-routing/nine-router/models")
+
+        body = resp.json()
+        assert [(m["id"], m["provider"]) for m in body["models"]] == [
+            ("cc/claude-opus-4-7", "claude"),
+            ("openai/gpt-4o", "openai"),
+        ]
+        assert mock_ctx.get.await_args is not None
+        assert mock_ctx.get.await_args.kwargs["params"] == {"kind": "chat"}
+
 
 class TestNineRouterRegisteredModels:
     def test_register_list_and_delete(self, client):

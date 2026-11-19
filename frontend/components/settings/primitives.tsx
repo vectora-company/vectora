@@ -23,6 +23,13 @@ export const settingsItemClass = "rounded-lg border border-border bg-card";
 export const settingsRowClass =
   "flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2";
 
+/**
+ * Contêiner rolável das listas longas (modelos detectados, registrados): a
+ * lista rola dentro da seção em vez de empurrar a página. Aplique quando houver
+ * mais de seis itens, ou sempre que a lista puder crescer sem limite.
+ */
+export const settingsScrollListClass = "max-h-[26rem] overflow-y-auto pr-1";
+
 /** Rótulo que envolve o controle: texto acima, controle abaixo. */
 export const settingsLabelClass = "grid gap-1 text-xs text-foreground";
 

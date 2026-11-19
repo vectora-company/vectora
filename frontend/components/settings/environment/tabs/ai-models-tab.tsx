@@ -25,6 +25,7 @@ import {
   settingsLabelClass,
   settingsOptionClass,
   settingsRowClass,
+  settingsScrollListClass,
 } from "@/components/settings/primitives";
 import { cn } from "@/lib/utils";
 import { useRagSettings } from "@/components/workbench/rag-settings-panel";
@@ -146,7 +147,7 @@ function CapabilityModelList({
         </p>
       ) : options.length ? (
         <div
-          className={`grid gap-2 md:grid-cols-2 xl:grid-cols-3 ${options.length > 6 ? "max-h-[26rem] overflow-y-auto pr-1" : ""}`}
+          className={`grid gap-2 md:grid-cols-2 xl:grid-cols-3 ${options.length > 6 ? settingsScrollListClass : ""}`}
         >
           {options.map((model) => (
             <div key={model.id} className={cn(settingsRowClass, "min-w-0")}>
@@ -1091,7 +1092,7 @@ export function ChatModelSettings() {
         </span>
       </div>
       <div
-        className={`grid gap-2 md:grid-cols-2 xl:grid-cols-3 ${registerable.length > 6 ? "max-h-[26rem] overflow-y-auto pr-1" : ""}`}
+        className={`grid gap-2 md:grid-cols-2 xl:grid-cols-3 ${registerable.length > 6 ? settingsScrollListClass : ""}`}
       >
         {registerable.map((model) => (
           <div key={model} className={cn(settingsRowClass, "min-w-0")}>

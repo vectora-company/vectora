@@ -1236,3 +1236,52 @@ describe("LlamaCppSection", () => {
     ]);
   });
 });
+
+describe("ProviderRoutingTab — 9Router / OmniRoute", () => {
+  beforeEach(() => {
+    overwriteGetLocale(() => "pt");
+  });
+
+  const models = Array.from({ length: 9 }, (_, index) => ({
+    id: `claude/modelo-${index}`,
+    name: `modelo-${index}`,
+    provider: "claude",
+  }));
+
+  async function detectar() {
+    mockFetch({
+      nineRouterStatus: {
+        configured: true,
+        base_url: "http://localhost:20128/api/v1",
+        masked: "sk-...84f8",
+      },
+      nineRouterDiscover: { reachable: true, models },
+    });
+    render(<ProviderRoutingTab />);
+    const card = (
+      await screen.findByRole("heading", { name: /9router/i })
+    ).closest(".rounded-lg.border") as HTMLElement;
+    fireEvent.click(within(card).getByRole("button", { name: /detectar/i }));
+    await waitFor(() => within(card).getByText("claude/modelo-0"));
+    return card;
+  }
+
+  it("a lista detectada rola dentro da própria seção", async () => {
+    const card = await detectar();
+
+    const list = within(card)
+      .getByText("claude/modelo-0")
+      .closest(".overflow-y-auto");
+    expect(list).not.toBeNull();
+    expect(list).toHaveClass("max-h-[26rem]");
+    expect(
+      within(list as HTMLElement).getAllByText(/^claude\/modelo-/),
+    ).toHaveLength(9);
+  });
+
+  it("mostra o provider de origem de cada modelo", async () => {
+    const card = await detectar();
+
+    expect(within(card).getAllByText("claude")).toHaveLength(9);
+  });
+});

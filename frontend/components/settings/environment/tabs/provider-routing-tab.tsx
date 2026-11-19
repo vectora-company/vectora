@@ -33,6 +33,7 @@ import {
   SettingsStack,
   SettingsStatus,
   settingsRowClass,
+  settingsScrollListClass,
   settingsSectionClass,
 } from "@/components/settings/primitives";
 import { cn } from "@/lib/utils";
@@ -107,6 +108,8 @@ interface NineRouterStatus {
 interface NineRouterModelInfo {
   id: string;
   name: string;
+  /** Provider de origem informado pelo roteador (`owned_by`). */
+  provider?: string;
 }
 
 interface LlamaCppModelInfo {
@@ -1875,7 +1878,7 @@ function RegisteredModelsList({
         </p>
       ) : (
         <div
-          className={`space-y-1.5 ${registered.length > 6 ? "max-h-[26rem] overflow-y-auto pr-1" : ""}`}
+          className={`space-y-1.5 ${registered.length > 6 ? settingsScrollListClass : ""}`}
         >
           {registered.map((model) => (
             <div key={model.id} className={settingsRowClass}>
@@ -2331,7 +2334,7 @@ function OllamaSection() {
             </p>
           )}
         {filteredDiscovered && filteredDiscovered.length > 0 && (
-          <div className="space-y-1.5">
+          <div className={cn("space-y-1.5", settingsScrollListClass)}>
             {filteredDiscovered.map((model) => {
               const already = registeredTags.has(model.name);
               return (
@@ -2915,13 +2918,20 @@ function NineRouterSection() {
                   {m.provider_routing_nine_router_search_empty()}
                 </p>
               ) : (
-                <div className="space-y-1.5">
+                <div className={cn("space-y-1.5", settingsScrollListClass)}>
                   {(filteredDiscovered ?? discovered).map((model) => {
                     const already = registeredTags.has(model.id);
                     return (
                       <div key={model.id} className={settingsRowClass}>
-                        <span className="text-sm font-mono truncate">
-                          {model.id}
+                        <span className="flex min-w-0 items-center gap-2">
+                          <span className="truncate font-mono text-sm">
+                            {model.id}
+                          </span>
+                          {model.provider ? (
+                            <SettingsStatus className="shrink-0">
+                              {model.provider}
+                            </SettingsStatus>
+                          ) : null}
                         </span>
                         <Button
                           variant="ghost"
@@ -3466,7 +3476,7 @@ function LlamaCppSection() {
       <div
         className={
           filteredModels.length > 6
-            ? "max-h-[26rem] space-y-2 overflow-y-auto pr-1"
+            ? cn("space-y-2", settingsScrollListClass)
             : "space-y-2"
         }
       >
