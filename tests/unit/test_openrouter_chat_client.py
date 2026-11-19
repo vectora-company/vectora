@@ -589,3 +589,52 @@ class TestStreamingToolCallsEUsage:
         assert "Documentação de ferramentas" not in sys_msg
         assert "Documentação ainda pertencente a Identity" not in sys_msg
         assert "Execute testes antes de concluir." in sys_msg
+
+
+class TestCacheDePrompt:
+    def _client(self, model: str, origem: str):
+        from backend.llm.openrouter.chat_client import OpenRouterChatClient
+
+        http = OpenRouterClient(
+            api_key="k",
+            http_client=httpx.AsyncClient(
+                transport=httpx.MockTransport(lambda r: httpx.Response(200, json={}))
+            ),
+        )
+        return OpenRouterChatClient(model, http, media_model_id=f"{origem}:{model}")
+
+    def _mensagens(self):
+        from backend.vtypes.message import MessageRole, text_message
+
+        return [
+            text_message(MessageRole.SYSTEM, "regras"),
+            text_message(MessageRole.USER, "primeira"),
+            text_message(MessageRole.ASSISTANT, "resposta"),
+            text_message(MessageRole.USER, "segunda"),
+        ]
+
+    def test_modelo_anthropic_no_openrouter_marca_os_pontos_de_cache(self) -> None:
+        corpo = self._client("anthropic/claude-sonnet-4.5", "openrouter")._payload(
+            self._mensagens(), tools=None, temperature=None, max_tokens=None
+        )
+
+        marcadas = [
+            m["role"]
+            for m in corpo["messages"]
+            if isinstance(m["content"], list) and m["content"][-1].get("cache_control")
+        ]
+        assert marcadas == ["system", "assistant", "user"]
+        assert corpo["messages"][1]["content"] == "primeira"
+
+    def test_modelo_sem_cache_explicito_fica_intacto(self) -> None:
+        corpo = self._client("meta-llama/llama-4", "openrouter")._payload(
+            self._mensagens(), tools=None, temperature=None, max_tokens=None
+        )
+        assert all(isinstance(m["content"], str) for m in corpo["messages"])
+        assert "cache_prompt" not in corpo
+
+    def test_llamacpp_pede_reaproveitar_o_prefixo(self) -> None:
+        corpo = self._client("qwen", "llamacpp")._payload(
+            self._mensagens(), tools=None, temperature=None, max_tokens=None
+        )
+        assert corpo["cache_prompt"] is True
