@@ -104,17 +104,17 @@ vi.mock("@/lib/i18n-dyn", () => ({
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-async function renderMemoriaTab() {
-  const { MemoriaTab } = await import("../memoria-tab");
-  return render(<MemoriaTab />);
+async function renderMemoriesPanel() {
+  const { MemoriesPanel } = await import("../memories-panel");
+  return render(<MemoriesPanel />);
 }
 
 // ── testes ────────────────────────────────────────────────────────────────────
 
-describe("MemoriaTab", () => {
+describe("MemoriesPanel", () => {
   it("exibe empty state quando não há memórias", async () => {
     await act(async () => {
-      await renderMemoriaTab();
+      await renderMemoriesPanel();
     });
     await waitFor(() => {
       expect(screen.queryByText("memory_empty_title")).toBeTruthy();
@@ -129,7 +129,7 @@ describe("MemoriaTab", () => {
       updated_at: "2024-01-01T00:00:00Z",
     });
     await act(async () => {
-      await renderMemoriaTab();
+      await renderMemoriesPanel();
     });
     await waitFor(() => {
       expect(screen.getByText("idioma")).toBeTruthy();
@@ -142,7 +142,7 @@ describe("MemoriaTab", () => {
       new Response(JSON.stringify({ detail: "erro" }), { status: 500 }),
     );
     await act(async () => {
-      await renderMemoriaTab();
+      await renderMemoriesPanel();
     });
     await waitFor(() => {
       expect(screen.getByText("memory_error_load")).toBeTruthy();
@@ -151,7 +151,7 @@ describe("MemoriaTab", () => {
 
   it("cria nova memória: POST /memory chamado com conteúdo correto", async () => {
     await act(async () => {
-      await renderMemoriaTab();
+      await renderMemoriesPanel();
     });
     await waitFor(() => screen.getByText("memory_add"));
 
@@ -194,7 +194,7 @@ describe("MemoriaTab", () => {
       updated_at: "2024-01-01T00:00:00Z",
     });
     await act(async () => {
-      await renderMemoriaTab();
+      await renderMemoriesPanel();
     });
     await waitFor(() => screen.getByText("Conteúdo a deletar"));
 
@@ -229,7 +229,7 @@ describe("MemoriaTab", () => {
       },
     );
     await act(async () => {
-      await renderMemoriaTab();
+      await renderMemoriesPanel();
     });
     await waitFor(() => screen.getByText("m1"));
 

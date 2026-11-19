@@ -483,6 +483,7 @@ def _decision_snapshot_matches_runtime(ctx: ToolContext) -> bool:
             "laya-local": settings.systemone_laya_model,
             "clef-api": settings.systemone_clef_api_model,
             "jev-api": settings.systemone_jev_api_model,
+            "openrouter-api": settings.systemone_openrouter_model,
         }
         runtime["model"] = (
             model_by_provider.get(provider) if isinstance(provider, str) else None
