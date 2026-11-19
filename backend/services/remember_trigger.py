@@ -14,10 +14,32 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 
 REMEMBER_TRIGGER_EVERY_N_TURNS = 5
+
+# O usuário pediu para guardar algo: vale revisar já, sem esperar o próximo ciclo.
+_EXPLICIT_CUE = re.compile(
+    r"\b(lembre|lembra de|guarde|anote|memorize|n[aã]o esque[cç]a|"
+    r"remember|don't forget|keep in mind|recuerda|no olvides)\b",
+    re.IGNORECASE,
+)
+
+
+async def _explicit_cue(thread_id: str) -> bool:
+    """True se a última mensagem do usuário pede para lembrar de algo."""
+    try:
+        from backend.services import agent_factory
+
+        pairs = await agent_factory.aget_thread_messages(thread_id)
+    except Exception:
+        return False
+    for role, text, *_rest in reversed(pairs):
+        if role in {"user", "human"}:
+            return bool(_EXPLICIT_CUE.search(text))
+    return False
 
 
 async def maybe_trigger_remember(thread_id: str, user_id: str) -> None:
@@ -36,7 +58,9 @@ async def maybe_trigger_remember(thread_id: str, user_id: str) -> None:
         )
 
         count = await increment_remember_turn_count(thread_id)
-        if count % REMEMBER_TRIGGER_EVERY_N_TURNS != 0:
+        if count % REMEMBER_TRIGGER_EVERY_N_TURNS != 0 and not await _explicit_cue(
+            thread_id
+        ):
             return
         if await get_remember_pending(thread_id):
             logger.debug(
