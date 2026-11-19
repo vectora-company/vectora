@@ -340,14 +340,20 @@ def _synthesize_speech_bytes(
         import asyncio
 
         from backend.llm.openrouter.client import OpenRouterClient
-        from backend.llm.openrouter.media import synthesize_speech_bytes
+        from backend.llm.openrouter.media import (
+            default_speech_voice,
+            synthesize_speech_bytes,
+        )
 
         client = OpenRouterClient(api_key=api_key or settings.openrouter_api_key or "")
-        return asyncio.run(
-            synthesize_speech_bytes(
-                client, model=model, text=text, voice=voice or "alloy"
+
+        async def _speak() -> bytes:
+            chosen = voice or await default_speech_voice(model)
+            return await synthesize_speech_bytes(
+                client, model=model, text=text, voice=chosen
             )
-        )
+
+        return asyncio.run(_speak())
 
     raise NotImplementedError(
         f"síntese de voz via {provider} (modelo {model}) ainda não tem "

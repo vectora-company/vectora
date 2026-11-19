@@ -6533,6 +6533,11 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "provider": {
+            "default": "",
+            "title": "Provider",
+            "type": "string"
           }
         },
         "required": [
@@ -9823,12 +9828,21 @@
             "title": "Local Model",
             "type": "string"
           },
+          "openrouter_key_configured": {
+            "title": "Openrouter Key Configured",
+            "type": "boolean"
+          },
+          "openrouter_model": {
+            "title": "Openrouter Model",
+            "type": "string"
+          },
           "provider": {
             "enum": [
               "clef-local",
               "laya-local",
               "clef-api",
-              "jev-api"
+              "jev-api",
+              "openrouter-api"
             ],
             "title": "Provider",
             "type": "string"
@@ -9855,6 +9869,8 @@
           "jev_api_model",
           "jev_api_key_configured",
           "jev_api_key_masked",
+          "openrouter_model",
+          "openrouter_key_configured",
           "allow_remote_fallback",
           "confidence_threshold_hitl",
           "risk_assessment_timeout_s"
@@ -11467,6 +11483,17 @@
             ],
             "title": "Local Model"
           },
+          "openrouter_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openrouter Model"
+          },
           "provider": {
             "anyOf": [
               {
@@ -11474,7 +11501,8 @@
                   "clef-local",
                   "laya-local",
                   "clef-api",
-                  "jev-api"
+                  "jev-api",
+                  "openrouter-api"
                 ],
                 "type": "string"
               },
@@ -13252,6 +13280,30 @@
           }
         },
         "summary": "Revoke Service Token Endpoint",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/speech-models": {
+      "get": {
+        "description": "Modelos de fala do OpenRouter e as vozes de cada um, para o seletor.",
+        "operationId": "get_speech_models_admin_speech_models_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Speech Models Admin Speech Models Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Speech Models",
         "tags": [
           "admin"
         ]
@@ -17850,6 +17902,30 @@
         ]
       }
     },
+    "/provider-routing/decision-models/catalog": {
+      "get": {
+        "description": "Modelos de decisão conhecidos e os providers que cada um aceita.",
+        "operationId": "get_decision_models_catalog_provider_routing_decision_models_catalog_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Decision Models Catalog Provider Routing Decision Models Catalog Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Decision Models Catalog",
+        "tags": [
+          "provider-routing"
+        ]
+      }
+    },
     "/provider-routing/decision-models/config": {
       "post": {
         "description": "Atualiza as configurações e credenciais de Decision Models.",
@@ -17906,7 +17982,8 @@
                 "clef-local",
                 "laya-local",
                 "clef-api",
-                "jev-api"
+                "jev-api",
+                "openrouter-api"
               ],
               "title": "Provider",
               "type": "string"
