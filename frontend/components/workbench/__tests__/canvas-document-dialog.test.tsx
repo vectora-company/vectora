@@ -10,6 +10,10 @@ vi.mock("@/lib/paraglide/messages", () => ({
   m: {
     dialog_close: () => "Fechar",
     dialog_resize: () => "Redimensionar diálogo",
+    window_minimize: () => "Minimizar",
+    window_maximize: () => "Maximizar",
+    window_restore: () => "Restaurar",
+    window_close: () => "Fechar janela",
   },
 }));
 
@@ -51,5 +55,23 @@ describe("CanvasDocumentDialog", () => {
       w: 1348,
       h: 882,
     });
+  });
+
+  it("minimizar esconde a janela, mantém o conteúdo e o botão restaura", () => {
+    const onOpenChange = vi.fn();
+    render(
+      <CanvasDocumentDialog open onOpenChange={onOpenChange} title="AGENTS.md">
+        <span>editor vivo</span>
+      </CanvasDocumentDialog>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /minimiz/i }));
+
+    expect(screen.getByTestId("minimized-document")).toBeTruthy();
+    expect(screen.getByText("editor vivo")).toBeTruthy();
+    expect(onOpenChange).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: /restaur/i }));
+    expect(screen.queryByTestId("minimized-document")).toBeNull();
   });
 });

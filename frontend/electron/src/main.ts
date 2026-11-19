@@ -878,18 +878,25 @@ function attachContextMenu(webContents: WebContents): void {
  * incluído) ficam para fora. Depois de maximizar ou restaurar, encaixa os bounds
  * na área útil do monitor onde ela está.
  */
+let fitTimers: NodeJS.Timeout[] = [];
+
 function fitWindowToWorkArea(): void {
   const win = mainWindow;
   if (!win || win.isDestroyed()) return;
-  setTimeout(() => {
-    if (win.isDestroyed() || win.isFullScreen()) return;
-    const bounds = win.getBounds();
-    const fitted = fitBoundsToWorkArea(
-      bounds,
-      screen.getDisplayMatching(bounds).workArea,
-    );
-    if (fitted) win.setBounds(fitted);
-  }, 120);
+  // O compositor pode entregar os bounds finais depois do evento; confere em
+  // vários instantes e cancela a verificação anterior para não acumular.
+  fitTimers.forEach(clearTimeout);
+  fitTimers = [80, 250, 700].map((delay) =>
+    setTimeout(() => {
+      if (win.isDestroyed() || win.isFullScreen() || win.isMinimized()) return;
+      const bounds = win.getBounds();
+      const fitted = fitBoundsToWorkArea(
+        bounds,
+        screen.getDisplayMatching(bounds).workArea,
+      );
+      if (fitted) win.setBounds(fitted);
+    }, delay),
+  );
 }
 
 function createWindow(options: { visible?: boolean } = {}): void {
@@ -958,6 +965,13 @@ function createWindow(options: { visible?: boolean } = {}): void {
     mainWindow?.webContents.send("vectora:window-state", { maximized: false });
     fitWindowToWorkArea();
   });
+  // Maximizar pelo gerenciador de janelas nem sempre emite "maximize" antes
+  // de os bounds mudarem: qualquer mudança de tamanho, restauração ou troca de
+  // monitor também confere se a janela coube na área útil.
+  mainWindow.on("resize", fitWindowToWorkArea);
+  mainWindow.on("restore", fitWindowToWorkArea);
+  mainWindow.on("leave-full-screen", fitWindowToWorkArea);
+  mainWindow.on("moved", fitWindowToWorkArea);
 
   // Inject app version no preload sem precisar recompilar.
   process.env.VECTORA_APP_VERSION = app.getVersion();
