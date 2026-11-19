@@ -831,3 +831,17 @@ def test_pr_gate_is_one_queue_that_does_not_cancel_code_checks_on_metadata_event
         "gitleaks.yml",
     ):
         assert not (WORKFLOW.parent / old).exists(), old
+
+
+def test_local_llm_only_starts_a_machine_when_requested() -> None:
+    """Sem a marcação no commit nem disparo manual o job nem inicia, e o push da
+    branch é o único gatilho automático (sem `pull_request`, que duplicaria)."""
+    content = (WORKFLOW.parent / "local-llm.yml").read_text(encoding="utf-8")
+
+    assert "\n  pull_request:\n" not in content
+    assert "workflow_dispatch:" in content
+    assert "\n  detect:\n" not in content
+    job = content.split("\n  local-llm:\n", 1)[1].split("\n    steps:", 1)[0]
+    assert "github.event_name == 'workflow_dispatch'" in job
+    assert "contains(github.event.head_commit.message, '[llm-local]')" in job
+    assert "contains(github.event.head_commit.message, '[local-llm]')" in job

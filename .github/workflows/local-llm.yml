@@ -4,42 +4,23 @@ name: Local LLM (Ollama Qwen, llama.cpp Jev e Laya)
 # The [llm-local] marker enables the real Ollama, llama.cpp and Laya matrix.
 # [local-llm] remains accepted for backwards compatibility.
 on:
+  # O push da branch já cobre os commits de uma PR: sem gatilho de pull_request
+  # não há execução em duplicata.
   push:
     branches: ["**"]
-  pull_request:
-    branches: [master, "release/**"]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  detect:
-    name: Detect [llm-local] marker
-    runs-on: ubuntu-24.04
-    outputs:
-      requested: ${{ steps.marker.outputs.requested }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 1
-          persist-credentials: false
-      - id: marker
-        shell: bash
-        run: |
-          subject="$(git log -1 --format=%s)"
-          echo "commit_subject=$subject"
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" || "$subject" == *"[llm-local]"* || "$subject" == *"[local-llm]"* ]]; then
-            echo "requested=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "requested=false" >> "$GITHUB_OUTPUT"
-          fi
-
   local-llm:
     name: Ollama Qwen + llama.cpp Jev + Laya SystemOne
-    needs: detect
-    if: needs.detect.outputs.requested == 'true'
+    # A marcação é lida no próprio `if`: um commit sem ela não sobe máquina.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      contains(github.event.head_commit.message, '[llm-local]') ||
+      contains(github.event.head_commit.message, '[local-llm]')
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
