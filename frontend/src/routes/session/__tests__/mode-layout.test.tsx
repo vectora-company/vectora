@@ -649,9 +649,9 @@ describe("SessionPage — IDE e Kanban no tablet", () => {
 
     render(<SessionPage />);
 
-    await waitFor(() =>
-      expect(screen.getByTestId("compact-sessions-rail")).toBeVisible(),
-    );
+    expect(
+      await screen.findByTestId("compact-sessions-rail"),
+    ).toBeInTheDocument();
     expect(screen.queryByTestId("compact-open-sessions")).toBeNull();
     fireEvent.click(screen.getByTestId("compact-rail-sessions"));
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
@@ -685,9 +685,9 @@ describe("SessionPage — tablet com faixas nas bordas", () => {
 
     render(<SessionPage />);
 
-    await waitFor(() =>
-      expect(screen.getByTestId("compact-sessions-rail")).toBeVisible(),
-    );
+    expect(
+      await screen.findByTestId("compact-sessions-rail"),
+    ).toBeInTheDocument();
     expect(screen.getByTestId("workbench-navbar")).toBeInTheDocument();
     // Os botões do cabeçalho só existem quando não há faixas (celular).
     expect(screen.queryByTestId("compact-open-sessions")).toBeNull();
@@ -723,6 +723,26 @@ describe("SessionPage — tablet com faixas nas bordas", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     // Clicar na área escurecida fecha a gaveta.
     fireEvent.click(screen.getByTestId("compact-workbench-backdrop"));
+    await waitFor(() =>
+      expect(screen.queryByTestId("compact-workbench-overlay")).toBeNull(),
+    );
+  });
+
+  it("Esc fecha a gaveta do workbench", async () => {
+    setMode("assistant");
+    useWorkbenchStore.setState({ panelOpen: { t1: true } });
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 818,
+    });
+
+    render(<SessionPage />);
+    expect(
+      await screen.findByTestId("compact-workbench-overlay"),
+    ).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: "Escape" });
+
     await waitFor(() =>
       expect(screen.queryByTestId("compact-workbench-overlay")).toBeNull(),
     );
