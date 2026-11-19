@@ -1,4 +1,84 @@
-/** Ícones oficiais (simplificados) dos provedores de LLM, usados no seletor de modelo. */
+/**
+ * Ícones dos provedores de LLM, usados no seletor de modelo e nas configurações.
+ * Ollama, llama.cpp, Hugging Face, Laya, Clef, JEV, 9Router e OmniRoute usam o
+ * logo em arquivo; os demais seguem como ícones simplificados até haver arquivo de
+ * origem (ver `assets/provider-logos/CREDITS.md`).
+ */
+
+import clefLogo from "@/assets/provider-logos/clef.png";
+import huggingfaceLogo from "@/assets/provider-logos/huggingface.svg";
+import jevOnDark from "@/assets/provider-logos/jev-on-dark.png";
+import jevOnLight from "@/assets/provider-logos/jev-on-light.png";
+import layaLogo from "@/assets/provider-logos/laya.svg";
+import llamacppOnDark from "@/assets/provider-logos/llamacpp-on-dark.svg";
+import llamacppOnLight from "@/assets/provider-logos/llamacpp-on-light.svg";
+import ninerouterLogo from "@/assets/provider-logos/ninerouter.svg";
+import ollamaOnDark from "@/assets/provider-logos/ollama-on-dark.svg";
+import ollamaOnLight from "@/assets/provider-logos/ollama-on-light.svg";
+import omnirouteLogo from "@/assets/provider-logos/omniroute.svg";
+import { useIsDark } from "@/lib/hooks/use-is-dark";
+
+/**
+ * Logo oficial do provider, carregado do arquivo SVG de origem (ver
+ * `assets/provider-logos/CREDITS.md`). Marcas com glifo de uma cor só têm uma
+ * variante por tema; as coloridas usam o mesmo arquivo nos dois.
+ */
+function LogoImage({
+  onDark,
+  onLight,
+  className,
+}: {
+  onDark: string;
+  onLight?: string;
+  className?: string;
+}) {
+  const isDark = useIsDark();
+  return (
+    <img
+      src={isDark ? onDark : (onLight ?? onDark)}
+      alt=""
+      aria-hidden="true"
+      draggable={false}
+      className={`${className ?? ""} object-contain`}
+    />
+  );
+}
+
+export function OllamaIcon({ className }: { className?: string }) {
+  return (
+    <LogoImage
+      onDark={ollamaOnDark}
+      onLight={ollamaOnLight}
+      className={className}
+    />
+  );
+}
+
+export function LlamaCppIcon({ className }: { className?: string }) {
+  return (
+    <LogoImage
+      onDark={llamacppOnDark}
+      onLight={llamacppOnLight}
+      className={className}
+    />
+  );
+}
+
+export function HuggingFaceIcon({ className }: { className?: string }) {
+  return <LogoImage onDark={huggingfaceLogo} className={className} />;
+}
+
+export function NineRouterIcon({ className }: { className?: string }) {
+  return <LogoImage onDark={ninerouterLogo} className={className} />;
+}
+
+export function LayaIcon({ className }: { className?: string }) {
+  return <LogoImage onDark={layaLogo} className={className} />;
+}
+
+export function OmniRouteIcon({ className }: { className?: string }) {
+  return <LogoImage onDark={omnirouteLogo} className={className} />;
+}
 
 export function GeminiIcon({ className }: { className?: string }) {
   return (
@@ -68,41 +148,6 @@ export function CohereIcon({ className }: { className?: string }) {
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-    </svg>
-  );
-}
-
-export function OllamaIcon({ className }: { className?: string }) {
-  // Sem ícone de marca oficial simplificado — servidor local genérico
-  // (Ollama roda no host do usuário, não é um provider de nuvem).
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      className={className}
-      aria-hidden="true"
-    >
-      <rect
-        x="3"
-        y="4"
-        width="18"
-        height="7"
-        rx="1.5"
-        stroke="currentColor"
-        strokeWidth="2"
-      />
-      <rect
-        x="3"
-        y="13"
-        width="18"
-        height="7"
-        rx="1.5"
-        stroke="currentColor"
-        strokeWidth="2"
-      />
-      <circle cx="7" cy="7.5" r="1" fill="currentColor" />
-      <circle cx="7" cy="16.5" r="1" fill="currentColor" />
     </svg>
   );
 }
@@ -197,72 +242,13 @@ export function GroqIcon({ className }: { className?: string }) {
   );
 }
 
-export function HuggingFaceIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      className={className}
-      aria-hidden="true"
-    >
-      <path
-        d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm-4 8a1.25 1.25 0 1 1 0 2.5A1.25 1.25 0 0 1 8 10Zm8 0a1.25 1.25 0 1 1 0 2.5A1.25 1.25 0 0 1 16 10Zm-8.2 4.1 1.5-.7a3 3 0 0 0 5.4 0l1.5.7a4.65 4.65 0 0 1-8.4 0Z"
-        fill="currentColor"
-      />
-    </svg>
-  );
-}
-
 export function ClefIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      className={className}
-      aria-hidden="true"
-    >
-      <path
-        d="M14.5 3.5a7.5 7.5 0 1 0 5.3 12.8l-2.1-2.1a4.5 4.5 0 1 1 0-6.4l2.1-2.1a7.47 7.47 0 0 0-5.3-2.2Z"
-        fill="currentColor"
-      />
-      <circle cx="8" cy="18.5" r="2" fill="currentColor" />
-    </svg>
-  );
-}
-
-export function LayaIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      className={className}
-      aria-hidden="true"
-    >
-      <path d="M5 3h3v15h11v3H5V3Z" fill="currentColor" />
-      <path d="M12 6h7v3h-7z" fill="currentColor" />
-    </svg>
-  );
+  return <LogoImage onDark={clefLogo} className={className} />;
 }
 
 export function JevIcon({ className }: { className?: string }) {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      className={className}
-      aria-hidden="true"
-    >
-      <path
-        d="M15.5 3H20v3h-1v10.5a4.5 4.5 0 0 1-9 0v-1h3v1a1.5 1.5 0 0 0 3 0V6h-3.5V3Z"
-        fill="currentColor"
-      />
-      <circle cx="6.5" cy="16.5" r="3.5" fill="currentColor" />
-      <circle cx="6.5" cy="16.5" r="1.3" fill="var(--background, #1f1f1f)" />
-    </svg>
+    <LogoImage onDark={jevOnDark} onLight={jevOnLight} className={className} />
   );
 }
 
@@ -296,40 +282,6 @@ export function DockerIcon({ className }: { className?: string }) {
     >
       <path
         d="M3 10h3v3H3v-3Zm4 0h3v3H7v-3Zm4 0h3v3h-3v-3Zm4 0h3v3h-3v-3Zm-8-4h3v3H7V6Zm4 0h3v3h-3V6Zm4 0h3v3h-3V6Zm4 4.5c1.2-.5 2.2-.3 3 .5-.5 1.5-1.5 2.4-3 2.7-.6 3.6-3.7 6.3-7.5 6.3H8c-3.5 0-6-2.3-6-5.5h14.5c1.4 0 2.4-1.3 2.5-4Z"
-        fill="currentColor"
-      />
-    </svg>
-  );
-}
-
-export function LlamaCppIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      className={className}
-      aria-hidden="true"
-    >
-      <path
-        d="M5 4h3v8.5c0 3 1.5 4.5 4.5 4.5H20v3h-7.5C7.7 20 5 17.3 5 12.5V4Zm8 1h3v5h5v3h-5v5h-3v-5H8v-3h5V5Z"
-        fill="currentColor"
-      />
-    </svg>
-  );
-}
-
-export function NineRouterIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      className={className}
-      aria-hidden="true"
-    >
-      <path
-        d="M12 2.5a7 7 0 1 0 0 14h3.8c-.7 1.4-2.1 2.4-3.8 2.4v2.6c4.1 0 7.5-3.3 7.5-7.5V9.5c0-3.9-3.2-7-7.5-7Zm0 3a4 4 0 1 1 0 8 4 4 0 0 1 0-8Z"
         fill="currentColor"
       />
     </svg>
@@ -390,6 +342,8 @@ const PROVIDER_ICONS: Record<
   dmr: DockerIcon,
   llamacpp: LlamaCppIcon,
   nine_router: NineRouterIcon,
+  omniroute: OmniRouteIcon,
+  "omni-route": OmniRouteIcon,
   ollama: OllamaIcon,
   openrouter: OpenRouterIcon,
   auto: OpenRouterIcon,
