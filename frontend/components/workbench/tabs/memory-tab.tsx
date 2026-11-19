@@ -251,7 +251,11 @@ function useJourney() {
     let alive = true;
     void (async () => {
       try {
-        const res = await fetch("/memory/journey");
+        const res = await fetch(
+          `/memory/journey?workspace_id=${encodeURIComponent(
+            useWorkspacesStore.getState().getActive()?.id ?? "",
+          )}`,
+        );
         if (!res.ok || !alive) return;
         const data = (await res.json()) as {
           facts?: JourneyFact[];
