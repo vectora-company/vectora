@@ -371,7 +371,7 @@ class TestApiAdapters:
         """Verifica o comportamento de jev api adapter decide success."""
         adapter = JevApiAdapter(api_key="jev_secret_test_key")
         req = SystemOneRequest(
-            model="jev-fast",
+            model="jev-1.14.0",
             state="State de teste",
             questions={"q1": NoulQuestion(criterion="critério de teste")},
         )

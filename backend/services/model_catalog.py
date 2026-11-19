@@ -12,7 +12,14 @@ import httpx
 from backend.settings import settings
 
 logger = logging.getLogger(__name__)
-_CATALOG_CACHE_TTL_S = 600.0
+# A agregação é barata porque cada fonte tem cache próprio: o resultado que
+# respondeu vale por 10 minutos e o que falhou só por 15 s, então um provider
+# que sobe depois (roteador, Ollama, llama.cpp) aparece quase de imediato sem
+# reconsultar a cada acesso os que já responderam.
+_CATALOG_CACHE_TTL_S = 15.0
+_SOURCE_OK_TTL_S = 600.0
+_SOURCE_FAILURE_TTL_S = 15.0
+_source_cache: dict[tuple[Any, ...], tuple[float, dict[str, Any] | None]] = {}
 _catalog_cache: dict[str, Any] = {"updated": 0.0, "entries": []}
 _catalog_lock = asyncio.Lock()
 
@@ -199,14 +206,32 @@ async def _get_json(
     headers: dict[str, str] | None = None,
     params: dict[str, str] | None = None,
 ) -> dict[str, Any] | None:
+    key = (
+        url,
+        tuple(sorted((params or {}).items())),
+        hash(tuple(sorted((headers or {}).items()))),
+    )
+    now = time.monotonic()
+    cached = _source_cache.get(key)
+    if cached is not None:
+        stored_at, payload = cached
+        ttl = _SOURCE_OK_TTL_S if payload is not None else _SOURCE_FAILURE_TTL_S
+        if now - stored_at < ttl:
+            return payload
     try:
         response = await client.get(url, headers=headers, params=params)
         response.raise_for_status()
-        payload = response.json()
-        return payload if isinstance(payload, dict) else None
-    except Exception:
-        logger.info("model catalog: provider endpoint unavailable (%s)", url)
-        return None
+        body = response.json()
+        result = body if isinstance(body, dict) else None
+    except Exception as exc:
+        logger.info(
+            "model catalog: provider endpoint unavailable (%s: %s)",
+            url,
+            type(exc).__name__,
+        )
+        result = None
+    _source_cache[key] = (time.monotonic(), result)
+    return result
 
 
 async def _direct_provider_catalogs(client: httpx.AsyncClient) -> list[dict[str, Any]]:
@@ -342,9 +367,14 @@ async def _router_catalogs(client: httpx.AsyncClient) -> list[dict[str, Any]]:
     entries: list[dict[str, Any]] = []
     if settings.openrouter_api_key:
         headers = {"Authorization": f"Bearer {settings.openrouter_api_key}"}
+        seen_router_models: set[str] = set()
         for catalog_url in (
             "https://openrouter.ai/api/v1/models",
             "https://openrouter.ai/api/v1/embeddings/models",
+            # Fala e decisões têm modalidades de saída próprias e não entram
+            # na listagem padrão de chat.
+            "https://openrouter.ai/api/v1/models?output_modalities=speech",
+            "https://openrouter.ai/api/v1/models?output_modalities=decisions",
         ):
             is_embedding_catalog = catalog_url.endswith("/embeddings/models")
             payload = await _get_json(client, catalog_url, headers=headers)
@@ -357,6 +387,9 @@ async def _router_catalogs(client: httpx.AsyncClient) -> list[dict[str, Any]]:
                     for value in architecture.get("output_modalities", [])
                 ]
                 model_id = str(model["id"])
+                if model_id in seen_router_models:
+                    continue
+                seen_router_models.add(model_id)
                 caps = _guess_capabilities("openrouter", model_id)
                 if "embeddings" in output_modalities or is_embedding_catalog:
                     caps = list(dict.fromkeys([*caps, "embedding"]))
@@ -368,8 +401,10 @@ async def _router_catalogs(client: httpx.AsyncClient) -> list[dict[str, Any]]:
                     caps = list(dict.fromkeys([*caps, "reranking"]))
                 if "text" in output_modalities and "embedding" not in caps:
                     caps = list(dict.fromkeys([*caps, "chat"]))
-                if "audio" in output_modalities:
+                if "audio" in output_modalities or "speech" in output_modalities:
                     caps = list(dict.fromkeys([*caps, "text_to_speech"]))
+                if "decisions" in output_modalities:
+                    caps = ["decision"]
                 if "image" in output_modalities:
                     caps = list(dict.fromkeys([*caps, "image_generation"]))
                 if "video" in output_modalities:
@@ -389,17 +424,17 @@ async def _router_catalogs(client: httpx.AsyncClient) -> list[dict[str, Any]]:
                     for value in architecture.get("input_modalities", [])
                 ):
                     caps = list(dict.fromkeys([*caps, "realtime_audio"]))
-                entries.append(
-                    _entry(
-                        "openrouter",
-                        model_id,
-                        name=str(model.get("name") or model_id),
-                        capabilities=caps,
-                        confidence="router_metadata"
-                        if output_modalities
-                        else "inferred",
-                    )
+                entry = _entry(
+                    "openrouter",
+                    model_id,
+                    name=str(model.get("name") or model_id),
+                    capabilities=caps,
+                    confidence="router_metadata" if output_modalities else "inferred",
                 )
+                if "decision" in caps:
+                    # O adaptador do OpenRouter Decisions executa esses modelos.
+                    entry["executable_capabilities"].append("decision")
+                entries.append(entry)
     # Providers locais/compatíveis: catálogo dinâmico, sem credenciais no retorno.
     ollama_url = (settings.ollama_base_url or "http://127.0.0.1:11434").rstrip("/")
     ollama_headers = (
@@ -547,3 +582,4 @@ async def list_model_catalog() -> list[dict[str, Any]]:
 def invalidate_model_catalog() -> None:
     """Força nova descoberta no próximo acesso do catálogo."""
     _catalog_cache["updated"] = 0.0
+    _source_cache.clear()

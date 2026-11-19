@@ -262,3 +262,51 @@ describe("IdeModeLayout", () => {
     expect(screen.getByTestId("panel-workbench")).toBeInTheDocument();
   });
 });
+
+function renderTablet(workbenchOpen: boolean) {
+  const onCloseWorkbench = vi.fn();
+  render(
+    <IdeModeLayout
+      layoutState="tablet"
+      workbenchOpen={workbenchOpen}
+      onCloseWorkbench={onCloseWorkbench}
+      header={<div data-testid="panel-header">Header</div>}
+      navBar={<div data-testid="panel-navbar">NavBar</div>}
+      workbenchContent={<div data-testid="panel-workbench">Workbench</div>}
+      editor={<div data-testid="panel-editor">Editor</div>}
+      chat={<div data-testid="panel-chat">Chat</div>}
+    />,
+  );
+  return { onCloseWorkbench };
+}
+
+describe("IdeModeLayout — tablet", () => {
+  it("mantém editor e faixa visíveis e só monta o chat quando aberto", () => {
+    renderTablet(false);
+
+    expect(screen.getByTestId("panel-editor")).toBeInTheDocument();
+    expect(screen.getByTestId("panel-navbar")).toBeInTheDocument();
+    expect(screen.queryByTestId("panel-chat")).toBeNull();
+    expect(screen.queryByTestId("ide-tablet-backdrop")).toBeNull();
+  });
+
+  it("abrir o chat fecha o workbench e o fundo escurecido fecha a gaveta", () => {
+    const { onCloseWorkbench } = renderTablet(false);
+
+    fireEvent.click(screen.getByTestId("ide-tablet-chat-toggle"));
+
+    expect(onCloseWorkbench).toHaveBeenCalled();
+    expect(screen.getByTestId("ide-tablet-chat-drawer")).toBeVisible();
+    fireEvent.click(screen.getByTestId("ide-tablet-backdrop"));
+    expect(screen.getByTestId("ide-tablet-chat-drawer")).not.toBeVisible();
+  });
+
+  it("com o workbench aberto, o fundo escurecido pede para fechá-lo", () => {
+    const { onCloseWorkbench } = renderTablet(true);
+
+    expect(screen.getByTestId("ide-tablet-workbench-drawer")).toBeVisible();
+    fireEvent.click(screen.getByTestId("ide-tablet-backdrop"));
+
+    expect(onCloseWorkbench).toHaveBeenCalled();
+  });
+});

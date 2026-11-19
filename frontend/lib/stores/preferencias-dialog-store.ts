@@ -21,7 +21,7 @@ export type PreferenciasTab = "preferencias" | "conta" | "memoria";
 const CATEGORY_BY_TAB: Record<PreferenciasTab, SettingsCategoryId> = {
   preferencias: "geral",
   conta: "conta",
-  memoria: "memoria",
+  memoria: "geral",
 };
 
 interface PreferenciasDialogState {
