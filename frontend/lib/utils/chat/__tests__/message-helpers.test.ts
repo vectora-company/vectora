@@ -259,3 +259,22 @@ describe("historyMessageToMessage — partes", () => {
     expect(message.toolCalls).toBeUndefined();
   });
 });
+
+describe("historyMessageToMessage — verificação", () => {
+  it("devolve o desfecho da verificação do turno", () => {
+    const message = historyMessageToMessage(
+      {
+        role: "assistant",
+        content: "Feito",
+        verification: { status: "degraded", outcome: "not_run" },
+      },
+      "h5",
+    );
+
+    expect(message.verification).toEqual({
+      status: "degraded",
+      outcome: "not_run",
+      detail: "",
+    });
+  });
+});

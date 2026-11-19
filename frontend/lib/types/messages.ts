@@ -47,6 +47,17 @@ export interface Message {
   thinkingSteps?: string[];
   /** Texto do raciocínio que o provider devolveu; mostrado recolhido. */
   reasoning?: string;
+  /** Checklist do plano do agente (`write_todos`) no fim do turno. */
+  plan?: Array<{
+    content: string;
+    status: "pending" | "in_progress" | "completed";
+  }>;
+  /** Desfecho da verificação do turno, mostrado como rodapé. */
+  verification?: {
+    status: "passed" | "degraded" | "failed" | string;
+    outcome: string;
+    detail: string;
+  };
   thinkingStartTime?: number;
   thinkingDuration?: number;
 

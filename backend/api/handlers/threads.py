@@ -1771,6 +1771,7 @@ async def get_history(
                 checkpoint_id=entry.checkpoint_id,
                 attachments=entry.attachments,
                 parts=entry.parts,
+                verification=entry.verification,
                 edited_files=[file.model_dump() for file in entry.edited_files],
             )
             for entry in pairs
@@ -2384,6 +2385,7 @@ async def get_thread_history_paginated(
             checkpoint_id=entry.checkpoint_id,
             attachments=entry.attachments,
             parts=entry.parts,
+            verification=entry.verification,
             edited_files=[file.model_dump() for file in entry.edited_files],
         )
         for entry in page

@@ -104,6 +104,7 @@ export type StreamEvent =
     }
   | { type: "token"; content: string; node?: string }
   | { type: "reasoning"; content: string }
+  | { type: "verification"; status: string; outcome: string; detail?: string }
   | {
       type: "tool_call";
       tool_name: string;
@@ -343,6 +344,8 @@ export interface HistoryMessage {
   edited_files?: HistoryEditedFile[];
   /** Raciocínio e tool calls da mensagem, na ordem em que o stream os mostrou. */
   parts?: HistoryPart[];
+  /** Desfecho da verificação do turno que gerou esta resposta. */
+  verification?: { status: string; outcome: string; detail?: string };
   /** Falha persistida; `null` é estado desconhecido e não marca erro. */
   is_error?: boolean | null;
 }

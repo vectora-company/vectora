@@ -40,6 +40,15 @@ class ReasoningChunk:
 
 
 @dataclass(frozen=True, slots=True)
+class VerificationFinished:
+    """Resultado da verificação pós-execução, mostrado no rodapé do turno."""
+
+    status: str
+    outcome: str
+    detail: str
+
+
+@dataclass(frozen=True, slots=True)
 class MessageBreak:
     """Sinaliza quebra de bolha — sem payload, mesmo shape vazio de
     `MessageBreakEvent`."""
@@ -224,6 +233,7 @@ EngineEvent = (
     ThreadStarted
     | MessageChunk
     | ReasoningChunk
+    | VerificationFinished
     | MessageBreak
     | ToolCallStarted
     | ToolResult

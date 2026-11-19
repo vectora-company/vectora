@@ -4758,6 +4758,16 @@
               }
             ],
             "title": "Turn Id"
+          },
+          "verification": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HistoryVerification"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -4857,6 +4867,30 @@
           "tool_name"
         ],
         "title": "HistoryToolCallPart",
+        "type": "object"
+      },
+      "HistoryVerification": {
+        "description": "Desfecho da verificação do turno que gerou a mensagem.",
+        "properties": {
+          "detail": {
+            "default": "",
+            "title": "Detail",
+            "type": "string"
+          },
+          "outcome": {
+            "title": "Outcome",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "outcome"
+        ],
+        "title": "HistoryVerification",
         "type": "object"
       },
       "HookRuleInfo": {

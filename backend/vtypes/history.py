@@ -47,6 +47,14 @@ class HistoryToolCallPart(BaseModel):
     is_error: bool | None = None
 
 
+class HistoryVerification(BaseModel):
+    """Desfecho da verificação do turno que gerou a mensagem."""
+
+    status: str
+    outcome: str
+    detail: str = ""
+
+
 HistoryPart = Annotated[
     HistoryReasoningPart | HistoryToolCallPart, Field(discriminator="kind")
 ]
@@ -67,5 +75,6 @@ class ThreadHistoryEntry(BaseModel):
     # masquerades as a known non-error message.
     is_error: bool | None = False
     parts: list[HistoryPart] = Field(default_factory=list)
+    verification: HistoryVerification | None = None
     attachments: list[dict[str, object]] = Field(default_factory=list)
     edited_files: list[HistoryEditedFile] = Field(default_factory=list)

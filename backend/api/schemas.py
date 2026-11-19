@@ -23,7 +23,7 @@ from backend.services.media_types import (
     max_bytes_for,
 )
 from backend.vtypes.contracts import ToolOption
-from backend.vtypes.history import HistoryPart
+from backend.vtypes.history import HistoryPart, HistoryVerification
 from backend.vtypes.permission import PermissionMode
 
 # ---------------------------------------------------------------------------
@@ -278,6 +278,14 @@ class ReasoningEvent(BaseModel):
     """Fragmento de raciocínio do modelo, mostrado recolhido no chat."""
 
     content: str
+
+
+class VerificationEvent(BaseModel):
+    """Desfecho da verificação do turno: passed, degraded ou failed."""
+
+    status: str
+    outcome: str
+    detail: str = ""
 
 
 class ToolCallEvent(BaseModel):
@@ -539,6 +547,7 @@ StreamChatEventPayload = (
     ThreadEvent
     | TokenEvent
     | ReasoningEvent
+    | VerificationEvent
     | ToolCallEvent
     | ToolResultEvent
     | NodeEvent
@@ -563,6 +572,7 @@ _TYPE_MAP: dict[type, str] = {
     ThreadEvent: "thread",
     TokenEvent: "token",
     ReasoningEvent: "reasoning",
+    VerificationEvent: "verification",
     ToolCallEvent: "tool_call",
     ToolResultEvent: "tool_result",
     NodeEvent: "node",
@@ -649,6 +659,8 @@ class HistoryMessage(BaseModel):
     # Raciocínio e tool calls (com resultado resumido) desta mensagem, na ordem
     # em que o stream os mostrou; o recarregamento reconstrói a mesma tela.
     parts: list[HistoryPart] = Field(default_factory=list)
+    # Desfecho da verificação do turno, na última resposta dele.
+    verification: HistoryVerification | None = None
 
 
 class ListThreadsResponse(BaseModel):

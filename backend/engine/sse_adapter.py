@@ -33,6 +33,7 @@ from backend.engine.stream_events import (
     ToolResult,
     TurnFilesChanged,
     UIMetrics,
+    VerificationFinished,
     WorkbenchInvalidate,
 )
 
@@ -49,6 +50,10 @@ def _to_payload(event: EngineEvent) -> schemas.StreamChatEventPayload:  # noqa: 
         return schemas.TokenEvent(content=event.content, node=event.node)
     if isinstance(event, ReasoningChunk):
         return schemas.ReasoningEvent(content=event.content)
+    if isinstance(event, VerificationFinished):
+        return schemas.VerificationEvent(
+            status=event.status, outcome=event.outcome, detail=event.detail
+        )
     if isinstance(event, MessageBreak):
         return schemas.MessageBreakEvent()
     if isinstance(event, ToolCallStarted):
