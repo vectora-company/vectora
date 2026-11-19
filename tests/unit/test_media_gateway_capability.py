@@ -140,7 +140,9 @@ async def test_cliente_openrouter_consulta_catalogo_so_com_arquivo(
     sent: list[dict] = []
 
     class _Http:
-        async def stream_sse(self, _path: str, body: dict):
+        async def stream_sse(
+            self, _path: str, body: dict, headers: dict[str, str] | None = None
+        ):
             sent.append(body)
             yield {"choices": [{"delta": {"content": "ok"}, "finish_reason": "stop"}]}
 
