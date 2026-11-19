@@ -271,6 +271,48 @@ describe("MessageItem", () => {
     expect(screen.getByText("Passo 2")).toBeInTheDocument();
   });
 
+  it("bloco de pensando vem recolhido e só expande quando há raciocínio", () => {
+    const { container } = render(
+      <MessageItem
+        {...baseProps(
+          msg({
+            role: "assistant",
+            content: "resposta",
+            isThinking: false,
+            thinkingSteps: ["Passo 1"],
+          }),
+        )}
+      />,
+    );
+    const block = screen.getByTestId("thinking-block");
+    expect(block).toHaveAttribute("data-expandable", "true");
+    expect((block as HTMLDetailsElement).open).toBe(false);
+
+    fireEvent.click(container.querySelector("summary") as HTMLElement);
+    expect((block as HTMLDetailsElement).open).toBe(true);
+  });
+
+  it("sem raciocínio nem fontes o bloco não expande e não mostra (0)", () => {
+    const { container } = render(
+      <MessageItem
+        {...baseProps(
+          msg({
+            role: "assistant",
+            content: "",
+            isThinking: true,
+            thinkingStartTime: Date.now(),
+          }),
+        )}
+      />,
+    );
+    const block = screen.getByTestId("thinking-block");
+    expect(block).toHaveAttribute("data-expandable", "false");
+
+    fireEvent.click(container.querySelector("summary") as HTMLElement);
+    expect((block as HTMLDetailsElement).open).toBe(false);
+    expect(block.textContent).not.toContain("(0)");
+  });
+
   it("bloco <details> NÃO aparece com thinkingStartTime setado mas isThinking=false e sem steps", () => {
     // thinkingStartTime sozinho não deve bastar pra exibir o bloco — só
     // isThinking=true ou thinkingSteps não-vazio o fazem.

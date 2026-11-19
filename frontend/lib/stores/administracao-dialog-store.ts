@@ -23,7 +23,7 @@ export type AdminSubTab =
 
 const CATEGORY_BY_SUBTAB: Record<AdminSubTab, SettingsCategoryId> = {
   users: "admin_users",
-  tools: "admin_tools",
+  tools: "tool_policy",
   "safe-roots": "admin_saferoots",
   system: "admin_system",
   storage: "admin_storage",
