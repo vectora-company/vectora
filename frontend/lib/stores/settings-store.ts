@@ -217,9 +217,6 @@ export interface SettingsState {
    *  próximo boot (só toma efeito na próxima abertura do app, não em
    *  runtime). Sem efeito no navegador/modo servidor. */
   autoUpdateEnabled: boolean;
-  weeklyInsightEnabled: boolean;
-  weeklyInsightWeeks: 1 | 2 | 4;
-  weeklyInsightDismissedWindow: string;
   /** Tamanho de fonte da interface geral (px), aplicado via CSS var
    *  --font-scale-ui (convertida pra razão contra FONT_SCALE_BASE_PX). */
   fontScaleUi: number;
@@ -290,9 +287,6 @@ export interface SettingsState {
   setChatSidebarWidth: (v: number) => void;
   setSelectedModel: (v: string) => void;
   setAutoUpdateEnabled: (v: boolean) => void;
-  setWeeklyInsightEnabled: (v: boolean) => void;
-  setWeeklyInsightWeeks: (v: 1 | 2 | 4) => void;
-  setWeeklyInsightDismissedWindow: (v: string) => void;
   setFontScaleUi: (v: number) => void;
   setFontScaleChat: (v: number) => void;
   setFontScaleMarkdown: (v: number) => void;
@@ -486,9 +480,6 @@ const DEFAULTS = {
   chatSidebarWidth: 300,
   selectedModel: getDefaultModel(),
   autoUpdateEnabled: true,
-  weeklyInsightEnabled: false,
-  weeklyInsightWeeks: 1 as 1 | 2 | 4,
-  weeklyInsightDismissedWindow: "",
   fontScaleUi: FONT_SCALE_BASE_PX,
   fontScaleChat: FONT_SCALE_BASE_PX,
   fontScaleMarkdown: FONT_SCALE_BASE_PX,
@@ -716,18 +707,6 @@ export const useSettingsStore = create<SettingsState>()(
       setAutoUpdateEnabled: (v) => {
         set({ autoUpdateEnabled: v });
         void pushPrefs({ autoUpdateEnabled: v });
-      },
-      setWeeklyInsightEnabled: (v) => {
-        set({ weeklyInsightEnabled: v });
-        void pushPrefs({ weeklyInsightEnabled: v });
-      },
-      setWeeklyInsightWeeks: (v) => {
-        set({ weeklyInsightWeeks: v });
-        void pushPrefs({ weeklyInsightWeeks: v });
-      },
-      setWeeklyInsightDismissedWindow: (v) => {
-        set({ weeklyInsightDismissedWindow: v });
-        void pushPrefs({ weeklyInsightDismissedWindow: v });
       },
       setFontScaleUi: (v) => set({ fontScaleUi: clampFontScale(v) }),
       setFontScaleChat: (v) => set({ fontScaleChat: clampFontScale(v) }),
@@ -960,16 +939,6 @@ export async function hydrateFromBackend(): Promise<void> {
     update.sidebarPosition = prefs.sidebarPosition as SidebarPosition;
   if (typeof prefs.autoUpdateEnabled === "boolean")
     update.autoUpdateEnabled = prefs.autoUpdateEnabled;
-  if (typeof prefs.weeklyInsightEnabled === "boolean")
-    update.weeklyInsightEnabled = prefs.weeklyInsightEnabled;
-  if (
-    prefs.weeklyInsightWeeks === 1 ||
-    prefs.weeklyInsightWeeks === 2 ||
-    prefs.weeklyInsightWeeks === 4
-  )
-    update.weeklyInsightWeeks = prefs.weeklyInsightWeeks;
-  if (typeof prefs.weeklyInsightDismissedWindow === "string")
-    update.weeklyInsightDismissedWindow = prefs.weeklyInsightDismissedWindow;
   useSettingsStore.setState(update);
   if (update.language) {
     const { setLocale, getLocale } = await import("@/lib/paraglide/runtime");
