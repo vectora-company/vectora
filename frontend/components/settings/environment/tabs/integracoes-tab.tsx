@@ -97,7 +97,7 @@ async function fetchIntegrations(): Promise<Integration[]> {
   return data.integrations ?? [];
 }
 
-type GatewayState = "never_connected" | "error" | "connected";
+type GatewayState = "never_connected" | "error" | "connected" | "disabled";
 
 interface GatewayStatus {
   connected: boolean;
@@ -790,7 +790,9 @@ export function IntegracoesTab({ onOpenFullPage }: IntegracoesTabProps = {}) {
               ? m.gateway_connected()
               : gateway.state === "error"
                 ? m.gateway_error()
-                : m.gateway_never_connected()}
+                : gateway.state === "disabled"
+                  ? m.gateway_disabled()
+                  : m.gateway_never_connected()}
           </p>
         </div>
         {gateway.state === "error" && (

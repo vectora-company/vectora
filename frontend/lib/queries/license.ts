@@ -26,6 +26,16 @@ export interface LicenseStatus {
   days_remaining: number;
   expires_at: string;
   cached: boolean;
+  /** `false` quando a execução foi iniciada com `--no-services`. */
+  services_enabled?: boolean;
+}
+
+/** `true` só quando o servidor disse que o Services está desligado (sem a
+ * informação, presume ligado: nada some por falta de resposta). */
+export function servicesDisabled(
+  status: LicenseStatus | null | undefined,
+): boolean {
+  return status?.services_enabled === false;
 }
 
 export const licenseQueryKey = ["license", "status"] as const;

@@ -8,6 +8,7 @@
  * é responsabilidade do PreAuthWizard).
  */
 
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 import {
   render,
@@ -40,18 +41,53 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+/** As telas leem o status de licença pelo cache de queries. */
+function renderWithQuery(ui: React.ReactElement) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={client}>{ui}</QueryClientProvider>,
+  );
+}
+
+describe("StepToken sem Services", () => {
+  it("avisa que o Services está desligado nesta execução", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ services_enabled: false, configured: false }),
+      })),
+    );
+
+    renderWithQuery(<StepToken />);
+
+    expect(
+      await screen.findByTestId("services-off-notice"),
+    ).toBeInTheDocument();
+  });
+
+  it("com o Services ligado não mostra o aviso", async () => {
+    renderWithQuery(<StepToken />);
+
+    await screen.findByPlaceholderText("vct_…");
+    expect(screen.queryByTestId("services-off-notice")).toBeNull();
+  });
+});
+
 describe("StepToken", () => {
   it("campo de token usa autocomplete=new-password para desabilitar o autofill/sugestão de senha salva do browser", async () => {
     // "off" é ignorado por Chrome/Edge em campos type="password" desde 2014
     // (o browser mostra a sugestão de senha salva mesmo assim) — o valor
     // que de fato suprime isso é "new-password".
-    render(<StepToken />);
+    renderWithQuery(<StepToken />);
     const input = await screen.findByPlaceholderText("vct_…");
     expect(input).toHaveAttribute("autocomplete", "new-password");
   });
 
   it("erro: campo de token não deve ter hint semântico que reative sugestões do browser", async () => {
-    render(<StepToken />);
+    renderWithQuery(<StepToken />);
     const input = await screen.findByPlaceholderText("vct_…");
     expect(input).not.toHaveAttribute("autocomplete", "off");
     expect(input).not.toHaveAttribute("autocomplete", "current-password");

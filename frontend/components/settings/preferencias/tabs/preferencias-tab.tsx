@@ -43,6 +43,7 @@ import { useIsDark } from "@/lib/hooks/use-is-dark";
 import { getPairedPresetId } from "@/lib/theme/presets";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { m } from "@/lib/paraglide/messages";
+import { useServicesDisabled } from "@/components/layout/services-off-notice";
 import { mDyn } from "@/lib/i18n-dyn";
 import {
   fetchWeeklyUsageInsight,
@@ -161,7 +162,24 @@ function ContextCompactionSection() {
  * manual funciona independente do toggle (dispara `checkForUpdates()` sob
  * demanda mesmo com o automático desligado). Invisível no navegador/modo
  * servidor: `window.vectora` só existe dentro do app desktop. */
-function AutoUpdateSection({
+export function AutoUpdateSection({
+  autoUpdateEnabled,
+  setAutoUpdateEnabled,
+}: {
+  autoUpdateEnabled: boolean;
+  setAutoUpdateEnabled: (v: boolean) => void;
+}) {
+  // Só existe no app desktop; no navegador não há atualização a consultar.
+  if (typeof window === "undefined" || !window.vectora) return null;
+  return (
+    <AutoUpdateControls
+      autoUpdateEnabled={autoUpdateEnabled}
+      setAutoUpdateEnabled={setAutoUpdateEnabled}
+    />
+  );
+}
+
+function AutoUpdateControls({
   autoUpdateEnabled,
   setAutoUpdateEnabled,
 }: {
@@ -169,8 +187,7 @@ function AutoUpdateSection({
   setAutoUpdateEnabled: (v: boolean) => void;
 }) {
   const [checking, setChecking] = useState(false);
-
-  if (typeof window === "undefined" || !window.vectora) return null;
+  const servicesOff = useServicesDisabled();
 
   const handleCheckNow = () => {
     setChecking(true);
@@ -194,13 +211,23 @@ function AutoUpdateSection({
           id="auto-update-toggle"
           checked={autoUpdateEnabled}
           onCheckedChange={setAutoUpdateEnabled}
+          disabled={servicesOff}
         />
       </div>
+      {servicesOff && (
+        <p
+          role="status"
+          data-testid="auto-update-services-off"
+          className="text-xs text-muted-foreground"
+        >
+          {m.prefs_auto_update_services_off()}
+        </p>
+      )}
       <Button
         variant="outline"
         size="sm"
         onClick={handleCheckNow}
-        disabled={checking}
+        disabled={checking || servicesOff}
       >
         {checking
           ? m.prefs_auto_update_checking()

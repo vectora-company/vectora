@@ -20,6 +20,7 @@ from typing import ClassVar, Literal
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from backend.services.availability import require_services, services_enabled
 from backend.services.extension_trust import TrustState
 from backend.services.service_auth import services_auth_headers
 
@@ -207,6 +208,14 @@ async def fetch_catalog(kind: RegistryKind) -> list[dict]:
     e sem cache: lista vazia — nunca levanta exceção.
     """
     cache = _read_cache(kind)
+    if not services_enabled():
+        return (
+            list(cache.get("entries", []))
+            if cache is not None
+            and (kind != "mcp" or _cache_has_current_mcp_shape(cache))
+            and _cache_is_fresh(cache, CACHE_TTL_OFFLINE)
+            else []
+        )
     if (
         cache is not None
         and (kind != "mcp" or _cache_has_current_mcp_shape(cache))
@@ -252,6 +261,10 @@ async def fetch_catalog_status(kind: Literal["mcp", "skills"]) -> RegistryStatus
         last_synced_at=None,
         error="status unavailable",
     )
+    if not services_enabled():
+        return fallback.model_copy(
+            update={"error": "Services disabled (--no-services)"}
+        )
     try:
         async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
             url = f"{_registry_url()}/status/{kind}"
@@ -276,6 +289,8 @@ async def fetch_catalog_status(kind: Literal["mcp", "skills"]) -> RegistryStatus
 
 async def fetch_enterprise_catalog(kind: Literal["mcp", "skills"]) -> list[dict]:
     """Fetch an optional enterprise catalog without affecting base sources."""
+    if not services_enabled():
+        return []
     base = _enterprise_registry_url()
     if not base or not _valid_registry_url(base):
         return []

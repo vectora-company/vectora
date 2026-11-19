@@ -12,7 +12,11 @@
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
 
-import { useLicenseStatus } from "@/lib/hooks/use-license-status";
+import {
+  servicesDisabled,
+  useLicenseStatus,
+} from "@/lib/hooks/use-license-status";
+import { ServicesOffNotice } from "@/components/layout/services-off-notice";
 import { m } from "@/lib/paraglide/messages";
 
 function openUrl(url: string): Promise<void> {
@@ -46,6 +50,11 @@ export function BillingPanel() {
     } finally {
       setPortalLoading(false);
     }
+  }
+
+  if (!loading && servicesDisabled(status)) {
+    // O portal de cobrança é do Services: com ele desligado a tela só explica.
+    return <ServicesOffNotice />;
   }
 
   if (loading) {

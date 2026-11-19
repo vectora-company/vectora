@@ -43,6 +43,7 @@ from typing import Literal
 import httpx
 
 from backend.runtime_profile import resolve_runtime_home
+from backend.services.availability import require_services, services_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -257,6 +258,9 @@ async def validate_license_async(*, force: bool = False) -> LicenseStatusInfo:
     ``LicenseError`` quando HÁ um token mas ele é inválido/expirado/
     revogado, ou quando a validação remota falha sem cache utilizável.
     """
+    if not services_enabled():
+        return _offline_status()
+
     if os.getenv("VECTORA_LICENSE_BYPASS", "").strip() == "1":
         logger.info("license: bypass via VECTORA_LICENSE_BYPASS=1")
         return LicenseStatusInfo(
@@ -406,8 +410,31 @@ def write_token_to_config(token: str) -> None:
     write_config_section("license", {"token": token or None})
 
 
+def _offline_status() -> LicenseStatusInfo:
+    cache = _read_cache()
+    if cache is not None and _cache_is_fresh(cache, CACHE_TTL_OFFLINE):
+        return LicenseStatusInfo(
+            tier=cache.get("tier", "free"),
+            status=cache.get("status", "active"),
+            days_remaining=int(cache.get("days_remaining", 0)),
+            expires_at=cache.get("expires_at", ""),
+            validated_at=cache.get("validated_at", ""),
+            cached=True,
+        )
+    return LicenseStatusInfo(
+        tier="free",
+        status="active",
+        days_remaining=0,
+        expires_at="",
+        validated_at=datetime.now(UTC).isoformat(),
+        cached=False,
+    )
+
+
 def read_cached_status() -> LicenseStatusInfo | None:
     """Lê o cache local sem validar remoto — usado pelo endpoint /license/status."""
+    if not services_enabled():
+        return _offline_status()
     cache = _read_cache()
     if cache is None:
         return None

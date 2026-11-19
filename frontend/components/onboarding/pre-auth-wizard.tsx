@@ -37,6 +37,10 @@ import {
   Upload,
 } from "lucide-react";
 import { m } from "@/lib/paraglide/messages";
+import {
+  ServicesOffNotice,
+  useServicesDisabled,
+} from "@/components/layout/services-off-notice";
 import { mDyn } from "@/lib/i18n-dyn";
 import { signalVpsGatePassed } from "@/lib/stores/onboarding-signal";
 import { useOnboardingDraftStore } from "@/lib/stores/onboarding-draft-store";
@@ -147,6 +151,7 @@ export function PreAuthWizard({
   const [token, setToken] = useState("");
   const [tokenError, setTokenError] = useState<string | null>(null);
   const [validating, setValidating] = useState(false);
+  const servicesOff = useServicesDisabled();
   const [settingUpLocal, setSettingUpLocal] = useState(false);
   const [backupPreview, setBackupPreview] = useState<BackupPreview | null>(
     null,
@@ -280,6 +285,12 @@ export function PreAuthWizard({
   async function handleValidateVpsToken() {
     const value = token.trim();
     if (!value) return;
+    // Validar o token é uma consulta ao Services: desligado nesta execução, o
+    // servidor responderia 503, então a tela explica sem tentar.
+    if (servicesOff) {
+      setTokenError(m.services_off_action_blocked());
+      return;
+    }
     setValidating(true);
     setTokenError(null);
     try {
@@ -744,6 +755,7 @@ export function PreAuthWizard({
                 ))}
               </ul>
             </div>
+            <ServicesOffNotice />
             <div className="space-y-1">
               <label
                 className="text-sm font-medium text-foreground"
