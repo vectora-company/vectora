@@ -1149,7 +1149,7 @@ function SessionPage() {
     right: physicalRails[sidebarOnRight ? "left" : "right"],
   };
   const assistantWorkbenchPanel = (
-    <div className="flex h-full min-w-0">
+    <div className="flex h-full w-full min-w-0">
       {!compactRails && assistantWorkbenchSide === "left" && (
         <WorkbenchNavBar threadId={threadId} side={assistantWorkbenchSide} />
       )}

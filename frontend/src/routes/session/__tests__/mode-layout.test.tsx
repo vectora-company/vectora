@@ -809,6 +809,27 @@ describe("SessionPage — tablet com faixas nas bordas", () => {
   });
 });
 
+describe("SessionPage — gaveta do workbench no layout compacto", () => {
+  it("o painel do workbench preenche a gaveta inteira, não só a largura do conteúdo", async () => {
+    setMode("assistant");
+    useWorkbenchStore.setState({ panelOpen: { t1: true } });
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 818,
+    });
+
+    render(<SessionPage />);
+
+    const overlay = await screen.findByTestId("compact-workbench-overlay");
+    const panel = overlay.firstElementChild;
+    expect(panel).not.toBeNull();
+    // Sem `w-full` o painel encolhe até o conteúdo e a gaveta fica com uma
+    // faixa vazia ao lado (o bug visto no modo compacto).
+    expect(panel).toHaveClass("w-full");
+    expect(panel).toHaveClass("h-full");
+  });
+});
+
 describe("SessionPage — laterais compactas", () => {
   it("abre uma sidebar por vez e renderiza sessões dentro do Sheet", async () => {
     setMode("assistant");
