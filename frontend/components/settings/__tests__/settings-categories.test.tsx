@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * buildSettingsCategoryGroups — gating de role (Administração) e feature flag
+ * buildSettingsCategoryGroups, findCategory — gating de role (Administração) e feature flag
  * (Connect).
  */
 
@@ -18,7 +18,10 @@ vi.mock("@/lib/paraglide/messages", () => ({
   ),
 }));
 
-import { buildSettingsCategoryGroups } from "../settings-categories";
+import {
+  buildSettingsCategoryGroups,
+  findCategory,
+} from "../settings-categories";
 
 function adminCategoryIds() {
   const groups = buildSettingsCategoryGroups({
@@ -59,5 +62,43 @@ describe("buildSettingsCategoryGroups — Administração achatada (5 categorias
       isAdmin: false,
     });
     expect(groups.find((g) => g.id === "administracao")).toBeUndefined();
+  });
+
+  it("Mídia vem depois do Provider Routing, dentro do grupo Ambiente", () => {
+    const groups = buildSettingsCategoryGroups({
+      connectEnabled: true,
+      isAdmin: false,
+    });
+    const ids = groups
+      .find((g) => g.id === "ambiente")
+      ?.categories.map((c) => c.id);
+
+    expect(ids).toBeDefined();
+    const order = ["ai_models", "provider_routing", "media", "connect"];
+    expect(ids?.filter((id) => order.includes(id))).toEqual(order);
+  });
+
+  it("Cobrança deixou de ser uma categoria e os ids antigos levam à Conta", () => {
+    const groups = buildSettingsCategoryGroups({
+      connectEnabled: false,
+      isAdmin: true,
+    });
+    const ids = groups.flatMap((g) => g.categories.map((c) => c.id));
+
+    expect(ids).not.toContain("billing");
+    expect(groups.map((g) => g.id)).not.toContain("geral_grupo");
+    expect(findCategory(groups, "billing")?.id).toBe("conta");
+    expect(findCategory(groups, "about")?.id).toBe("conta");
+  });
+
+  it("Memória não é mais uma categoria: vive no workbench e o id antigo abre Geral", () => {
+    const groups = buildSettingsCategoryGroups({
+      connectEnabled: false,
+      isAdmin: true,
+    });
+    const ids = groups.flatMap((g) => g.categories.map((c) => c.id));
+
+    expect(ids).not.toContain("memoria");
+    expect(findCategory(groups, "memoria")?.id).toBe("geral");
   });
 });

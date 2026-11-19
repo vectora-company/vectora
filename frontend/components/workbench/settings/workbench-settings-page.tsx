@@ -7,6 +7,7 @@ import type {
 } from "@/lib/types/workbench-settings";
 import { m } from "@/lib/paraglide/messages";
 import { WorkbenchSettingsContent } from "@/components/workbench/settings/workbench-settings-content";
+import { SettingsSection } from "@/components/settings/primitives";
 import { WORKBENCH_TABS } from "@/lib/stores/workbench-store";
 
 interface WorkbenchSettingsPageProps {
@@ -69,47 +70,22 @@ export function WorkbenchSettingsPage({
           ))}
         </div>
       </nav>
-      {orderedWorkbenches.map((workbench) => {
-        const items = groups.get(workbench) ?? [];
-        return (
-          <section
-            key={workbench}
-            id={`workbench-settings-${workbench}`}
-            className="min-w-0 scroll-mt-4"
+      {orderedWorkbenches.flatMap((workbench) =>
+        (groups.get(workbench) ?? []).map((descriptor, index) => (
+          <SettingsSection
+            key={descriptor.id}
+            id={index === 0 ? `workbench-settings-${workbench}` : undefined}
+            className="scroll-mt-4"
+            title={descriptor.title()}
+            description={descriptor.description?.()}
           >
-            <h2 className="mb-3 break-words text-base font-semibold">
-              {WORKBENCH_LABELS[workbench]()}
-            </h2>
-            <div className="flex min-w-0 flex-col gap-4">
-              {items.map((descriptor) => {
-                return (
-                  <article
-                    key={descriptor.id}
-                    className="min-w-0 rounded-lg border border-border/60 p-4"
-                  >
-                    <header className="mb-3 min-w-0">
-                      <h3 className="break-words text-sm font-medium">
-                        {descriptor.title()}
-                      </h3>
-                      {descriptor.description?.() && (
-                        <p className="mt-1 break-words text-xs text-muted-foreground">
-                          {descriptor.description?.()}
-                        </p>
-                      )}
-                    </header>
-                    <div className="min-w-0">
-                      <WorkbenchSettingsContent
-                        descriptor={descriptor}
-                        context={{ ...context, presentation: "settings" }}
-                      />
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          </section>
-        );
-      })}
+            <WorkbenchSettingsContent
+              descriptor={descriptor}
+              context={{ ...context, presentation: "settings" }}
+            />
+          </SettingsSection>
+        )),
+      )}
     </div>
   );
 }

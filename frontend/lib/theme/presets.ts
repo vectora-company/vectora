@@ -56,7 +56,7 @@ const TOKEN_VAR_NAMES = [
 ] as const;
 
 /** Presets baseados nos temas originais do VS Code (paletas open-source).
- * `github-*`, `nous-*`, `catppuccin-*`, `everforest-*` e `solarized-*` usam
+ * `github-*`, `nous-*`, `catppuccin-*` e `everforest-*` usam
  * exatamente as cores da extensão VS Code correspondente; `midnight`, `ember`,
  * `mono`, `cyberpunk` e `slate` não têm variante clara na extensão de origem
  * (dark-only). */
@@ -229,40 +229,6 @@ export const THEME_PRESETS: ThemePresetDef[] = [
       muted: "#373e42",
       sidebar: "#2d353b",
       userBubble: "#434e47",
-    },
-  },
-  {
-    id: "solarized-light",
-    label: "Solarized Light",
-    mode: "light",
-    family: "solarized",
-    colors: {
-      background: "#fdf6e3",
-      foreground: "#1f1f1f",
-      card: "#d3cbb7",
-      border: "#ddd6c1",
-      primary: "#675e34",
-      accent: "#ebe4ce",
-      muted: "#f4eddb",
-      sidebar: "#eee8d5",
-      userBubble: "#c6bea7",
-    },
-  },
-  {
-    id: "solarized-dark",
-    label: "Solarized Dark",
-    mode: "dark",
-    family: "solarized",
-    colors: {
-      background: "#002b36",
-      foreground: "#839496",
-      card: "#002b36",
-      border: "#234751",
-      primary: "#6ea1c4",
-      accent: "#144050",
-      muted: "#08313c",
-      sidebar: "#001f26",
-      userBubble: "#144050",
     },
   },
   {
