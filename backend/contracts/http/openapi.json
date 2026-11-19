@@ -10518,6 +10518,32 @@
         "title": "TokenResponse",
         "type": "object"
       },
+      "ToolAccessBody": {
+        "properties": {
+          "access": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Access",
+            "type": "object"
+          }
+        },
+        "required": [
+          "access"
+        ],
+        "title": "ToolAccessBody",
+        "type": "object"
+      },
       "ToolOption": {
         "description": "A single user-selectable option in a structured tool approval.",
         "properties": {
@@ -13483,6 +13509,72 @@
           }
         },
         "summary": "Patch Timezone",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/tool-access": {
+      "get": {
+        "description": "Acesso por role de cada tool (RBAC): quem pode usar o quê.",
+        "operationId": "get_tool_access_admin_tool_access_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Tool Access Admin Tool Access Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Tool Access",
+        "tags": [
+          "admin"
+        ]
+      },
+      "put": {
+        "description": "Grava o acesso por role. Só admin/root; tools e roles são validados.",
+        "operationId": "put_tool_access_admin_tool_access_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ToolAccessBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Put Tool Access Admin Tool Access Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Tool Access",
         "tags": [
           "admin"
         ]
