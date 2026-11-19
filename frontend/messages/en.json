@@ -1816,6 +1816,7 @@
   "welcome_suggestion_3": "Write tests for the most critical functions",
   "welcome_title": "What can I help with?",
   "window_close": "Close",
+  "window_maximize": "Maximize",
   "window_minimize": "Minimize",
   "window_open_as_window": "Open as window",
   "window_restore": "Restore",
