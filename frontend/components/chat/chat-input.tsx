@@ -141,6 +141,7 @@ interface ChatInputProps {
   // Context meter
   tokensUsed?: number;
   modelId?: string;
+  threadId?: string;
 
   // Modelo (seletor permanente no rodapé)
   agentConfig?: AgentConfig;
@@ -381,6 +382,7 @@ export function ChatInput({
   onRetryQueued,
   tokensUsed,
   modelId,
+  threadId,
   agentConfig,
   onAgentConfigChange,
   dropHintExpanded = false,
@@ -824,6 +826,7 @@ export function ChatInput({
                     <UsagePopover
                       tokensUsed={tokensUsed ?? 0}
                       modelId={modelId}
+                      threadId={threadId}
                     />
                   </div>
                 )}
@@ -856,6 +859,7 @@ export function ChatInput({
                     <UsagePopover
                       tokensUsed={tokensUsed ?? 0}
                       modelId={modelId}
+                      threadId={threadId}
                     />
                   </div>
                 )}

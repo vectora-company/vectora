@@ -1739,6 +1739,7 @@ export function ChatInterface({
           onRemoveQueued={handleRemoveQueued}
           onRetryQueued={handleRetryQueued}
           modelId={agentConfig?.model}
+          threadId={threadId}
           tokensUsed={contextTokens}
           agentConfig={agentConfig}
           onAgentConfigChange={onAgentConfigChange}

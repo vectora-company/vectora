@@ -113,3 +113,63 @@ describe("UsagePopover — consumo por provider", () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 });
+
+describe("UsagePopover — consumo da conversa", () => {
+  it("mostra entrada, saída e total acumulados da conversa", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (String(url).includes("/threads/t1/usage")) {
+          return new Response(
+            JSON.stringify({
+              input_tokens: 1500,
+              output_tokens: 300,
+              total_tokens: 1800,
+              runs: 2,
+            }),
+            { status: 200 },
+          );
+        }
+        return new Response(JSON.stringify({ providers: [] }), { status: 200 });
+      }),
+    );
+    render(
+      <UsagePopover
+        tokensUsed={100}
+        modelId="google-genai:gemini-2.5-flash"
+        threadId="t1"
+      />,
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button"));
+    });
+
+    const bloco = await screen.findByTestId("thread-usage");
+    expect(bloco.textContent).toContain("Consumo da conversa");
+    expect(bloco.textContent).toContain("1.5k");
+    expect(bloco.textContent).toContain("1.8k");
+  });
+
+  it("não mostra o bloco sem execuções", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ providers: [], runs: 0 }), {
+            status: 200,
+          }),
+      ),
+    );
+    render(
+      <UsagePopover
+        tokensUsed={100}
+        modelId="google-genai:gemini-2.5-flash"
+        threadId="t1"
+      />,
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button"));
+    });
+    expect(screen.queryByTestId("thread-usage")).toBeNull();
+  });
+});

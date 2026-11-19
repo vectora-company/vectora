@@ -179,6 +179,18 @@ def _row_to_message(row: Any) -> VMessage:
     return VMessage.from_dict(data)
 
 
+_THREAD_USAGE_SQL = (
+    "SELECT "
+    "COALESCE(SUM(CASE WHEN json_valid(metrics_json) "
+    "THEN json_extract(metrics_json, '$.input_tokens') END), 0), "
+    "COALESCE(SUM(CASE WHEN json_valid(metrics_json) "
+    "THEN json_extract(metrics_json, '$.output_tokens') END), 0), "
+    "COALESCE(SUM(CASE WHEN json_valid(metrics_json) "
+    "THEN json_extract(metrics_json, '$.total_tokens') END), 0), "
+    "COUNT(*) FROM agent_runs WHERE thread_id = ?"
+)
+
+
 _MESSAGE_SEARCH_SQL = (
     "SELECT f.thread_id, f.role, "
     "snippet(messages_fts, 0, '[', ']', ' … ', 24), m.created_at "
@@ -1766,6 +1778,30 @@ class SessionStore:
             except Exception:
                 await conn.rollback()
                 raise
+
+    async def thread_token_usage(self, thread_id: str) -> dict[str, Any]:
+        """Soma os tokens das execuções da conversa e devolve o último modelo."""
+        await self.setup()
+        async with self._pool.acquire() as conn:
+            rows = await conn.execute_fetchall(
+                _THREAD_USAGE_SQL,
+                (thread_id,),
+            )
+            model_rows = await conn.execute_fetchall(
+                "SELECT model FROM agent_runs WHERE thread_id = ? AND model != '' "
+                "ORDER BY started_at DESC LIMIT 1",
+                (thread_id,),
+            )
+        usage_rows = list(rows)
+        model_list = list(model_rows)
+        row = usage_rows[0] if usage_rows else (0, 0, 0, 0)
+        return {
+            "input_tokens": int(row[0] or 0),
+            "output_tokens": int(row[1] or 0),
+            "total_tokens": int(row[2] or 0),
+            "runs": int(row[3] or 0),
+            "model": str(model_list[0][0]) if model_list else "",
+        }
 
     async def list_branch_heads(
         self, thread_id: str, *, limit: int = 100
