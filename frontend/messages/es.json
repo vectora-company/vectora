@@ -1131,6 +1131,7 @@
   "prefs_image_fallback_help": "Cuando el modelo activo no procesa imágenes y el mensaje tiene un adjunto, usa este modelo automáticamente en vez de bloquear el envío.",
   "prefs_image_fallback_none": "Ninguno (bloquea el envío, comportamiento por defecto)",
   "prefs_image_fallback_title": "Modelo de fallback para imágenes",
+  "prefs_interface_section": "Interfaz",
   "prefs_language": "Idioma",
   "prefs_language_en": "English",
   "prefs_language_es": "Español",

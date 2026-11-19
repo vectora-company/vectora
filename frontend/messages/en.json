@@ -1131,6 +1131,7 @@
   "prefs_image_fallback_help": "When the active model can't process images and the message has an attachment, use this model automatically instead of blocking the send.",
   "prefs_image_fallback_none": "None (blocks the send, default behavior)",
   "prefs_image_fallback_title": "Image fallback model",
+  "prefs_interface_section": "Interface",
   "prefs_language": "Language",
   "prefs_language_en": "English",
   "prefs_language_es": "Español",
