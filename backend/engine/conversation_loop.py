@@ -1125,6 +1125,7 @@ async def run_conversation(  # noqa: PLR0911
 
     media_routed_model: str | None = None
     response_revisions = 0
+    prompt_calibration = 1.0
     for _iteracao in range(config.max_iterations):
         # Toolsets ativados na chamada anterior entram no schema desta.
         tools = tool_registry.all()
@@ -1144,6 +1145,14 @@ async def run_conversation(  # noqa: PLR0911
             default=_default_context_tokens(),
             tools_tokens=estimate_tools_tokens(tools),
         )
+        if prompt_calibration != 1.0 and config.context_max_tokens is None:
+            from backend.services.context_budget import calibrated_budget
+
+            effective_max_tokens = calibrated_budget(
+                effective_max_tokens,
+                prompt_calibration,
+                floor=_default_context_tokens(),
+            )
         from backend.services.context_planner import plan_context_with_fallback
 
         planned_context = plan_context_with_fallback(
@@ -1269,6 +1278,18 @@ async def run_conversation(  # noqa: PLR0911
             # não via `on_event`.
 
         if stream_usage is not None:
+            with contextlib.suppress(Exception):
+                from backend.services.context_budget import (
+                    calibration_ratio,
+                    estimate_tools_tokens,
+                )
+                from backend.services.context_compaction import _message_tokens
+
+                estimated = sum(_message_tokens(m) for m in historico)
+                estimated += estimate_tools_tokens(tools)
+                prompt_calibration = calibration_ratio(
+                    int(stream_usage.get("input_tokens", 0)), estimated
+                )
             with contextlib.suppress(Exception):
                 from backend.services.image_token_cost import observe_turn
 
@@ -1481,6 +1502,9 @@ async def run_conversation(  # noqa: PLR0911
             input_tokens=int(last_usage.get("input_tokens", 0) if last_usage else 0),
             output_tokens=int(last_usage.get("output_tokens", 0) if last_usage else 0),
             total_tokens=int(last_usage.get("total_tokens", 0) if last_usage else 0),
+            cached_input_tokens=int(
+                last_usage.get("cached_input_tokens", 0) if last_usage else 0
+            ),
         )
 
         if not tool_calls:
@@ -2400,6 +2424,9 @@ async def run_conversation(  # noqa: PLR0911
                 ),
                 total_tokens=int(
                     last_usage.get("total_tokens", 0) if last_usage else 0
+                ),
+                cached_input_tokens=int(
+                    last_usage.get("cached_input_tokens", 0) if last_usage else 0
                 ),
             )
             await session_store.update_agent_run_status(

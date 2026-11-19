@@ -210,13 +210,21 @@ def _with_prompt_cache(corpo: dict[str, Any]) -> dict[str, Any]:
 def _usage_metadata(usage: dict | None) -> UsageSnapshot | None:
     if not usage:
         return None
-    entrada = int(usage.get("input_tokens") or 0)
+    lido = int(usage.get("cache_read_input_tokens") or 0)
+    escrito = int(usage.get("cache_creation_input_tokens") or 0)
+    # Nas demais APIs `input_tokens` já inclui o que veio do cache; a Anthropic
+    # o reporta à parte, então somamos para o mesmo significado em todo provedor.
+    entrada = int(usage.get("input_tokens") or 0) + lido + escrito
     saida = int(usage.get("output_tokens") or 0)
-    return {
+    snapshot: UsageSnapshot = {
         "input_tokens": entrada,
         "output_tokens": saida,
         "total_tokens": entrada + saida,
     }
+    cached = lido
+    if cached:
+        snapshot["cached_input_tokens"] = cached
+    return snapshot
 
 
 class AnthropicChatClient:

@@ -895,6 +895,7 @@
   "meter_provider_usage": "Provider usage",
   "meter_requests": "requests",
   "meter_resets_in": "resets in",
+  "meter_thread_cached": "Cached input",
   "meter_thread_input": "Input",
   "meter_thread_output": "Output",
   "meter_thread_total": "Total",

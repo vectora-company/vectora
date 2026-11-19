@@ -77,3 +77,27 @@ def resolve_history_budget(
         return default
     budget = int(window * HISTORY_WINDOW_FRACTION) - tools_tokens
     return max(default, min(budget, HISTORY_BUDGET_CAP))
+
+
+_MIN_CALIBRATION = 0.5
+_MAX_CALIBRATION = 3.0
+
+
+def calibration_ratio(real_prompt_tokens: int, estimated_prompt_tokens: int) -> float:
+    """Quanto o provedor contou a mais (>1) ou a menos (<1) que a estimativa local.
+
+    Limitada para uma chamada atípica (cache, imagens) não distorcer o orçamento.
+    """
+    if real_prompt_tokens <= 0 or estimated_prompt_tokens <= 0:
+        return 1.0
+    ratio = real_prompt_tokens / estimated_prompt_tokens
+    return max(_MIN_CALIBRATION, min(ratio, _MAX_CALIBRATION))
+
+
+def calibrated_budget(budget: int, ratio: float, *, floor: int) -> int:
+    """Orçamento em tokens estimados que equivale ao orçamento real pedido.
+
+    Se o provedor conta 30% a mais que a estimativa local, o histórico precisa
+    caber em ``budget / 1.3`` na régua local para caber em ``budget`` na real.
+    """
+    return max(floor, int(budget / ratio))

@@ -187,7 +187,9 @@ _THREAD_USAGE_SQL = (
     "THEN json_extract(metrics_json, '$.output_tokens') END), 0), "
     "COALESCE(SUM(CASE WHEN json_valid(metrics_json) "
     "THEN json_extract(metrics_json, '$.total_tokens') END), 0), "
-    "COUNT(*) FROM agent_runs WHERE thread_id = ?"
+    "COUNT(*), "
+    "COALESCE(SUM(CASE WHEN json_valid(metrics_json) "
+    "THEN json_extract(metrics_json, '$.cached_input_tokens') END), 0) FROM agent_runs WHERE thread_id = ?"
 )
 
 
@@ -1794,12 +1796,13 @@ class SessionStore:
             )
         usage_rows = list(rows)
         model_list = list(model_rows)
-        row = usage_rows[0] if usage_rows else (0, 0, 0, 0)
+        row = usage_rows[0] if usage_rows else (0, 0, 0, 0, 0)
         return {
             "input_tokens": int(row[0] or 0),
             "output_tokens": int(row[1] or 0),
             "total_tokens": int(row[2] or 0),
             "runs": int(row[3] or 0),
+            "cached_input_tokens": int(row[4] or 0),
             "model": str(model_list[0][0]) if model_list else "",
         }
 

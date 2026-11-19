@@ -442,6 +442,11 @@
             "title": "Attempts",
             "type": "integer"
           },
+          "cached_input_tokens": {
+            "default": 0,
+            "title": "Cached Input Tokens",
+            "type": "integer"
+          },
           "cost_cents": {
             "default": 0.0,
             "title": "Cost Cents",
@@ -10374,6 +10379,11 @@
       "ThreadUsageResponse": {
         "description": "Consumo de tokens acumulado da conversa e janela do modelo ativo.",
         "properties": {
+          "cached_input_tokens": {
+            "default": 0,
+            "title": "Cached Input Tokens",
+            "type": "integer"
+          },
           "context_window": {
             "anyOf": [
               {
