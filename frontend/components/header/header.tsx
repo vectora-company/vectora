@@ -2,7 +2,6 @@
 
 import { ContextualHelp } from "./contextual-help";
 import { SettingsMenu } from "./settings-menu";
-import { GitStatusBadge } from "./git-status-badge";
 import { ModeSwitch } from "./mode-switcher";
 import { useElementWidth } from "@/lib/hooks/use-element-width";
 import { MessageSquare, PanelLeftOpen, PanelRightOpen } from "lucide-react";
@@ -118,7 +117,6 @@ export function Header({
             renderSessionsButton()}
           {compactNavigation?.workbenchSide !== "left" &&
             renderWorkbenchButton()}
-          <GitStatusBadge />
           <ContextualHelp onShowShortcuts={onShowShortcuts} />
           <SettingsMenu />
         </div>

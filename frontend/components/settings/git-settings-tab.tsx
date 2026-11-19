@@ -5,7 +5,6 @@ import { m } from "@/lib/paraglide/messages";
 import {
   settingsItemClass,
   SettingsStack,
-  SettingsTabHeader,
 } from "@/components/settings/primitives";
 import { cn } from "@/lib/utils";
 
@@ -17,11 +16,7 @@ export function GitSettingsTab() {
   const setSignoff = useSettingsStore((s) => s.setGitSignoffEnabled);
   const setBypass = useSettingsStore((s) => s.setGitBypassEnabled);
   return (
-    <SettingsStack className="max-w-xl">
-      <SettingsTabHeader
-        title={m.settings_category_git()}
-        description={m.settings_git_description()}
-      />
+    <SettingsStack>
       <label className={cn(settingsItemClass, "flex items-start gap-3 p-3")}>
         <input
           type="checkbox"
