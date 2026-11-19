@@ -42,13 +42,14 @@ import { GitToolbar } from "./git-toolbar";
 import { ChangesView } from "./changes-view";
 import { HistoryView, type GitCommitDetailsState } from "./history-view";
 import { CompareView } from "./compare-view";
+import { GithubView } from "./github-view";
 import { StashModal } from "./stash-modal";
 import { WorktreesModal } from "./worktrees-modal";
 import { m } from "@/lib/paraglide/messages";
 import { WorkbenchSettingsSurface } from "@/components/workbench/settings/workbench-settings-surface";
 import { gitSettings } from "@/components/workbench/settings/workbench-settings-registry";
 
-type GitView = "changes" | "history";
+type GitView = "changes" | "history" | "github";
 
 function PrDialog({
   workspaceId,
@@ -422,6 +423,22 @@ export function GitTab({
           {m.workbench_git_tab_history()}
         </button>
         <button
+          onClick={() => {
+            setCompareOpen(false);
+            setView("github");
+          }}
+          aria-pressed={!compareOpen && view === "github"}
+          role="tab"
+          aria-selected={!compareOpen && view === "github"}
+          className={`flex-1 whitespace-nowrap px-2 py-1.5 text-center text-xs font-medium transition-colors ${
+            !compareOpen && view === "github"
+              ? "border-b-2 border-primary text-foreground -mb-px"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          {m.workbench_github_tab()}
+        </button>
+        <button
           role="tab"
           aria-selected={compareOpen}
           aria-pressed={compareOpen}
@@ -453,6 +470,8 @@ export function GitTab({
             summary={summary}
             onOpenSettings={() => setSettingsOpen(true)}
           />
+        ) : view === "github" ? (
+          <GithubView key={wsId} workspaceId={wsId} />
         ) : (
           <HistoryView
             key={`${wsId}:${repoKey}`}

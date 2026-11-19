@@ -54,6 +54,7 @@ from backend.api.handlers.dag import router as dag_router
 from backend.api.handlers.feedback import router as feedback_router
 from backend.api.handlers.flags import router as flags_router
 from backend.api.handlers.gateway import router as gateway_router
+from backend.api.handlers.github import router as github_router
 from backend.api.handlers.license import router as license_router
 from backend.api.handlers.mcp_marketplace import router as mcp_marketplace_router
 from backend.api.handlers.memory import router as memory_router
@@ -867,6 +868,7 @@ def create_app(serve_static: bool = True) -> FastAPI:
     app.include_router(admin_router)
     app.include_router(backup_router)
     app.include_router(usage_router)
+    app.include_router(github_router)
     app.include_router(workspace_router)
     app.include_router(workspace_view_router)
     app.include_router(workspace_scoped_view_router)
