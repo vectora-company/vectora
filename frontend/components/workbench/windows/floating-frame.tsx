@@ -30,7 +30,7 @@ import {
   moveRect,
   resizeRect,
   snapRect,
-  type LayoutPreset,
+  type LayoutTarget,
   type Rect,
   type ResizeDir,
 } from "@/lib/layout/window-geometry";
@@ -130,8 +130,8 @@ export function FloatingFrame({
     target.addEventListener("pointercancel", finish);
   };
 
-  const applyLayout = (preset: LayoutPreset) => {
-    const next = snapRect(preset, liveRef.current, MIN_SIZE, viewportSize());
+  const applyLayout = (target: LayoutTarget) => {
+    const next = snapRect(target, liveRef.current, MIN_SIZE, viewportSize());
     setMaximized(false);
     apply(next);
     onBoundsChange(next);

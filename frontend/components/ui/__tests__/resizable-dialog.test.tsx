@@ -7,8 +7,8 @@ import { Dialog, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ResizableDialogContent } from "../resizable-dialog";
 import { useDialogSizeStore } from "@/lib/stores/dialog-size-store";
 
-vi.mock("@/lib/paraglide/messages", () => ({
-  m: {
+vi.mock("@/lib/paraglide/messages", () => {
+  const known: Record<string, () => string> = {
     dialog_close: () => "Fechar",
     dialog_resize: () => "Redimensionar diálogo",
     window_minimize: () => "Minimizar",
@@ -24,8 +24,14 @@ vi.mock("@/lib/paraglide/messages", () => ({
     window_layout_top_right: () => "Topo direito",
     window_layout_bottom_left: () => "Base esquerda",
     window_layout_bottom_right: () => "Base direita",
-  },
-}));
+  };
+  return {
+    // Mensagens não listadas devolvem a própria chave (rótulos que o teste não checa).
+    m: new Proxy(known, {
+      get: (target, prop: string) => target[prop] ?? (() => prop),
+    }),
+  };
+});
 
 function renderDialog(
   storageKey?: string,
@@ -302,7 +308,7 @@ describe("ResizableDialogContent", () => {
     renderDialog("layout-dialog", 2000, 2000);
 
     fireEvent.click(screen.getByRole("button", { name: "Layout" }));
-    fireEvent.click(screen.getByTestId("window-layout-right"));
+    fireEvent.click(screen.getByTestId("window-layout-zone-right"));
 
     expect(content().style.left).toBe("800px");
     expect(content().style.top).toBe("0px");

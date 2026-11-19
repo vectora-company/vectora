@@ -16,7 +16,7 @@ import {
   moveRect,
   resizeRect,
   snapRect,
-  type LayoutPreset,
+  type LayoutTarget,
   type Rect,
   type ResizeDir,
 } from "@/lib/layout/window-geometry";
@@ -217,9 +217,9 @@ export function ResizableDialogContent({
   };
 
   /** Encaixa a janela (metade, canto ou centro) pelo menu de layout. */
-  const applyLayout = (preset: LayoutPreset) => {
+  const applyLayout = (target: LayoutTarget) => {
     const next = snapRect(
-      preset,
+      target,
       liveRef.current,
       { w: minWidth, h: minHeight },
       viewport(),

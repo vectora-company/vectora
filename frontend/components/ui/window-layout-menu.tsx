@@ -4,46 +4,38 @@ import * as React from "react";
 import { LayoutGrid } from "lucide-react";
 
 import { m } from "@/lib/paraglide/messages";
-import { cn } from "@/lib/utils";
-import { LAYOUT_GRID, type LayoutPreset } from "@/lib/layout/window-geometry";
+import {
+  LAYOUT_TEMPLATES,
+  type LayoutTarget,
+} from "@/lib/layout/window-geometry";
 
 /** Tempo que o painel espera antes de fechar, para dar tempo de chegar nele. */
 const CLOSE_DELAY_MS = 150;
 
-const LABELS: Record<LayoutPreset, () => string> = {
-  center: () => m.window_layout_center(),
+const ZONE_LABELS: Record<string, () => string> = {
   left: () => m.window_layout_left(),
   right: () => m.window_layout_right(),
-  top: () => m.window_layout_top(),
-  bottom: () => m.window_layout_bottom(),
+  "left-wide": () => m.window_layout_left_wide(),
+  "right-narrow": () => m.window_layout_right_narrow(),
+  "third-left": () => m.window_layout_third_left(),
+  "third-center": () => m.window_layout_third_center(),
+  "third-right": () => m.window_layout_third_right(),
   "top-left": () => m.window_layout_top_left(),
   "top-right": () => m.window_layout_top_right(),
   "bottom-left": () => m.window_layout_bottom_left(),
   "bottom-right": () => m.window_layout_bottom_right(),
 };
 
-/** Região que o encaixe ocupa, em % do miniatura (esquema desenhado no botão). */
-const THUMB: Record<LayoutPreset, string> = {
-  center: "left-[25%] top-[25%] h-1/2 w-1/2",
-  left: "left-0 top-0 h-full w-1/2",
-  right: "right-0 top-0 h-full w-1/2",
-  top: "left-0 top-0 h-1/2 w-full",
-  bottom: "bottom-0 left-0 h-1/2 w-full",
-  "top-left": "left-0 top-0 h-1/2 w-1/2",
-  "top-right": "right-0 top-0 h-1/2 w-1/2",
-  "bottom-left": "bottom-0 left-0 h-1/2 w-1/2",
-  "bottom-right": "bottom-0 right-0 h-1/2 w-1/2",
-};
-
 interface WindowLayoutMenuProps {
-  onSelect: (preset: LayoutPreset) => void;
+  onSelect: (target: LayoutTarget) => void;
   className?: string;
 }
 
 /**
- * Botão de layout da janela: ao passar o mouse (ou focar/clicar) abre uma
- * grade 3x3 com os encaixes — cantos, metades e centralizar — como os layouts
- * de encaixe do sistema.
+ * Botão de layout da janela, no estilo dos layouts de encaixe do Windows 11:
+ * ao passar o mouse (ou focar/clicar) abre um painel com poucos modelos de
+ * divisão desenhados; a zona sob o mouse acende e clicar nela encaixa a
+ * janela ali. Um botão extra centraliza.
  */
 export function WindowLayoutMenu({
   onSelect,
@@ -62,9 +54,15 @@ export function WindowLayoutMenu({
   };
   React.useEffect(() => () => clearTimeout(timer.current), []);
 
+  const choose = (target: LayoutTarget) => {
+    onSelect(target);
+    setOpen(false);
+  };
+
   return (
+    // z-index alto: o painel precisa ficar acima do editor (minimap, rolagem).
     <div
-      className="relative"
+      className="relative z-[1000]"
       onMouseEnter={show}
       onMouseLeave={hideSoon}
       onBlur={(event) => {
@@ -81,7 +79,6 @@ export function WindowLayoutMenu({
       <button
         type="button"
         aria-label={m.window_layout()}
-        title={m.window_layout()}
         aria-haspopup="true"
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
@@ -94,29 +91,48 @@ export function WindowLayoutMenu({
           role="group"
           aria-label={m.window_layout()}
           data-testid="window-layout-panel"
-          className="absolute top-full right-0 z-30 mt-1 grid grid-cols-3 gap-1 rounded-md border bg-popover p-1.5 shadow-lg"
+          className="absolute top-full right-0 mt-2 w-max rounded-lg border bg-popover p-2.5 text-popover-foreground shadow-xl"
         >
-          {LAYOUT_GRID.map((preset) => (
-            <button
-              key={preset}
-              type="button"
-              data-testid={`window-layout-${preset}`}
-              aria-label={LABELS[preset]()}
-              title={LABELS[preset]()}
-              onClick={() => {
-                onSelect(preset);
-                setOpen(false);
-              }}
-              className="group relative h-6 w-9 rounded-xs border border-border/70 bg-muted/40 hover:border-primary focus-visible:border-primary focus-visible:outline-hidden"
-            >
-              <span
-                className={cn(
-                  "absolute rounded-[2px] bg-muted-foreground/50 group-hover:bg-primary group-focus-visible:bg-primary",
-                  THUMB[preset],
-                )}
-              />
-            </button>
-          ))}
+          <div className="grid grid-cols-2 gap-2.5">
+            {LAYOUT_TEMPLATES.map((template) => (
+              <div
+                key={template.id}
+                data-testid={`window-layout-template-${template.id}`}
+                className="relative h-14 w-24 rounded-md border border-border/70 bg-muted/30 p-0.5"
+              >
+                <div className="relative h-full w-full">
+                  {template.zones.map((zone) => (
+                    <div
+                      key={zone.id}
+                      className="absolute p-px"
+                      style={{
+                        left: `${zone.x * 100}%`,
+                        top: `${zone.y * 100}%`,
+                        width: `${zone.w * 100}%`,
+                        height: `${zone.h * 100}%`,
+                      }}
+                    >
+                      <button
+                        type="button"
+                        data-testid={`window-layout-zone-${zone.id}`}
+                        aria-label={ZONE_LABELS[zone.id]?.() ?? zone.id}
+                        onClick={() => choose(zone)}
+                        className="block h-full w-full rounded-[3px] bg-muted-foreground/30 transition-colors hover:bg-primary focus-visible:bg-primary focus-visible:outline-hidden"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            data-testid="window-layout-center"
+            onClick={() => choose("center")}
+            className="mt-2.5 w-full rounded-md px-2 py-1 text-center text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:outline-hidden"
+          >
+            {m.window_layout_center()}
+          </button>
         </div>
       )}
     </div>

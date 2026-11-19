@@ -53,7 +53,7 @@ describe("FloatingFrame — menu de layout", () => {
     const onBoundsChange = setup();
 
     fireEvent.click(screen.getByRole("button", { name: "window_layout" }));
-    fireEvent.click(screen.getByTestId("window-layout-bottom-left"));
+    fireEvent.click(screen.getByTestId("window-layout-zone-bottom-left"));
 
     expect(onBoundsChange).toHaveBeenCalledWith({
       x: 0,

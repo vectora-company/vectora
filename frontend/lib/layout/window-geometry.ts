@@ -68,73 +68,103 @@ export function fitRectToViewport(rect: Rect, min: Size, viewport: Size): Rect {
   };
 }
 
-export type LayoutPreset =
-  | "center"
-  | "left"
-  | "right"
-  | "top"
-  | "bottom"
-  | "top-left"
-  | "top-right"
-  | "bottom-left"
-  | "bottom-right";
+/** Região da tela, em frações de 0 a 1 (como as zonas de um modelo de encaixe). */
+export interface LayoutZone {
+  id: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
 
-/** Fração da tela (null = manter o tamanho atual) e âncora (0, 0,5 ou 1). */
-const PRESETS: Record<
-  LayoutPreset,
-  { fw: number | null; fh: number | null; ax: number; ay: number }
-> = {
-  center: { fw: null, fh: null, ax: 0.5, ay: 0.5 },
-  left: { fw: 0.5, fh: 1, ax: 0, ay: 0 },
-  right: { fw: 0.5, fh: 1, ax: 1, ay: 0 },
-  top: { fw: 1, fh: 0.5, ax: 0, ay: 0 },
-  bottom: { fw: 1, fh: 0.5, ax: 0, ay: 1 },
-  "top-left": { fw: 0.5, fh: 0.5, ax: 0, ay: 0 },
-  "top-right": { fw: 0.5, fh: 0.5, ax: 1, ay: 0 },
-  "bottom-left": { fw: 0.5, fh: 0.5, ax: 0, ay: 1 },
-  "bottom-right": { fw: 0.5, fh: 0.5, ax: 1, ay: 1 },
-};
+export interface LayoutTemplate {
+  id: string;
+  zones: LayoutZone[];
+}
 
-/** Ordem de exibição na grade 3x3 do menu de layout. */
-export const LAYOUT_GRID: LayoutPreset[] = [
-  "top-left",
-  "top",
-  "top-right",
-  "left",
-  "center",
-  "right",
-  "bottom-left",
-  "bottom",
-  "bottom-right",
+const zone = (
+  id: string,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+): LayoutZone => ({ id, x, y, w, h });
+
+/** Modelos de divisão oferecidos no menu de layout, no estilo do Windows 11. */
+export const LAYOUT_TEMPLATES: LayoutTemplate[] = [
+  {
+    id: "halves",
+    zones: [zone("left", 0, 0, 0.5, 1), zone("right", 0.5, 0, 0.5, 1)],
+  },
+  {
+    id: "wide-narrow",
+    zones: [
+      zone("left-wide", 0, 0, 2 / 3, 1),
+      zone("right-narrow", 2 / 3, 0, 1 / 3, 1),
+    ],
+  },
+  {
+    id: "thirds",
+    zones: [
+      zone("third-left", 0, 0, 1 / 3, 1),
+      zone("third-center", 1 / 3, 0, 1 / 3, 1),
+      zone("third-right", 2 / 3, 0, 1 / 3, 1),
+    ],
+  },
+  {
+    id: "quarters",
+    zones: [
+      zone("top-left", 0, 0, 0.5, 0.5),
+      zone("top-right", 0.5, 0, 0.5, 0.5),
+      zone("bottom-left", 0, 0.5, 0.5, 0.5),
+      zone("bottom-right", 0.5, 0.5, 0.5, 0.5),
+    ],
+  },
 ];
 
+/** Destino de um encaixe: uma zona de um modelo ou centralizar mantendo o tamanho. */
+export type LayoutTarget = LayoutZone | "center";
+
 /**
- * Posição e tamanho de um encaixe (metade, quadrante ou centro). Respeita o
- * tamanho mínimo e o máximo: se a metade da tela for menor que o mínimo, a
- * janela fica no mínimo, ainda ancorada no lado pedido e dentro da tela.
+ * Posição e tamanho de um encaixe. Respeita o tamanho mínimo e o máximo: se a
+ * zona for menor que o mínimo, a janela fica no mínimo, colada ao lado da
+ * zona (direita/base quando a zona encosta nesses lados) e dentro da tela.
  */
 export function snapRect(
-  preset: LayoutPreset,
+  target: LayoutTarget,
   current: Rect,
   min: Size,
   viewport: Size,
   max: Size = { w: Number.POSITIVE_INFINITY, h: Number.POSITIVE_INFINITY },
 ): Rect {
-  const { fw, fh, ax, ay } = PRESETS[preset];
-  const w = clamp(
-    fw === null ? current.w : viewport.w * fw,
-    min.w,
-    Math.min(max.w, viewport.w),
-  );
-  const h = clamp(
-    fh === null ? current.h : viewport.h * fh,
-    min.h,
-    Math.min(max.h, viewport.h),
-  );
+  const limitW = Math.min(max.w, viewport.w);
+  const limitH = Math.min(max.h, viewport.h);
+  if (target === "center") {
+    const w = clamp(current.w, min.w, limitW);
+    const h = clamp(current.h, min.h, limitH);
+    return {
+      w: Math.round(w),
+      h: Math.round(h),
+      x: Math.round((viewport.w - w) / 2),
+      y: Math.round((viewport.h - h) / 2),
+    };
+  }
+  const w = clamp(viewport.w * target.w, min.w, limitW);
+  const h = clamp(viewport.h * target.h, min.h, limitH);
+  // Zona que começa no início do eixo fica colada nele; só as que começam
+  // adiante e chegam ao fim (direita/base) ficam coladas ao fim.
+  const x =
+    target.x > 0 && target.x + target.w >= 1
+      ? viewport.w - w
+      : viewport.w * target.x;
+  const y =
+    target.y > 0 && target.y + target.h >= 1
+      ? viewport.h - h
+      : viewport.h * target.y;
   return {
     w: Math.round(w),
     h: Math.round(h),
-    x: Math.round((viewport.w - w) * ax),
-    y: Math.round((viewport.h - h) * ay),
+    x: Math.round(clamp(x, 0, viewport.w - w)),
+    y: Math.round(clamp(y, 0, viewport.h - h)),
   };
 }
