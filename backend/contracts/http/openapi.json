@@ -1458,6 +1458,15 @@
       },
       "CloseBody": {
         "properties": {
+          "scope": {
+            "default": "workspace",
+            "enum": [
+              "workspace",
+              "thread"
+            ],
+            "title": "Scope",
+            "type": "string"
+          },
           "terminal_id": {
             "title": "Terminal Id",
             "type": "string"
@@ -3252,6 +3261,94 @@
           "reference"
         ],
         "title": "DmrModelRequest",
+        "type": "object"
+      },
+      "EmbeddingQueueCleanupBody": {
+        "properties": {
+          "days": {
+            "default": 30,
+            "maximum": 365.0,
+            "minimum": 1.0,
+            "title": "Days",
+            "type": "integer"
+          }
+        },
+        "title": "EmbeddingQueueCleanupBody",
+        "type": "object"
+      },
+      "EmbeddingQueueFailure": {
+        "properties": {
+          "attempt_count": {
+            "title": "Attempt Count",
+            "type": "integer"
+          },
+          "collection": {
+            "title": "Collection",
+            "type": "string"
+          },
+          "error": {
+            "title": "Error",
+            "type": "string"
+          },
+          "queue_id": {
+            "title": "Queue Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "queue_id",
+          "collection",
+          "status",
+          "attempt_count",
+          "error"
+        ],
+        "title": "EmbeddingQueueFailure",
+        "type": "object"
+      },
+      "EmbeddingQueueRetryBody": {
+        "properties": {
+          "limit": {
+            "default": 100,
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "title": "EmbeddingQueueRetryBody",
+        "type": "object"
+      },
+      "EmbeddingQueueState": {
+        "properties": {
+          "failures": {
+            "items": {
+              "$ref": "#/components/schemas/EmbeddingQueueFailure"
+            },
+            "title": "Failures",
+            "type": "array"
+          },
+          "pending": {
+            "title": "Pending",
+            "type": "integer"
+          },
+          "stats": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Stats",
+            "type": "object"
+          }
+        },
+        "required": [
+          "stats",
+          "pending",
+          "failures"
+        ],
+        "title": "EmbeddingQueueState",
         "type": "object"
       },
       "EnvOverrideRequest": {
@@ -13038,6 +13135,191 @@
           }
         },
         "summary": "Patch Server Config",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/embedding-queue": {
+      "get": {
+        "description": "Estado da indexação: itens por status e as falhas mais recentes.",
+        "operationId": "get_embedding_queue_state_admin_embedding_queue_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmbeddingQueueState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Embedding Queue State",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/embedding-queue/cleanup": {
+      "post": {
+        "description": "Remove falhas e itens da DLQ mais antigos que o prazo informado.",
+        "operationId": "cleanup_embedding_queue_admin_embedding_queue_cleanup_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmbeddingQueueCleanupBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "title": "Response Cleanup Embedding Queue Admin Embedding Queue Cleanup Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cleanup Embedding Queue",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/embedding-queue/retry": {
+      "post": {
+        "description": "Reenfileira falhas e itens da DLQ para uma nova tentativa.",
+        "operationId": "retry_embedding_queue_admin_embedding_queue_retry_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmbeddingQueueRetryBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "title": "Response Retry Embedding Queue Admin Embedding Queue Retry Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retry Embedding Queue",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/embedding-queue/{queue_id}/discard": {
+      "post": {
+        "description": "Move um item para a DLQ, sem novas tentativas automáticas.",
+        "operationId": "discard_embedding_queue_item_admin_embedding_queue__queue_id__discard_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "queue_id",
+            "required": true,
+            "schema": {
+              "title": "Queue Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Discard Embedding Queue Item Admin Embedding Queue  Queue Id  Discard Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Discard Embedding Queue Item",
         "tags": [
           "admin"
         ]
@@ -26160,7 +26442,7 @@
     },
     "/vectora.terminal.v1/list": {
       "get": {
-        "description": "Lista os terminais ativos da sessão (do usuário autenticado).",
+        "description": "Lista os terminais ativos da sessão (do usuário autenticado).\n\nO padrão (``workspace``) lista todos os terminais do usuário no workspace:\na thread da interface e a do agente são diferentes de propósito, e filtrar\npor thread faria um terminal já aberto sumir e outro shell ser criado.\n``scope=thread`` restringe aos terminais anexados a esta conversa.",
         "operationId": "list_terminals_vectora_terminal_v1_list_get",
         "parameters": [
           {
@@ -26178,6 +26460,20 @@
             "required": true,
             "schema": {
               "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "default": "workspace",
+              "enum": [
+                "workspace",
+                "thread"
+              ],
+              "title": "Scope",
               "type": "string"
             }
           }

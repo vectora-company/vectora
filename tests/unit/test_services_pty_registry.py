@@ -49,12 +49,15 @@ def test_close_unknown_returns_false():
     assert reg.close("nao") is False
 
 
-def test_list_for_thread_filters():
+def test_list_for_context_filters_user_thread_and_workspace():
     reg = PtyRegistry()
     reg.add(_FakeSession("a", thread_id="t1"))  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
     reg.add(_FakeSession("b", thread_id="t1"))  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
     reg.add(_FakeSession("c", thread_id="t2"))  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
-    assert {s.terminal_id for s in reg.list_for_thread("t1")} == {"a", "b"}
+    reg.add(_FakeSession("d", thread_id="t1", user_id="u2"))  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
+    reg.add(_FakeSession("e", thread_id="t1", workspace_id="ws2"))  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
+    found = reg.list_for_context(user_id="u1", thread_id="t1", workspace_id="ws1")
+    assert {s.terminal_id for s in found} == {"a", "b"}
 
 
 def test_list_for_user_workspace_prioriza_anexo_mais_recente() -> None:

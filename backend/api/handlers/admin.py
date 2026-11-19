@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from backend.api.schemas import (
     CreateInviteRequest,
@@ -1658,3 +1658,100 @@ async def revoke_service_token_endpoint(request: Request, token_id: str) -> dict
         revoked,
     )
     return {"revoked": revoked}
+
+
+# ---------------------------------------------------------------------------
+# Fila de embedding (indexação do RAG)
+# ---------------------------------------------------------------------------
+
+
+class EmbeddingQueueFailure(BaseModel):
+    queue_id: str
+    collection: str
+    status: str
+    attempt_count: int
+    error: str
+
+
+class EmbeddingQueueState(BaseModel):
+    stats: dict[str, int]
+    pending: int
+    failures: list[EmbeddingQueueFailure]
+
+
+class EmbeddingQueueRetryBody(BaseModel):
+    limit: int = Field(default=100, ge=1, le=1000)
+
+
+class EmbeddingQueueCleanupBody(BaseModel):
+    days: int = Field(default=30, ge=1, le=365)
+
+
+async def _embedding_queue() -> Any:
+    from backend.embedding.queue import get_configured_embedding_queue
+
+    try:
+        return await get_configured_embedding_queue(settings.embedding_queue_dsn)
+    except Exception as exc:
+        logger.warning("admin: fila de embedding indisponível: %s", exc)
+        raise HTTPException(
+            status_code=503, detail="A fila de embedding não está disponível."
+        ) from exc
+
+
+@router.get("/embedding-queue", response_model=EmbeddingQueueState)
+async def get_embedding_queue_state(
+    request: Request, limit: Annotated[int, Query(ge=1, le=100)] = 20
+) -> EmbeddingQueueState:
+    """Estado da indexação: itens por status e as falhas mais recentes."""
+    require_admin(_get_user(request))
+    queue = await _embedding_queue()
+    stats = await queue.get_stats()
+    failures = await queue.list_failures(limit)
+    return EmbeddingQueueState(
+        stats=stats,
+        pending=await queue.count_pending(),
+        failures=[
+            EmbeddingQueueFailure(**{**item, "error": item["error"][:300]})
+            for item in failures
+        ],
+    )
+
+
+@router.post("/embedding-queue/retry")
+async def retry_embedding_queue(
+    request: Request, body: EmbeddingQueueRetryBody
+) -> dict[str, int]:
+    """Reenfileira falhas e itens da DLQ para uma nova tentativa."""
+    user = _get_user(request)
+    require_admin(user)
+    queue = await _embedding_queue()
+    moved = await queue.retry_failed(body.limit)
+    logger.info("admin: %s reenfileirou %d itens de embedding", user.id, moved)
+    return {"moved": moved}
+
+
+@router.post("/embedding-queue/cleanup")
+async def cleanup_embedding_queue(
+    request: Request, body: EmbeddingQueueCleanupBody
+) -> dict[str, int]:
+    """Remove falhas e itens da DLQ mais antigos que o prazo informado."""
+    user = _get_user(request)
+    require_admin(user)
+    queue = await _embedding_queue()
+    deleted = await queue.cleanup_old_records(body.days)
+    logger.info("admin: %s removeu %d falhas antigas de embedding", user.id, deleted)
+    return {"deleted": deleted}
+
+
+@router.post("/embedding-queue/{queue_id}/discard")
+async def discard_embedding_queue_item(
+    request: Request, queue_id: str
+) -> dict[str, str]:
+    """Move um item para a DLQ, sem novas tentativas automáticas."""
+    user = _get_user(request)
+    require_admin(user)
+    queue = await _embedding_queue()
+    await queue.mark_dlq(queue_id, f"descartado por {user.id}")
+    logger.info("admin: %s descartou o item de embedding %s", user.id, queue_id)
+    return {"status": "dlq", "queue_id": queue_id}
