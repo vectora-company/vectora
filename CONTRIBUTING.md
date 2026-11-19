@@ -109,7 +109,7 @@ A configuração das linhas está em `.github/release-lines.json`.
 
 O Vectora oferece suporte a macOS somente em Apple Silicon (`arm64`). Não planejamos oferecer suporte a Macs Intel: a linha de hardware e sistema foi descontinuada pela Apple, e a cadeia de CI, dependências, sidecars e aplicações externas usadas pelo Vectora já não oferece uma base sustentável para mantê-la. Não adicione builds, testes ou documentação de suporte para macOS Intel.
 
-Todo PR usa a base da linha que ele atinge e a milestone correspondente; o workflow `PR Release Milestone` atribui a milestone e bloqueia combinações incompatíveis. As versões são calculadas dos commits pelo workflow de release, que abre o PR `chore(master): release X.Y.Z`. Uma correção aplicada na linha de manutenção também precisa chegar à linha de desenvolvimento; o workflow de propagação abre esse PR.
+Todo PR usa a base da linha que ele atinge e a milestone correspondente; o workflow `PR Gate` atribui a milestone e bloqueia combinações incompatíveis. As versões são calculadas dos commits pelo workflow de release, que abre o PR `chore(master): release X.Y.Z`. Uma correção aplicada na linha de manutenção também precisa chegar à linha de desenvolvimento; o workflow de propagação abre esse PR.
 
 ## Mudanças em `.github/`
 
@@ -174,4 +174,4 @@ A simulação confere a lógica do job: a ordem e os argumentos das chamadas, o 
 
 ## O que o CI executa em PRs
 
-Os workflows de PR rodam a versão do próprio PR. Eles validam título (Conventional Commits), ausência de referências proibidas no texto do PR, milestone, labels, lint, tipos, testes, varredura de segurança (Snyk) e o build dos instaladores. PRs de fork rodam sem segredos: rotulagem, milestone e comentários automáticos só valem para branches do próprio repositório.
+Os workflows de PR rodam a versão do próprio PR. Eles validam título (Conventional Commits), ausência de referências proibidas no texto do PR, milestone, labels, lint, tipos, testes, varredura de segurança (gitleaks) e o build dos instaladores. PRs de fork rodam sem segredos: rotulagem, milestone e comentários automáticos só valem para branches do próprio repositório.
