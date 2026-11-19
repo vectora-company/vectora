@@ -30,17 +30,22 @@ def decision_model_enabled_for(ctx: object, surface: str | tuple[str, ...]) -> b
     )
 
 
+_DECISION_PROVIDERS = frozenset(
+    {"clef-local", "laya-local", "clef-api", "jev-api", "openrouter-api"}
+)
+
+
 def selected_decision_model_provider(ctx: object) -> DecisionProviderType | None:
     """Return a supported provider id from the trusted context snapshot."""
     provider = decision_model_preferences(ctx).get("provider")
-    if provider in {"clef-local", "laya-local", "clef-api", "jev-api"}:
+    if provider in _DECISION_PROVIDERS:
         return cast("DecisionProviderType", provider)
     return None
 
 
 def decision_model_runtime_fingerprint(provider: str | None) -> str | None:
     """Fingerprint provider routing and credentials without persisting secrets."""
-    if provider not in {"clef-local", "laya-local", "clef-api", "jev-api"}:
+    if provider not in _DECISION_PROVIDERS:
         return None
 
     from backend.settings import settings
@@ -57,6 +62,12 @@ def decision_model_runtime_fingerprint(provider: str | None) -> str | None:
             "model": settings.systemone_laya_model,
             "credential": settings.systemone_laya_api_key
             or os.getenv("LAYA_API_KEY", ""),
+        }
+    elif provider == "openrouter-api":
+        config = {
+            "model": settings.systemone_openrouter_model,
+            "credential": settings.openrouter_api_key
+            or os.getenv("OPENROUTER_API_KEY", ""),
         }
     elif provider == "clef-api":
         config = {
