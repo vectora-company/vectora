@@ -192,6 +192,7 @@ something. Do not save one-off task details. Briefly confirm in your reply.
 
 Use `get_memory` or `search_memory` only when the answer is not in this
 conversation and may come from an earlier one.
+Use `search_sessions` to find what was said in earlier conversations.
 
 ---
 

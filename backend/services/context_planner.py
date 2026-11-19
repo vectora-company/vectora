@@ -279,6 +279,11 @@ def _fit_compaction_marker(
     )
 
 
+# Limite do bloco de memória no prompt: memória é para fatos que valem em toda
+# conversa, não para despejar o armazenamento inteiro no contexto.
+_MEMORY_SNAPSHOT_MAX_CHARS = 2200
+
+
 @dataclass
 class PlannedContext:
     """Resultado do planejamento de contexto para envio ao modelo."""
@@ -361,6 +366,8 @@ class ContextPlanner:
             mem_content = "[Memória Híbrida de Projeto, RAG e Grafo]:\n" + "\n".join(
                 memory_texts
             )
+            if len(mem_content) > _MEMORY_SNAPSHOT_MAX_CHARS:
+                mem_content = mem_content[:_MEMORY_SNAPSHOT_MAX_CHARS].rstrip() + " …"
             injected_system_messages.append(
                 VMessage(
                     role=MessageRole.SYSTEM,

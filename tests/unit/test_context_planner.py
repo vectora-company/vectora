@@ -817,3 +817,29 @@ def test_memoria_entra_depois_das_instrucoes_de_sistema() -> None:
     assert planned.messages[0].text() == "prompt de sistema"
     assert "Usar ruff" in planned.messages[1].text()
     assert planned.messages[2].text() == "oi"
+
+
+def test_bloco_de_memoria_tem_limite_de_caracteres() -> None:
+    from backend.services.context_planner import plan_context
+    from backend.services.memory_store import MemoryRecord
+    from backend.vtypes.message import MessageRole, text_message
+
+    records = [
+        MemoryRecord(
+            id=f"m{i}",
+            domain="project",
+            scope_id="global",
+            content="x" * 3000,
+            provenance="teste",
+        )
+        for i in range(3)
+    ]
+    planned = plan_context(
+        [text_message(MessageRole.USER, "oi")],
+        max_tokens=100_000,
+        persistent_memory_records=records,
+    )
+
+    bloco = planned.messages[0].text()
+    assert len(bloco) <= 2210
+    assert bloco.endswith("…")

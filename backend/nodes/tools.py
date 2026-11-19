@@ -89,6 +89,9 @@ from backend.tools import (
     rag as _rag_module,
 )
 from backend.tools import (
+    session_search as _session_search_module,
+)
+from backend.tools import (
     slack as _slack_module,
 )
 from backend.tools import (
@@ -305,6 +308,7 @@ save_memory = _bridge("save_memory")
 get_memory = _bridge("get_memory")
 delete_memory = _bridge("delete_memory")
 search_memory = _bridge("search_memory")
+search_sessions = _bridge("search_sessions")
 generate_image = _bridge("generate_image")
 text_to_speech = _bridge("text_to_speech")
 generate_video = _bridge("generate_video")
@@ -414,6 +418,7 @@ MEMORY_TOOLS: list[ToolSpec] = [
     get_memory,
     delete_memory,
     search_memory,
+    search_sessions,
     learn_from_session,
     install_learned_skill,
     save_learned_fact,
@@ -609,6 +614,7 @@ for _t in [
     get_memory,
     delete_memory,
     search_memory,
+    search_sessions,
     learn_from_session,
     install_learned_skill,
     save_learned_fact,
@@ -777,6 +783,7 @@ CHAT_TOOLS: list[ToolSpec] = [
     get_memory,
     delete_memory,
     search_memory,
+    search_sessions,
     google_drive_list,
     google_drive_read,
     google_drive_search,

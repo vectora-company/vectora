@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 from collections.abc import AsyncGenerator, Mapping
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -176,6 +177,25 @@ def _row_to_message(row: Any) -> VMessage:
         "is_error": None if is_error is None else bool(is_error),
     }
     return VMessage.from_dict(data)
+
+
+_MESSAGE_SEARCH_SQL = (
+    "SELECT f.thread_id, f.role, "
+    "snippet(messages_fts, 0, '[', ']', ' … ', 24), m.created_at "
+    "FROM messages_fts f "
+    "JOIN messages m ON m.id = f.rowid "
+    "JOIN sessions s ON s.thread_id = f.thread_id "
+    "WHERE messages_fts MATCH ? AND s.user_id = ? "
+    "AND f.text NOT LIKE '[cancelado]%' AND f.text NOT LIKE '[falha]%' "
+    "{exclude}"
+    "ORDER BY bm25(messages_fts) LIMIT ?"
+)
+
+
+def _fts_match_expression(query: str) -> str:
+    """Consulta FTS5 segura: cada termo vira uma frase entre aspas, unidas por AND."""
+    terms = [t for t in re.findall(r"\w+", query, flags=re.UNICODE) if len(t) > 1]
+    return " AND ".join(f'"{t}"' for t in terms[:12])
 
 
 class SessionSummary(TypedDict):
@@ -1602,6 +1622,47 @@ class SessionStore:
             thread_id, up_to_message_id=up_to_message_id
         )
         return [msg for _id, msg in pares]
+
+    async def search_messages(
+        self,
+        user_id: str,
+        query: str,
+        *,
+        limit: int = 5,
+        exclude_thread_id: str | None = None,
+    ) -> list[dict[str, str]]:
+        """Busca full-text (FTS5) nas mensagens de usuário e assistente do usuário.
+
+        Devolve as melhores correspondências com um trecho em torno do termo.
+        Lista vazia se a consulta for vazia ou o SQLite não tiver FTS5.
+        """
+        match = _fts_match_expression(query)
+        if not match:
+            return []
+        await self.setup()
+        params: list[Any] = [match, user_id]
+        exclude_sql = ""
+        if exclude_thread_id:
+            exclude_sql = "AND f.thread_id != ? "
+            params.append(exclude_thread_id)
+        params.append(max(1, min(limit, 20)))
+        sql = _MESSAGE_SEARCH_SQL.replace("{exclude}", exclude_sql)
+        async with self._pool.acquire() as conn:
+            try:
+                rows = await conn.execute_fetchall(sql, params)
+            except Exception as exc:
+                if "no such table" in str(exc).lower():
+                    return []
+                raise
+        return [
+            {
+                "thread_id": str(r[0]),
+                "role": str(r[1]),
+                "snippet": str(r[2]),
+                "created_at": str(r[3]),
+            }
+            for r in rows
+        ]
 
     async def get_history_with_ids(
         self, thread_id: str, *, up_to_message_id: int | None = None
