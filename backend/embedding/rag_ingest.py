@@ -13,7 +13,9 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from backend.embedding.queue import get_embedding_queue
+from backend.embedding.queue import (
+    get_configured_embedding_queue as get_embedding_queue,
+)
 from backend.services.ignore import load_ignore_spec, walk_files
 from backend.services.security import is_safe_file_path
 from backend.services.text import text_service
@@ -283,12 +285,13 @@ async def ingest_directory(
             try:
                 await queue.enqueue(chunk, collection, metadata, job_id=job)
                 total_chunks += 1
-            except Exception:
+            except Exception as exc:
                 logger.warning(
                     "rag_ingest: falha ao enfileirar chunk de %s",
                     file_path,
                     exc_info=True,
                 )
+                raise RuntimeError("Falha ao enfileirar trecho para indexação") from exc
 
     logger.info(
         "rag_ingest_enqueued",

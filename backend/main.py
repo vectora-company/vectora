@@ -493,6 +493,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "  test <DSN>         testa conectividade a um banco\n"
             "  wizard             configura o backend interativamente (BaaS)\n"
             "  migrate status|history|plan|upgrade\n"
+            "  migrate-embedding-queue --offline\n"
             "  backup / restore <arquivo>"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -507,6 +508,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "test",
             "wizard",
             "migrate",
+            "migrate-embedding-queue",
             "backup",
             "restore",
         ],
@@ -527,6 +529,11 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     storage_p.add_argument(
         "--output", metavar="FILE", default=None, help="Arquivo de saída do backup"
+    )
+    storage_p.add_argument(
+        "--offline",
+        action="store_true",
+        help="Confirma que todas as instâncias e workers antigos estão parados",
     )
 
     # ── auth ──────────────────────────────────────────────────────────────────

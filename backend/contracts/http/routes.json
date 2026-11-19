@@ -2625,6 +2625,13 @@
   },
   {
     "methods": [
+      "POST"
+    ],
+    "name": "retry_rag_job_workspaces__workspace_id__rag_jobs__job_id__retry_post",
+    "path": "/workspaces/{workspace_id}/rag/jobs/{job_id}/retry"
+  },
+  {
+    "methods": [
       "GET"
     ],
     "name": "workspace_sandbox_audit_workspaces__workspace_id__sandbox_audit_get",

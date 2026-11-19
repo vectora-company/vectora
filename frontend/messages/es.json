@@ -2018,6 +2018,7 @@
   "workbench_memory_journey_skill_label": "Skill aprendida: {name}",
   "workbench_memory_journey_title": "Lo que aprendí sobre ti",
   "workbench_memory_no_result": "Sin resultado",
+  "workbench_memory_retry_failed": "No se pudo reanudar la indexación.",
   "workbench_memory_search_filter_fact": "Hechos",
   "workbench_memory_search_filter_rag_bucket": "Buckets",
   "workbench_memory_search_filter_skill": "Skills",

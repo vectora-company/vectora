@@ -5222,7 +5222,7 @@ class RagJobStatus(BaseModel):
     total: int
     processed: int
     failed: int
-    status: str  # "indexing" | "done" | "failed" | "no_files" | "paused"
+    status: str  # "indexing" | "done" | "failed" | "no_files" | "paused" | "unknown"
     # Preenchido quando o worker pausou por rate limit (motivo exibido ao usuário).
     error_reason: str | None = None
 
@@ -5239,6 +5239,34 @@ _RAG_TASKS: set[Any] = set()
 _RAG_LAST_EMITTED_STATUS: dict[str, str] = {}
 
 
+async def _save_rag_job(job_id: str, meta: dict[str, Any]) -> None:
+    from backend.embedding.queue import get_embedding_queue
+    from backend.settings import settings
+
+    queue = await get_embedding_queue(settings.embedding_queue_dsn)
+    await queue.save_ingestion_job(
+        job_id,
+        str(meta["workspace_id"]),
+        str(meta["path"]),
+        total_chunks=meta.get("total_chunks"),
+        enqueue_done=bool(meta.get("enqueue_done")),
+        enqueue_error=meta.get("enqueue_error"),
+    )
+
+
+async def _load_rag_jobs(workspace_id: str) -> None:
+    from backend.embedding.queue import get_embedding_queue
+    from backend.settings import settings
+
+    queue = await get_embedding_queue(settings.embedding_queue_dsn)
+    for job in await queue.list_ingestion_jobs(workspace_id):
+        job_id = str(job.pop("job_id"))
+        current = _RAG_JOBS.get(job_id)
+        if current is None or current.get("preparation_unknown"):
+            job["preparation_unknown"] = not bool(job.get("enqueue_done"))
+            _RAG_JOBS[job_id] = job
+
+
 def _rag_job_status(job_id: str, stats: dict[str, int]) -> RagJobStatus:
     from backend.embedding.background import get_worker_pause_state
 
@@ -5252,13 +5280,21 @@ def _rag_job_status(job_id: str, stats: dict[str, int]) -> RagJobStatus:
     failed = int(stats.get("failed", 0)) + int(stats.get("dlq", 0))
 
     paused, reason = get_worker_pause_state()
-    if enqueue_done and total == 0:
+    enqueue_error = meta.get("enqueue_error")
+    if enqueue_error:
+        status = "failed"
+    elif meta.get("preparation_unknown"):
+        status = "unknown"
+    elif enqueue_done and total == 0:
         status = "no_files"
-    elif enqueue_done and processed + failed >= total:
-        status = "done" if failed < total else "failed"
-    elif paused and processed < total:
-        # Circuit breaker arquivou a fila — o job não termina sozinho.
+    elif (
+        paused
+        and processed < total
+        and (stats.get("dlq", 0) > 0 or processed + failed < total)
+    ):
         status = "paused"
+    elif enqueue_done and processed + failed >= total:
+        status = "failed" if failed else "done"
     else:
         status = "indexing"
     return RagJobStatus(
@@ -5268,7 +5304,13 @@ def _rag_job_status(job_id: str, stats: dict[str, int]) -> RagJobStatus:
         processed=processed,
         failed=failed,
         status=status,
-        error_reason=reason if paused else None,
+        error_reason=str(enqueue_error)
+        if enqueue_error
+        else "Estado da preparação não confirmado; verifique a execução da indexação."
+        if status == "unknown"
+        else reason
+        if status == "paused"
+        else None,
     )
 
 
@@ -5286,7 +5328,9 @@ async def _maybe_emit_job_event(job_id: str) -> None:
     """
     if job_id not in _RAG_JOBS:
         return
-    from backend.embedding.queue import get_embedding_queue
+    from backend.embedding.queue import (
+        get_configured_embedding_queue as get_embedding_queue,
+    )
     from backend.settings import settings
 
     try:
@@ -5294,7 +5338,9 @@ async def _maybe_emit_job_event(job_id: str) -> None:
         stats = await queue.get_job_stats(job_id)
     except Exception:
         logger.warning("rag_job_event_stats_failed", extra={"job_id": job_id})
-        return
+        if not _RAG_JOBS[job_id].get("enqueue_error"):
+            return
+        stats = {}
 
     status_obj = _rag_job_status(job_id, stats)
     done_count = status_obj.processed + status_obj.failed
@@ -5570,6 +5616,13 @@ async def rag_ingest(
         "workspace_id": workspace_id,
         "enqueue_done": False,
     }
+    try:
+        await _save_rag_job(job_id, _RAG_JOBS[job_id])
+    except Exception as exc:
+        _RAG_JOBS.pop(job_id, None)
+        raise HTTPException(
+            status_code=503, detail="Não foi possível registrar o job de indexação."
+        ) from exc
 
     async def _run() -> None:
         try:
@@ -5589,11 +5642,15 @@ async def rag_ingest(
             logger.exception("rag_ingest_task_failed", extra={"path": body.path})
             meta = _RAG_JOBS.get(job_id)
             if meta is not None:
-                meta["total_chunks"] = 0
+                meta["enqueue_error"] = "Falha ao preparar a fila de indexação."
         finally:
             meta = _RAG_JOBS.get(job_id)
             if meta is not None:
                 meta["enqueue_done"] = True
+                try:
+                    await _save_rag_job(job_id, meta)
+                except Exception:
+                    logger.exception("rag_job_persist_failed", extra={"job_id": job_id})
             await _maybe_emit_job_event(job_id)
 
     task = _asyncio.create_task(_run())
@@ -5669,13 +5726,25 @@ async def rag_ingest_preview(
 @workspace_scoped_router.get("/rag/jobs/{job_id}", response_model=RagJobStatus)
 async def rag_job_status(workspace_id: str, job_id: str) -> RagJobStatus:
     """Progresso de um job de indexação (chunks processados / total)."""
-    from backend.embedding.queue import get_embedding_queue
+    if job_id not in _RAG_JOBS or _RAG_JOBS[job_id].get("preparation_unknown"):
+        try:
+            await _load_rag_jobs(workspace_id)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=503, detail="Jobs de indexação indisponíveis."
+            ) from exc
+    meta = _RAG_JOBS.get(job_id)
+    if meta is None or meta.get("workspace_id") != workspace_id:
+        raise HTTPException(status_code=404, detail="Job não encontrado.")
+    from backend.embedding.queue import (
+        get_configured_embedding_queue as get_embedding_queue,
+    )
     from backend.settings import settings
 
     try:
         queue = await get_embedding_queue(settings.embedding_queue_dsn)
         stats = await queue.get_job_stats(job_id)
-    except Exception:
+    except Exception as exc:
         # `workspace_id` só existe pra manter a URL aninhada (consistência com
         # os demais endpoints de workspace) — o lookup real é por job_id
         # (chave única na fila), mas registra o par pra facilitar diagnóstico.
@@ -5683,28 +5752,67 @@ async def rag_job_status(workspace_id: str, job_id: str) -> RagJobStatus:
             "rag_job_status_failed",
             extra={"job_id": job_id, "workspace_id": workspace_id},
         )
-        stats = {}
+        if meta.get("enqueue_error"):
+            return _rag_job_status(job_id, {})
+        raise HTTPException(
+            status_code=503, detail="Fila de indexação indisponível."
+        ) from exc
     return _rag_job_status(job_id, stats)
+
+
+@workspace_scoped_router.post("/rag/jobs/{job_id}/retry")
+async def retry_rag_job(workspace_id: str, job_id: str) -> dict[str, int]:
+    """Reprocessa somente os chunks falhos de um job deste workspace."""
+    if job_id not in _RAG_JOBS:
+        try:
+            await _load_rag_jobs(workspace_id)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=503, detail="Jobs de indexação indisponíveis."
+            ) from exc
+    meta = _RAG_JOBS.get(job_id)
+    if meta is None or meta.get("workspace_id") != workspace_id:
+        raise HTTPException(status_code=404, detail="Job não encontrado.")
+    from backend.embedding.background import get_background_worker
+
+    try:
+        worker = await get_background_worker()
+        count = await worker.retry_job(job_id)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503, detail="Não foi possível retomar a indexação."
+        ) from exc
+    if count == 0:
+        raise HTTPException(status_code=409, detail="O job não tem itens para retomar.")
+    await _maybe_emit_job_event(job_id)
+    return {"retried": count}
 
 
 @workspace_scoped_router.get("/rag/jobs", response_model=list[RagJobStatus])
 async def rag_jobs(workspace_id: str) -> list[RagJobStatus]:
     """Lista os jobs de indexação deste workspace com seu progresso atual."""
-    from backend.embedding.queue import get_embedding_queue
+    from backend.embedding.queue import (
+        get_configured_embedding_queue as get_embedding_queue,
+    )
     from backend.settings import settings
 
     out: list[RagJobStatus] = []
     try:
+        await _load_rag_jobs(workspace_id)
         queue = await get_embedding_queue(settings.embedding_queue_dsn)
-    except Exception:
-        return out
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503, detail="Fila de indexação indisponível."
+        ) from exc
     for job_id, meta in list(_RAG_JOBS.items()):
         if workspace_id and meta.get("workspace_id") != workspace_id:
             continue
         try:
             stats = await queue.get_job_stats(job_id)
-        except Exception:
-            stats = {}
+        except Exception as exc:
+            raise HTTPException(
+                status_code=503, detail="Fila de indexação indisponível."
+            ) from exc
         out.append(_rag_job_status(job_id, stats))
     return out
 
