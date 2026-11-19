@@ -82,6 +82,77 @@ def _workspace_run_lock(workspace_id: str) -> asyncio.Lock:
 _DISCONNECT_CONFIRM_DELAY_S = 0.3
 
 _SENTINEL = object()
+
+
+_TURN_FILES_TIMEOUT_SECONDS = 5.0
+_attach_tasks: set[asyncio.Task[None]] = set()
+
+
+async def _finalize_turn_files(
+    finalize_fn: Callable[[Any], list[Any]], snapshot: Any
+) -> list[Any]:
+    """Lista os arquivos alterados no turno sem deixar um workspace lento
+    segurar o evento final: passou do prazo, o turno termina sem a lista."""
+    try:
+        return await asyncio.wait_for(
+            asyncio.to_thread(finalize_fn, snapshot),
+            timeout=_TURN_FILES_TIMEOUT_SECONDS,
+        )
+    except TimeoutError:
+        logger.warning(
+            "native_stream: varredura dos arquivos do turno passou de %.0fs; "
+            "turno encerrado sem a lista de arquivos",
+            _TURN_FILES_TIMEOUT_SECONDS,
+        )
+        return []
+
+
+def _schedule_attach_edited_files(
+    thread_id: str, run_id: str, files: list[dict[str, object]]
+) -> None:
+    """Persiste os arquivos editados depois do fim do stream."""
+
+    async def _run() -> None:
+        try:
+            from backend.services import agent_factory
+
+            store = await agent_factory.get_session_store()
+            await store.attach_edited_files(thread_id, run_id, files)
+        except Exception:
+            logger.warning(
+                "native_stream: falha ao persistir arquivos editados", exc_info=True
+            )
+
+    task = asyncio.create_task(_run(), name=f"attach-files-{thread_id}")
+    _attach_tasks.add(task)
+    task.add_done_callback(_attach_tasks.discard)
+
+
+_checkpoint_tasks: set[asyncio.Task[None]] = set()
+
+
+def _schedule_turn_checkpoint(workspace_id: str, thread_id: str) -> None:
+    """Registra o checkpoint do turno depois do fim do stream.
+
+    O checkpoint percorre o workspace; o cliente não precisa esperar por ele
+    para ver a resposta terminar.
+    """
+
+    async def _run() -> None:
+        try:
+            await _record_turn_checkpoint(
+                workspace_id, thread_id, {"run_id": str(uuid.uuid4())}
+            )
+        except Exception:
+            logger.warning(
+                "native_stream: falha ao registrar checkpoint", exc_info=True
+            )
+
+    task = asyncio.create_task(_run(), name=f"checkpoint-{thread_id}")
+    _checkpoint_tasks.add(task)
+    task.add_done_callback(_checkpoint_tasks.discard)
+
+
 """Marca o fim da fila de eventos — devolvida pelo runner depois que a
 chamada ao motor nativo termina (sucesso, pausa HITL, ou exceção)."""
 
@@ -503,21 +574,12 @@ def stream_engine_events(
                 run_error = exc
                 stopped_reason = "error"
             finally:
-                changes = await asyncio.to_thread(finalize, turn_snapshot)
+                changes = await _finalize_turn_files(finalize, turn_snapshot)
                 turn_files_payload.extend(encode_turn_files(changes))
                 if changes:
-                    try:
-                        from backend.services import agent_factory
-
-                        store = await agent_factory.get_session_store()
-                        await store.attach_edited_files(
-                            thread_id, resolved_run_id, encode_turn_files(changes)
-                        )
-                    except Exception:
-                        logger.warning(
-                            "native_stream: falha ao persistir arquivos editados",
-                            exc_info=True,
-                        )
+                    _schedule_attach_edited_files(
+                        thread_id, resolved_run_id, encode_turn_files(changes)
+                    )
                 # Finalize durable run state from the producer as well as the
                 # SSE consumer.  If the client disconnects, the consumer stops
                 # draining after the sentinel and must not be the only place
@@ -566,26 +628,16 @@ def stream_engine_events(
                                 exc_info=True,
                             )
                         if workspace_id:
-                            try:
-                                await _record_turn_checkpoint(
-                                    workspace_id,
-                                    thread_id,
-                                    {"run_id": str(uuid.uuid4())},
-                                )
-                            except Exception:
-                                logger.warning(
-                                    "native_stream: falha ao registrar checkpoint",
-                                    exc_info=True,
-                                )
+                            _schedule_turn_checkpoint(workspace_id, thread_id)
                         from backend.services.remember_trigger import (
-                            maybe_trigger_remember,
+                            schedule_remember,
                         )
 
                         try:
-                            await maybe_trigger_remember(thread_id, user_id or "local")
+                            schedule_remember(thread_id, user_id or "local")
                         except Exception:
                             logger.warning(
-                                "native_stream: falha ao disparar remember",
+                                "native_stream: falha ao agendar remember",
                                 exc_info=True,
                             )
                 await queue.put(_SENTINEL)
@@ -696,13 +748,11 @@ def stream_engine_events(
                                                 {"run_id": str(uuid.uuid4())},
                                             )
                                     from backend.services.remember_trigger import (
-                                        maybe_trigger_remember,
+                                        schedule_remember,
                                     )
 
                                     with contextlib.suppress(Exception):
-                                        await maybe_trigger_remember(
-                                            thread_id, user_id or "local"
-                                        )
+                                        schedule_remember(thread_id, user_id or "local")
                             finally:
                                 _release_workspace_lock()
                                 with contextlib.suppress(Exception):

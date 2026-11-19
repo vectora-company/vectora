@@ -442,6 +442,11 @@
             "title": "Attempts",
             "type": "integer"
           },
+          "cached_input_tokens": {
+            "default": 0,
+            "title": "Cached Input Tokens",
+            "type": "integer"
+          },
           "cost_cents": {
             "default": 0.0,
             "title": "Cost Cents",
@@ -10369,6 +10374,54 @@
           "expires_at"
         ],
         "title": "ThreadShare",
+        "type": "object"
+      },
+      "ThreadUsageResponse": {
+        "description": "Consumo de tokens acumulado da conversa e janela do modelo ativo.",
+        "properties": {
+          "cached_input_tokens": {
+            "default": 0,
+            "title": "Cached Input Tokens",
+            "type": "integer"
+          },
+          "context_window": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context Window"
+          },
+          "input_tokens": {
+            "default": 0,
+            "title": "Input Tokens",
+            "type": "integer"
+          },
+          "model": {
+            "default": "",
+            "title": "Model",
+            "type": "string"
+          },
+          "output_tokens": {
+            "default": 0,
+            "title": "Output Tokens",
+            "type": "integer"
+          },
+          "runs": {
+            "default": 0,
+            "title": "Runs",
+            "type": "integer"
+          },
+          "total_tokens": {
+            "default": 0,
+            "title": "Total Tokens",
+            "type": "integer"
+          }
+        },
+        "title": "ThreadUsageResponse",
         "type": "object"
       },
       "TimezoneBody": {
@@ -24589,6 +24642,46 @@
           }
         },
         "summary": "Latest Turn Files"
+      }
+    },
+    "/threads/{thread_id}/usage": {
+      "get": {
+        "description": "Tokens consumidos pela conversa e a janela de contexto do modelo ativo.",
+        "operationId": "get_thread_usage_threads__thread_id__usage_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadUsageResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Thread Usage"
       }
     },
     "/tools/policy": {

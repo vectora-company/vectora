@@ -84,6 +84,15 @@ function ProviderRow({ item }: { item: ProviderUsage }) {
 interface UsagePopoverProps {
   tokensUsed: number;
   modelId: string;
+  threadId?: string;
+}
+
+interface ThreadUsage {
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  cached_input_tokens?: number;
+  runs: number;
 }
 
 function UsageBar({ pct }: { pct: number }) {
@@ -133,12 +142,17 @@ function UsageRing({ pct }: { pct: number }) {
   );
 }
 
-export function UsagePopover({ tokensUsed, modelId }: UsagePopoverProps) {
+export function UsagePopover({
+  tokensUsed,
+  modelId,
+  threadId,
+}: UsagePopoverProps) {
   const contextWindow = getContextWindow(modelId as ModelOption);
   const pct = contextWindow > 0 ? (tokensUsed / contextWindow) * 100 : 0;
   const [open, setOpen] = useState(false);
   const [providers, setProviders] = useState<ProviderUsage[]>([]);
   const [mediaQuota, setMediaQuota] = useState<MediaQuota | null>(null);
+  const [threadUsage, setThreadUsage] = useState<ThreadUsage | null>(null);
 
   // Só busca ao abrir: o consumo dos providers é dado remoto, e o backend
   // cacheia — não faz sentido consultar a cada render do composer.
@@ -165,10 +179,23 @@ export function UsagePopover({ tokensUsed, modelId }: UsagePopoverProps) {
       .catch(() => {
         if (!cancelado) setMediaQuota(null);
       });
+    if (threadId) {
+      void fetch(`/threads/${encodeURIComponent(threadId)}/usage`, {
+        credentials: "include",
+        cache: "no-store",
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (!cancelado) setThreadUsage((data as ThreadUsage | null) ?? null);
+        })
+        .catch(() => {
+          if (!cancelado) setThreadUsage(null);
+        });
+    }
     return () => {
       cancelado = true;
     };
-  }, [open]);
+  }, [open, threadId]);
 
   const valueLabel = `${formatTokens(tokensUsed)} / ${formatTokens(
     contextWindow,
@@ -206,6 +233,51 @@ export function UsagePopover({ tokensUsed, modelId }: UsagePopoverProps) {
           </div>
           <UsageBar pct={pct} />
           <p className="text-[11px] text-muted-foreground pt-1">{modelId}</p>
+
+          {threadUsage && threadUsage.runs > 0 && (
+            <div
+              className="space-y-1 pt-2 mt-1 border-t border-border/60"
+              data-testid="thread-usage"
+            >
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                {m.meter_thread_usage()}
+              </p>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">
+                  {m.meter_thread_input()}
+                </span>
+                <span className="font-mono text-foreground/90">
+                  {formatTokens(threadUsage.input_tokens)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">
+                  {m.meter_thread_output()}
+                </span>
+                <span className="font-mono text-foreground/90">
+                  {formatTokens(threadUsage.output_tokens)}
+                </span>
+              </div>
+              {(threadUsage.cached_input_tokens ?? 0) > 0 && (
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">
+                    {m.meter_thread_cached()}
+                  </span>
+                  <span className="font-mono text-foreground/90">
+                    {formatTokens(threadUsage.cached_input_tokens ?? 0)}
+                  </span>
+                </div>
+              )}
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">
+                  {m.meter_thread_total()}
+                </span>
+                <span className="font-mono text-foreground/90">
+                  {formatTokens(threadUsage.total_tokens)}
+                </span>
+              </div>
+            </div>
+          )}
 
           {mediaQuota && (
             <div className="space-y-1 pt-2 mt-1 border-t border-border/60">

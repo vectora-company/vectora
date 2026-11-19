@@ -207,11 +207,15 @@ def _usage_metadata(usage: dict | None) -> UsageSnapshot | None:
         return None
     entrada = int(usage.get("input_tokens") or 0)
     saida = int(usage.get("output_tokens") or 0)
-    return {
+    snapshot: UsageSnapshot = {
         "input_tokens": entrada,
         "output_tokens": saida,
         "total_tokens": int(usage.get("total_tokens") or entrada + saida),
     }
+    cached = int((usage.get("input_tokens_details") or {}).get("cached_tokens") or 0)
+    if cached:
+        snapshot["cached_input_tokens"] = cached
+    return snapshot
 
 
 class OpenAIChatClient:

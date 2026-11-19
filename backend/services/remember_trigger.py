@@ -12,6 +12,7 @@ própria proposta) e limparem a flag de pendência.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 logger = logging.getLogger(__name__)
@@ -24,8 +25,8 @@ async def maybe_trigger_remember(thread_id: str, user_id: str) -> None:
     proposta pendente, destila o transcript e propõe skills/fatos.
 
     Best-effort: qualquer falha aqui não pode afetar o turno de chat que
-    já terminou — é sempre chamada fire-and-forget, nunca ``await``ada
-    pelo caller.
+    já terminou. Os callers usam ``schedule_remember`` para que a destilação
+    (uma chamada de LLM) nunca segure o fim do stream.
     """
     try:
         from backend.api.handlers.threads import (
@@ -133,3 +134,21 @@ async def _write_proposal_artifact(
         content=content,
         ctx=ToolContext(thread_id=thread_id),
     )
+
+
+_background_tasks: set[asyncio.Task[None]] = set()
+
+
+def schedule_remember(thread_id: str, user_id: str) -> None:
+    """Dispara ``maybe_trigger_remember`` em segundo plano.
+
+    O stream do turno já pode fechar: a destilação por LLM roda depois, sem
+    atrasar o evento final. A tarefa fica referenciada até terminar para não
+    ser coletada no meio.
+    """
+    task = asyncio.create_task(
+        maybe_trigger_remember(thread_id, user_id),
+        name=f"remember-{thread_id}",
+    )
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)

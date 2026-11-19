@@ -5134,6 +5134,33 @@
     }
   },
   {
+    "category": "memory",
+    "description": "Busca trechos de conversas anteriores do usuário.",
+    "destructive": false,
+    "name": "search_sessions",
+    "render_hint": "json",
+    "schema": {
+      "properties": {
+        "limit": {
+          "default": 5,
+          "description": "Máximo de resultados (1 a 20).",
+          "title": "Limit",
+          "type": "integer"
+        },
+        "query": {
+          "description": "Palavras a procurar (todas precisam aparecer na mensagem).",
+          "title": "Query",
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "title": "search_sessionsArgs",
+      "type": "object"
+    }
+  },
+  {
     "category": "computer_use",
     "description": "Seleciona uma janela descoberta no contexto atual, sem aceitar handles.",
     "destructive": true,

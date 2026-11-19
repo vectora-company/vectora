@@ -282,3 +282,55 @@ async def test_exception_never_propagates(monkeypatch):
     )
 
     await maybe_trigger_remember("t1", "u1")  # não deve levantar
+
+
+@pytest.mark.asyncio
+async def test_schedule_remember_nao_bloqueia_o_chamador(monkeypatch) -> None:
+    """A destilação roda em segundo plano: o agendamento volta na hora."""
+    import asyncio
+
+    from backend.services import remember_trigger
+
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def _lenta(thread_id: str, user_id: str) -> None:
+        started.set()
+        await release.wait()
+
+    monkeypatch.setattr(remember_trigger, "maybe_trigger_remember", _lenta)
+
+    remember_trigger.schedule_remember("t1", "u1")
+
+    await asyncio.wait_for(started.wait(), timeout=1)
+    assert len(remember_trigger._background_tasks) == 1
+    release.set()
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    assert not remember_trigger._background_tasks
+
+
+@pytest.mark.asyncio
+async def test_destilacao_usa_o_trecho_mais_recente_da_conversa(monkeypatch) -> None:
+    from backend.services import learning
+
+    capturado: dict[str, str] = {}
+
+    class _Llm:
+        async def agenerate(self, messages):
+            capturado["user"] = messages[-1].text()
+
+            class _R:
+                @staticmethod
+                def text() -> str:
+                    return '{"skills": [], "facts": []}'
+
+            return _R()
+
+    monkeypatch.setattr("backend.services.utils.load_native_llm", _Llm)
+    transcript = "INICIO " + "x" * 30_000 + " FIM"
+
+    await learning.distill_transcript(transcript)
+
+    assert capturado["user"].endswith("FIM")
+    assert "INICIO" not in capturado["user"]

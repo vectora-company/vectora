@@ -1706,6 +1706,13 @@
   },
   {
     "methods": [
+      "GET"
+    ],
+    "name": "get_thread_usage_threads__thread_id__usage_get",
+    "path": "/threads/{thread_id}/usage"
+  },
+  {
+    "methods": [
       "GET",
       "PUT"
     ],

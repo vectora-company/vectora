@@ -178,6 +178,7 @@ def redact_sensitive_data(value: Any) -> Any:
                     "input_tokens",
                     "output_tokens",
                     "total_tokens",
+                    "cached_input_tokens",
                 } and isinstance(v, (int, float)):
                     result[k] = v
                 else:
@@ -208,6 +209,7 @@ class AgentRunMetrics(BaseModel):
     input_tokens: int = 0
     output_tokens: int = 0
     total_tokens: int = 0
+    cached_input_tokens: int = 0
     duration_ms: int = 0
     cost_cents: float = 0.0
     attempts: int = 1

@@ -683,6 +683,18 @@ class ConversationBranchesResponse(BaseModel):
     active_head_message_id: int | None = None
 
 
+class ThreadUsageResponse(BaseModel):
+    """Consumo de tokens acumulado da conversa e janela do modelo ativo."""
+
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
+    cached_input_tokens: int = 0
+    runs: int = 0
+    model: str = ""
+    context_window: int | None = None
+
+
 class ConversationBranchComparison(BaseModel):
     active_head_message_id: int | None = None
     selected_head_message_id: int

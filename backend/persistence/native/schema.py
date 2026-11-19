@@ -6,12 +6,15 @@ do consumo de dados feito por `SessionStore` e `PostgresSessionStore`.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import logging
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     import asyncpg
 
     from backend.storage.sqlite.pool import AsyncConnectionPool
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # SQLite Schema (sessions.db)
@@ -466,6 +469,73 @@ async def setup_sqlite_session_schema(pool: AsyncConnectionPool) -> None:
             "ON messages(thread_id, turn_id) WHERE turn_id IS NOT NULL"
         )
         await conn.commit()
+        await setup_message_search_index(conn)
+
+
+# Texto de uma mensagem para a busca: concatena os blocos de texto do JSON e
+# cai no conteúdo cru se o JSON for inválido, para o trigger nunca abortar o
+# INSERT da mensagem.
+_MESSAGE_SEARCH_TEXT = (
+    "COALESCE((SELECT group_concat(json_extract(value, '$.text'), ' ') "
+    "FROM json_each(CASE WHEN json_valid({c}) THEN "
+    "(CASE WHEN json_type({c}) = 'array' THEN {c} ELSE '[]' END) ELSE '[]' END) "
+    "WHERE CASE WHEN type = 'object' "
+    "THEN json_extract(value, '$.text') IS NOT NULL ELSE 0 END), "
+    "CASE WHEN json_valid({c}) THEN '' ELSE {c} END)"
+)
+
+
+_FTS_TRIGGER_AI = (
+    "CREATE TRIGGER IF NOT EXISTS messages_fts_ai AFTER INSERT ON messages "
+    "WHEN NEW.role IN ('user', 'assistant') BEGIN "
+    "INSERT INTO messages_fts(rowid, text, thread_id, role) "
+    "VALUES (NEW.id, {text}, NEW.thread_id, NEW.role); END"
+)
+_FTS_TRIGGER_AU = (
+    "CREATE TRIGGER IF NOT EXISTS messages_fts_au AFTER UPDATE OF "
+    "content_json ON messages WHEN NEW.role IN ('user', 'assistant') BEGIN "
+    "DELETE FROM messages_fts WHERE rowid = OLD.id; "
+    "INSERT INTO messages_fts(rowid, text, thread_id, role) "
+    "VALUES (NEW.id, {text}, NEW.thread_id, NEW.role); END"
+)
+_FTS_BACKFILL = (
+    "INSERT INTO messages_fts(rowid, text, thread_id, role) "
+    "SELECT id, {text}, thread_id, role FROM messages "
+    "WHERE role IN ('user', 'assistant')"
+)
+
+
+async def setup_message_search_index(conn: Any) -> None:
+    """Índice FTS5 das mensagens (busca entre conversas), mantido por triggers.
+
+    O ``rowid`` do índice é o ``id`` da mensagem, então apagar e reindexar é
+    direto. Bancos sem FTS5 compilado seguem funcionando sem a busca.
+    """
+    new_text = _MESSAGE_SEARCH_TEXT.replace("{c}", "NEW.content_json")
+    try:
+        await conn.execute(
+            "CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5("
+            "text, thread_id UNINDEXED, role UNINDEXED, "
+            "tokenize='unicode61 remove_diacritics 2')"
+        )
+        await conn.execute(_FTS_TRIGGER_AI.replace("{text}", new_text))
+        await conn.execute(
+            "CREATE TRIGGER IF NOT EXISTS messages_fts_ad AFTER DELETE ON messages "
+            "BEGIN DELETE FROM messages_fts WHERE rowid = OLD.id; END"
+        )
+        await conn.execute(_FTS_TRIGGER_AU.replace("{text}", new_text))
+        indexed = await conn.execute_fetchall("SELECT 1 FROM messages_fts LIMIT 1")
+        if not indexed:
+            await conn.execute(
+                _FTS_BACKFILL.replace(
+                    "{text}", _MESSAGE_SEARCH_TEXT.replace("{c}", "content_json")
+                )
+            )
+        await conn.commit()
+    except Exception as exc:
+        if "fts5" not in str(exc).lower() and "no such module" not in str(exc).lower():
+            raise
+        logger.warning("session_search: SQLite sem FTS5; busca entre conversas off")
 
 
 # ---------------------------------------------------------------------------

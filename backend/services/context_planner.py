@@ -279,6 +279,11 @@ def _fit_compaction_marker(
     )
 
 
+# Limite do bloco de memória no prompt: memória é para fatos que valem em toda
+# conversa, não para despejar o armazenamento inteiro no contexto.
+_MEMORY_SNAPSHOT_MAX_CHARS = 2200
+
+
 @dataclass
 class PlannedContext:
     """Resultado do planejamento de contexto para envio ao modelo."""
@@ -361,6 +366,8 @@ class ContextPlanner:
             mem_content = "[Memória Híbrida de Projeto, RAG e Grafo]:\n" + "\n".join(
                 memory_texts
             )
+            if len(mem_content) > _MEMORY_SNAPSHOT_MAX_CHARS:
+                mem_content = mem_content[:_MEMORY_SNAPSHOT_MAX_CHARS].rstrip() + " …"
             injected_system_messages.append(
                 VMessage(
                     role=MessageRole.SYSTEM,
@@ -377,7 +384,17 @@ class ContextPlanner:
                 )
             )
 
-        full_messages = [*injected_system_messages, *messages]
+        # A memória entra depois das instruções de sistema que já abrem o
+        # histórico: o prefixo (prompt + tools) fica idêntico entre chamadas e
+        # o cache de prompt dos provedores continua valendo quando ela muda.
+        lead = 0
+        while lead < len(messages) and messages[lead].role is MessageRole.SYSTEM:
+            lead += 1
+        full_messages = [
+            *messages[:lead],
+            *injected_system_messages,
+            *messages[lead:],
+        ]
         tokens_before = sum(_message_tokens(m) for m in full_messages)
 
         if not enabled or max_tokens <= 0 or len(full_messages) < 2:

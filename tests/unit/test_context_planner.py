@@ -335,7 +335,7 @@ def test_context_planner_injects_project_memory_and_manifest() -> None:
     )
 
     assert len(planned.messages) == 3
-    assert "Convenção de nomenclatura" in planned.messages[0].text()
+    assert "Convenção de nomenclatura" in planned.messages[1].text()
     assert planned.manifest is not None
     assert len(planned.manifest.blocks) >= 1
     assert any(b.domain == "project" for b in planned.manifest.blocks)
@@ -483,7 +483,9 @@ def test_context_planner_injects_persistent_project_memory() -> None:
         persistent_memory_records=persistent,
     )
 
-    assert "Sempre validar o schema antes do commit" in planned.messages[0].text()
+    assert any(
+        "Sempre validar o schema antes do commit" in m.text() for m in planned.messages
+    )
 
 
 def test_context_planner_does_not_cross_workspace_or_trust_boundaries() -> None:
@@ -788,3 +790,73 @@ def test_context_projection_evidence_keeps_preserved_items() -> None:
     assert evidence["preserved_decisions"] == ["Chamada de ferramentas: run_build"]
     assert evidence["preserved_errors"] == ["Tool call_build: Build falhou"]
     assert evidence["preserved_approvals"] == ["Aprovação de run_build: aprovado"]
+
+
+def test_memoria_entra_depois_das_instrucoes_de_sistema() -> None:
+    """O prefixo de sistema fica no topo para o cache de prompt não quebrar."""
+    from backend.services.context_planner import plan_context
+    from backend.services.memory_store import MemoryRecord
+    from backend.vtypes.message import MessageRole, text_message
+
+    record = MemoryRecord(
+        id="m-ruff",
+        domain="project",
+        scope_id="global",
+        content="Usar ruff",
+        provenance="teste",
+    )
+    messages = [
+        text_message(MessageRole.SYSTEM, "prompt de sistema"),
+        text_message(MessageRole.USER, "oi"),
+    ]
+
+    planned = plan_context(
+        messages, max_tokens=8000, persistent_memory_records=[record]
+    )
+
+    assert planned.messages[0].text() == "prompt de sistema"
+    assert "Usar ruff" in planned.messages[1].text()
+    assert planned.messages[2].text() == "oi"
+
+
+def test_bloco_de_memoria_tem_limite_de_caracteres() -> None:
+    from backend.services.context_planner import plan_context
+    from backend.services.memory_store import MemoryRecord
+    from backend.vtypes.message import MessageRole, text_message
+
+    records = [
+        MemoryRecord(
+            id=f"m{i}",
+            domain="project",
+            scope_id="global",
+            content="x" * 3000,
+            provenance="teste",
+        )
+        for i in range(3)
+    ]
+    planned = plan_context(
+        [text_message(MessageRole.USER, "oi")],
+        max_tokens=100_000,
+        persistent_memory_records=records,
+    )
+
+    bloco = planned.messages[0].text()
+    assert len(bloco) <= 2210
+    assert bloco.endswith("…")
+
+
+def test_compactacao_preserva_a_cauda_mais_recente_dentro_do_orcamento() -> None:
+    from backend.services.context_planner import plan_context
+    from backend.vtypes.message import MessageRole, text_message
+
+    mensagens = []
+    for i in range(40):
+        papel = MessageRole.USER if i % 2 == 0 else MessageRole.ASSISTANT
+        mensagens.append(text_message(papel, f"turno {i} " + "palavra " * 60))
+
+    planejado = plan_context(mensagens, max_tokens=800)
+    textos = [m.text() for m in planejado.messages]
+
+    assert any("turno 39" in t for t in textos)
+    assert not any("turno 0 " in t for t in textos)
+    assert any("mensagens anteriores" in t for t in textos)

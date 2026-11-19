@@ -2962,3 +2962,67 @@ async def test_plan_proposal_approval_and_stages_complete_through_harness(
         "passed",
     ]
     await db.close()
+
+
+def test_drop_terminal_notices_remove_avisos_sinteticos() -> None:
+    from backend.engine.conversation_loop import _drop_terminal_notices
+    from backend.vtypes.message import MessageRole, VMessage, text_message
+
+    pergunta = text_message(MessageRole.USER, "qual o meu github?")
+    cancelado = VMessage(
+        role=MessageRole.ASSISTANT,
+        content=text_message(
+            MessageRole.ASSISTANT, "[cancelado] A execução foi cancelada."
+        ).content,
+        is_error=True,
+    )
+    falha = VMessage(
+        role=MessageRole.ASSISTANT,
+        content=text_message(MessageRole.ASSISTANT, "[falha] erro").content,
+        is_error=True,
+    )
+    resposta = text_message(MessageRole.ASSISTANT, "[cancelado] é só texto do modelo")
+
+    resultado = _drop_terminal_notices([pergunta, cancelado, pergunta, falha, resposta])
+
+    assert [m.role for m in resultado] == [MessageRole.USER, MessageRole.ASSISTANT]
+    assert resultado[1] == resposta
+
+
+def test_drop_terminal_notices_une_usuarios_seguidos() -> None:
+    from backend.engine.conversation_loop import _drop_terminal_notices
+    from backend.vtypes.message import MessageRole, VMessage, text_message
+
+    a = text_message(MessageRole.USER, "primeira")
+    b = text_message(MessageRole.USER, "segunda")
+    cancelado = VMessage(
+        role=MessageRole.ASSISTANT,
+        content=text_message(MessageRole.ASSISTANT, "[cancelado] x").content,
+        is_error=True,
+    )
+
+    resultado = _drop_terminal_notices([a, cancelado, b])
+
+    assert len(resultado) == 1
+    assert "primeira" in resultado[0].text()
+    assert "segunda" in resultado[0].text()
+
+
+@pytest.mark.asyncio
+async def test_memorias_ficam_congeladas_por_conversa(monkeypatch) -> None:
+    from backend.engine import conversation_loop as cl
+    from backend.tools.context import ToolContext
+
+    cl._frozen_memories.clear()
+    leituras = iter([["primeira"], ["segunda"]])
+
+    async def _ler(ctx):
+        return next(leituras)
+
+    monkeypatch.setattr(cl, "_read_persistent_context_memories", _ler)
+    ctx = ToolContext(thread_id="t-congelada")
+
+    assert await cl._load_persistent_context_memories(ctx) == ["primeira"]
+    assert await cl._load_persistent_context_memories(ctx) == ["primeira"]
+    outra = ToolContext(thread_id="t-outra")
+    assert await cl._load_persistent_context_memories(outra) == ["segunda"]

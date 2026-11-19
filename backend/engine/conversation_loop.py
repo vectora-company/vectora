@@ -492,8 +492,29 @@ def _preserve_latest_tool_result(model_id: str) -> bool:
     return normalized.startswith(("ollama:", "llamacpp:", "dmr:"))
 
 
+_FROZEN_MEMORY_MAX_THREADS = 256
+_frozen_memories: dict[str, list[MemoryRecord]] = {}
+
+
 async def _load_persistent_context_memories(ctx: ToolContext) -> list[MemoryRecord]:
-    """Executa a operação  load persistent context memories."""
+    """Memórias persistentes congeladas na primeira leitura da conversa.
+
+    Reler a cada iteração mudaria o prefixo no meio da conversa e invalidaria o
+    cache de prompt; o que for salvo agora aparece na próxima conversa.
+    """
+    thread_id = ctx.thread_id or ""
+    if thread_id and thread_id in _frozen_memories:
+        return _frozen_memories[thread_id]
+    records = await _read_persistent_context_memories(ctx)
+    if thread_id:
+        if len(_frozen_memories) >= _FROZEN_MEMORY_MAX_THREADS:
+            _frozen_memories.pop(next(iter(_frozen_memories)))
+        _frozen_memories[thread_id] = records
+    return records
+
+
+async def _read_persistent_context_memories(ctx: ToolContext) -> list[MemoryRecord]:
+    """Lê as memórias persistentes do armazenamento."""
     if ctx.store is None or not hasattr(ctx.store, "asearch"):
         return []
     if ctx.user_id and ctx.user_id != "local":
@@ -535,6 +556,7 @@ if TYPE_CHECKING:
     from backend.engine.stream_events import EventSink
     from backend.llm.base import ChatClient
     from backend.persistence.native.session_store import SessionStore
+    from backend.services.context_planner import PlannedContext
     from backend.services.policy_compiler import PolicySnapshot
     from backend.tools.context import ToolContext
     from backend.tools.registry import ToolRegistry
@@ -686,6 +708,75 @@ def _args_preview(args: dict[str, Any]) -> str:
 
 
 _WRITE_TODOS_TOOL_NAME = "write_todos"
+
+
+_TERMINAL_NOTICE_PREFIXES = ("[cancelado]", "[falha]")
+
+
+def _drop_terminal_notices(history: list[VMessage]) -> list[VMessage]:
+    """Remove do histórico do modelo os avisos sintéticos de cancelamento/falha.
+
+    ``_persist_terminal_outcome`` grava ``[cancelado] …`` / ``[falha] …`` como
+    mensagem de assistente para a UI e o ledger. Para o modelo isso seria uma
+    resposta dele mesmo que nunca existiu e o levaria a repetir "não consegui".
+    """
+    kept = [
+        m
+        for m in history
+        if not (
+            m.role is MessageRole.ASSISTANT
+            and m.is_error
+            and not m.tool_calls
+            and m.text().lstrip().startswith(_TERMINAL_NOTICE_PREFIXES)
+        )
+    ]
+    return _merge_consecutive_user_messages(kept)
+
+
+def _merge_consecutive_user_messages(history: list[VMessage]) -> list[VMessage]:
+    """Une perguntas seguidas sem resposta no meio numa só mensagem de usuário.
+
+    Depois de descartar um aviso de cancelamento sobram dois turnos de usuário
+    adjacentes, o que vários provedores rejeitam. O texto fica na ordem original.
+    """
+    merged: list[VMessage] = []
+    for m in history:
+        prev = merged[-1] if merged else None
+        if (
+            prev is not None
+            and prev.role is MessageRole.USER
+            and m.role is MessageRole.USER
+            and not prev.tool_calls
+            and not m.tool_calls
+        ):
+            merged[-1] = replace(prev, content=[*prev.content, *m.content])
+            continue
+        merged.append(m)
+    return merged
+
+
+async def _with_llm_summary(
+    planned: PlannedContext, raw_history: list[VMessage], thread_id: str
+) -> PlannedContext:
+    """Troca o marcador de compactação por um resumo do que foi descartado."""
+    from backend.services import context_summary
+    from backend.settings import settings
+
+    if not settings.context_summary_enabled:
+        return planned
+    if not any(context_summary.is_compaction_marker(m) for m in planned.messages):
+        return planned
+    try:
+        dropped = context_summary.dropped_messages(raw_history, planned.messages)
+        summary = await context_summary.summarize_dropped(thread_id, dropped)
+        if not summary:
+            return planned
+        return replace(
+            planned, messages=context_summary.with_summary(planned.messages, summary)
+        )
+    except Exception:
+        logger.warning("conversation_loop: resumo de contexto falhou", exc_info=True)
+        return planned
 
 
 def _default_context_tokens() -> int:
@@ -1034,17 +1125,34 @@ async def run_conversation(  # noqa: PLR0911
 
     media_routed_model: str | None = None
     response_revisions = 0
+    prompt_calibration = 1.0
     for _iteracao in range(config.max_iterations):
-        raw_history = await session_store.get_history(thread_id)
+        # Toolsets ativados na chamada anterior entram no schema desta.
+        tools = tool_registry.all()
+        raw_history = _drop_terminal_notices(await session_store.get_history(thread_id))
         if ctx.permission_mode == "plan":
             await _hydrate_plan_approvals(
                 session_store, ctx, config.run_id, raw_history
             )
-        effective_max_tokens = (
-            config.context_max_tokens
-            if config.context_max_tokens is not None
-            else _default_context_tokens()
+        from backend.services.context_budget import (
+            estimate_tools_tokens,
+            resolve_history_budget,
         )
+
+        effective_max_tokens = resolve_history_budget(
+            model=str(ctx.model) if ctx.model else None,
+            override=config.context_max_tokens,
+            default=_default_context_tokens(),
+            tools_tokens=estimate_tools_tokens(tools),
+        )
+        if prompt_calibration != 1.0 and config.context_max_tokens is None:
+            from backend.services.context_budget import calibrated_budget
+
+            effective_max_tokens = calibrated_budget(
+                effective_max_tokens,
+                prompt_calibration,
+                floor=_default_context_tokens(),
+            )
         from backend.services.context_planner import plan_context_with_fallback
 
         planned_context = plan_context_with_fallback(
@@ -1056,6 +1164,9 @@ async def run_conversation(  # noqa: PLR0911
             policy_snapshot=policy_snapshot,
             persistent_memory_records=await _load_persistent_context_memories(ctx),
             model=str(ctx.model) if ctx.model else None,
+        )
+        planned_context = await _with_llm_summary(
+            planned_context, raw_history, thread_id
         )
         from backend.services.media_hydration import hydrate_media_blocks
 
@@ -1167,6 +1278,18 @@ async def run_conversation(  # noqa: PLR0911
             # não via `on_event`.
 
         if stream_usage is not None:
+            with contextlib.suppress(Exception):
+                from backend.services.context_budget import (
+                    calibration_ratio,
+                    estimate_tools_tokens,
+                )
+                from backend.services.context_compaction import _message_tokens
+
+                estimated = sum(_message_tokens(m) for m in historico)
+                estimated += estimate_tools_tokens(tools)
+                prompt_calibration = calibration_ratio(
+                    int(stream_usage.get("input_tokens", 0)), estimated
+                )
             with contextlib.suppress(Exception):
                 from backend.services.image_token_cost import observe_turn
 
@@ -1379,6 +1502,9 @@ async def run_conversation(  # noqa: PLR0911
             input_tokens=int(last_usage.get("input_tokens", 0) if last_usage else 0),
             output_tokens=int(last_usage.get("output_tokens", 0) if last_usage else 0),
             total_tokens=int(last_usage.get("total_tokens", 0) if last_usage else 0),
+            cached_input_tokens=int(
+                last_usage.get("cached_input_tokens", 0) if last_usage else 0
+            ),
         )
 
         if not tool_calls:
@@ -2298,6 +2424,9 @@ async def run_conversation(  # noqa: PLR0911
                 ),
                 total_tokens=int(
                     last_usage.get("total_tokens", 0) if last_usage else 0
+                ),
+                cached_input_tokens=int(
+                    last_usage.get("cached_input_tokens", 0) if last_usage else 0
                 ),
             )
             await session_store.update_agent_run_status(

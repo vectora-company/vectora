@@ -95,6 +95,7 @@ from backend.api.schemas import (
     Thread,
     ThreadLastMessagePreview,
     ThreadPinsResponse,
+    ThreadUsageResponse,
     TodoItem,
     UpdateThreadRequest,
 )
@@ -1793,6 +1794,27 @@ async def get_history(
 
 class SelectConversationBranchRequest(BaseModel):
     head_message_id: int
+
+
+@router.get("/threads/{thread_id}/usage", response_model=ThreadUsageResponse)
+async def get_thread_usage(thread_id: str, request: Request) -> ThreadUsageResponse:
+    """Tokens consumidos pela conversa e a janela de contexto do modelo ativo."""
+    await _require_existing_thread(thread_id, request)
+    store = await _get_session_store()
+    reader = getattr(store, "thread_token_usage", None)
+    data = await reader(thread_id) if reader is not None else {}
+    model = str(data.get("model") or "")
+    from backend.services.context_budget import model_context_window
+
+    return ThreadUsageResponse(
+        input_tokens=int(data.get("input_tokens", 0)),
+        output_tokens=int(data.get("output_tokens", 0)),
+        total_tokens=int(data.get("total_tokens", 0)),
+        cached_input_tokens=int(data.get("cached_input_tokens", 0)),
+        runs=int(data.get("runs", 0)),
+        model=model,
+        context_window=model_context_window(model),
+    )
 
 
 @router.get(

@@ -237,11 +237,15 @@ def _usage_metadata(usage: dict | None) -> UsageSnapshot | None:
         return None
     entrada = int(usage.get("promptTokenCount") or 0)
     saida = int(usage.get("candidatesTokenCount") or 0)
-    return {
+    snapshot: UsageSnapshot = {
         "input_tokens": entrada,
         "output_tokens": saida,
         "total_tokens": int(usage.get("totalTokenCount") or entrada + saida),
     }
+    cached = int(usage.get("cachedContentTokenCount") or 0)
+    if cached:
+        snapshot["cached_input_tokens"] = cached
+    return snapshot
 
 
 class GoogleChatClient:
