@@ -23,6 +23,7 @@ interface Skill {
 }
 import { settingsItemClass } from "@/components/settings/primitives";
 import { cn } from "@/lib/utils";
+import { useConfirm } from "@/components/ui/use-confirm";
 
 type VerifyState = { state: "idle" | "loading" | "ok" | "error"; msg: string };
 
@@ -32,6 +33,7 @@ interface SkillsTabProps {
 }
 
 export function SkillsTab({ onSkillsChange }: SkillsTabProps = {}) {
+  const { confirm, dialog } = useConfirm();
   const [skills, setSkills] = useState<Skill[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -59,7 +61,13 @@ export function SkillsTab({ onSkillsChange }: SkillsTabProps = {}) {
   }, [refresh]);
 
   async function handleRemove(id: string) {
-    if (!confirm(m.skills_confirm_remove())) return;
+    if (
+      !(await confirm({
+        message: m.skills_confirm_remove(),
+        variant: "destructive",
+      }))
+    )
+      return;
     await fetch(`/skills/${encodeURIComponent(id)}`, { method: "DELETE" });
     await refresh();
   }
@@ -159,6 +167,7 @@ export function SkillsTab({ onSkillsChange }: SkillsTabProps = {}) {
           })}
         </div>
       )}
+      {dialog}
     </div>
   );
 }

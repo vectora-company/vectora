@@ -22,6 +22,7 @@ import { contextGraphSettings } from "@/components/workbench/settings/workbench-
 import { ContextGraphViewer } from "@/components/workbench/tabs/context-graph-viewer";
 import { m } from "@/lib/paraglide/messages";
 import { WorkbenchError, WorkbenchToolbar } from "../primitives";
+import { useConfirm } from "@/components/ui/use-confirm";
 
 interface ContextGraphTabProps {
   threadId: string;
@@ -43,6 +44,7 @@ export function ContextGraphTab({
   threadId,
   onSendPrompt,
 }: ContextGraphTabProps) {
+  const { confirm, dialog } = useConfirm();
   const workspaceId = useWorkspacesStore((s) => s.active_id);
   const {
     status,
@@ -141,13 +143,13 @@ export function ContextGraphTab({
     const nodeCount = status.node_count ?? 0;
     const edgeCount = status.edge_count ?? 0;
     if (
-      !window.confirm(
-        m.graph_falkordb_confirm({
+      !(await confirm({
+        message: m.graph_falkordb_confirm({
           destination,
           nodes: nodeCount,
           edges: edgeCount,
         }),
-      )
+      }))
     ) {
       return;
     }
@@ -651,6 +653,7 @@ export function ContextGraphTab({
           {m.graph_credit()}
         </a>
       </div>
+      {dialog}
     </div>
   );
 }

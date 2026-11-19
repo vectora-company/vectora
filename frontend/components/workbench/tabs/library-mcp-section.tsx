@@ -29,6 +29,7 @@ import { useWindowsStore } from "@/lib/stores/windows-store";
 import { useWorkspacesStore } from "@/lib/stores/workspaces-store";
 import { LibraryCard, LibraryTag } from "./library-card";
 import type { LibraryItem } from "./library-tab";
+import { useConfirm } from "@/components/ui/use-confirm";
 
 async function saveEnvVar(key: string, value: string): Promise<void> {
   const res = await fetch("/auth/envs", {
@@ -81,6 +82,7 @@ function ConfigureDialog({
   onClose: () => void;
   onInstalled: () => void;
 }) {
+  const { confirm, dialog } = useConfirm();
   const [values, setValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -101,7 +103,10 @@ function ConfigureDialog({
       setError(m.library_mcp_trust_invalid_install());
       return;
     }
-    if (requiresConfirmation && !window.confirm(m.library_mcp_trust_confirm()))
+    if (
+      requiresConfirmation &&
+      !(await confirm({ message: m.library_mcp_trust_confirm() }))
+    )
       return;
 
     setSaving(true);
@@ -163,6 +168,7 @@ function ConfigureDialog({
           </Button>
         </DialogFooter>
       </DialogContent>
+      {dialog}
     </Dialog>
   );
 }
@@ -178,6 +184,7 @@ function ConnectorCard({
   onChanged: () => void;
   onOpen: () => void;
 }) {
+  const { confirm, dialog } = useConfirm();
   const [busy, setBusy] = useState(false);
   const [configuring, setConfiguring] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -205,7 +212,7 @@ function ConnectorCard({
       }
       if (
         requiresConfirmation &&
-        !window.confirm(m.library_mcp_trust_confirm())
+        !(await confirm({ message: m.library_mcp_trust_confirm() }))
       )
         return;
       const result = await installMcp(connector.id, requiresConfirmation);
@@ -338,6 +345,7 @@ function ConnectorCard({
           onInstalled={onChanged}
         />
       )}
+      {dialog}
     </LibraryCard>
   );
 }

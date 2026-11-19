@@ -15,6 +15,7 @@ import { VECTORA_API_URL } from "@/lib/constants/api";
 import { HistoryCursorGoneError } from "./history-cursor";
 import { saveReturnTo } from "@/lib/utils/return-to";
 import { getDeviceId, resetDeviceId } from "@/lib/device-id";
+import { m } from "@/lib/paraglide/messages";
 
 // ============================================================================
 // Types — espelham os schemas do src/api/schemas.py
@@ -244,7 +245,7 @@ export async function answerStructuredQuestion(
       body: JSON.stringify({ question_id: questionId, answer, cancel }),
     },
   );
-  if (!response.ok) throw new Error("Não foi possível enviar a resposta");
+  if (!response.ok) throw new Error(m.api_error_reply_failed());
   return (await response.json()) as {
     question_id: string;
     status: "answered" | "cancelled" | "expired";
@@ -452,7 +453,7 @@ export async function cancelRun(threadId: string): Promise<boolean> {
   if (response.status === 401) {
     if (!(await tryRefreshToken())) {
       redirectToLogin();
-      throw new Error("CancelRun: sessão expirada. Faça login novamente.");
+      throw new Error(`CancelRun: ${m.api_error_session_expired()}`);
     }
     response = await doFetch();
   }
@@ -504,7 +505,7 @@ export async function* streamChat(
     const refreshed = await tryRefreshToken();
     if (!refreshed) {
       redirectToLogin();
-      throw new Error("StreamChat: sessão expirada. Faça login novamente.");
+      throw new Error(`StreamChat: ${m.api_error_session_expired()}`);
     }
     response = await doFetch();
   }
@@ -566,7 +567,7 @@ export async function* resumeStream(
     const refreshed = await tryRefreshToken();
     if (!refreshed) {
       redirectToLogin();
-      throw new Error("ResumeStream: sessão expirada. Faça login novamente.");
+      throw new Error(`ResumeStream: ${m.api_error_session_expired()}`);
     }
     response = await doFetch();
   }
@@ -609,7 +610,7 @@ export async function* resumeChat(
     const refreshed = await tryRefreshToken();
     if (!refreshed) {
       redirectToLogin();
-      throw new Error("ResumeChat: sessão expirada. Faça login novamente.");
+      throw new Error(`ResumeChat: ${m.api_error_session_expired()}`);
     }
     response = await doFetch();
   }
@@ -641,7 +642,7 @@ async function postRpc<T>(
     const refreshed = await tryRefreshToken();
     if (refreshed) return postRpc(path, body, true);
     redirectToLogin();
-    throw new Error(`${path}: sessão expirada. Faça login novamente.`);
+    throw new Error(`${path}: ${m.api_error_session_expired()}`);
   }
   if (!response.ok) {
     const text = await response.text().catch(() => "");
@@ -746,7 +747,7 @@ async function branchRequest<T>(path: string, init?: RequestInit): Promise<T> {
   if (response.status === 401) {
     if (!(await tryRefreshToken())) {
       redirectToLogin();
-      throw new BranchRequestError(401, "sessão expirada");
+      throw new BranchRequestError(401, m.api_error_session_expired());
     }
     response = await request();
   }

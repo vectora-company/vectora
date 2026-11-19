@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { m } from "@/lib/paraglide/messages";
 
 export interface GraphStatus {
   status:
@@ -148,7 +149,7 @@ export function useContextGraph(workspaceId: string | null | undefined) {
       username?: string;
       password?: string;
     }) => {
-      if (!workspaceId) throw new Error("Workspace indisponível");
+      if (!workspaceId) throw new Error(m.graph_workspace_unavailable());
       const res = await fetch(`${base(workspaceId)}/falkordb/config`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -175,7 +176,7 @@ export function useContextGraph(workspaceId: string | null | undefined) {
   );
 
   const pushToFalkordb = useCallback(async () => {
-    if (!workspaceId) throw new Error("Workspace indisponível");
+    if (!workspaceId) throw new Error(m.graph_workspace_unavailable());
     const res = await fetch(`${base(workspaceId)}/falkordb/push`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -290,7 +291,7 @@ export function useContextGraph(workspaceId: string | null | undefined) {
   );
 
   const clusterGraph = useCallback(async (): Promise<GraphClusterResult> => {
-    if (!workspaceId) throw new Error("Workspace indisponível");
+    if (!workspaceId) throw new Error(m.graph_workspace_unavailable());
     const res = await fetch(`${base(workspaceId)}/cluster`, { method: "POST" });
     if (!res.ok) {
       const detail = await res.json().catch(() => null);
@@ -304,7 +305,7 @@ export function useContextGraph(workspaceId: string | null | undefined) {
 
   const resolveSymbol = useCallback(
     async (symbol: string): Promise<GraphSymbolResolution> => {
-      if (!workspaceId) throw new Error("Workspace indisponível");
+      if (!workspaceId) throw new Error(m.graph_workspace_unavailable());
       const res = await fetch(`${base(workspaceId)}/resolve-symbol`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -336,7 +337,7 @@ export function useContextGraph(workspaceId: string | null | undefined) {
 
   const exportGraph = useCallback(
     async (format: ContextGraphExportFormat): Promise<Blob> => {
-      if (!workspaceId) throw new Error("Workspace indisponível");
+      if (!workspaceId) throw new Error(m.graph_workspace_unavailable());
       const res = await fetch(`${base(workspaceId)}/export/${format}`);
       if (!res.ok) {
         const detail = await res.json().catch(() => null);

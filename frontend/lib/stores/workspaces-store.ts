@@ -347,7 +347,7 @@ export const useWorkspacesStore = create<WorkspacesState>()(
             active_id?: string | null;
           }>("/workspaces");
           if (!data?.workspaces) {
-            throw new Error("Resposta inesperada do servidor.");
+            throw new Error(m.workspaces_error_unexpected_response());
           }
           if (
             generation !== accountGeneration ||
@@ -442,7 +442,7 @@ export const useWorkspacesStore = create<WorkspacesState>()(
             throw new Error(
               typeof data?.message === "string"
                 ? data.message
-                : "Resposta inesperada do servidor.",
+                : m.workspaces_error_unexpected_response(),
             );
           }
           await get().hydrate();

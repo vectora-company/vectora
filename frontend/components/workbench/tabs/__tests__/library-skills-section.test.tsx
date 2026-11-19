@@ -15,6 +15,7 @@ import {
 
 import { SkillsSection } from "../library-skills-section";
 import { useLibraryStore, type CatalogSkill } from "@/lib/stores/library-store";
+import { answerConfirm } from "@/components/ui/__tests__/answer-confirm";
 
 afterEach(cleanup);
 
@@ -74,11 +75,11 @@ describe("SkillsSection — Catálogo", () => {
 
   it("instalar chama POST /skills com o id do catálogo", async () => {
     mockFetch();
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     render(<SkillsSection query="" />);
     await waitFor(() => screen.getByText("PDF Extract"));
 
     fireEvent.click(screen.getByText("Install"));
+    await answerConfirm(true);
 
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalledWith(

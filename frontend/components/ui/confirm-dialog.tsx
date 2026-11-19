@@ -28,6 +28,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { m } from "@/lib/paraglide/messages";
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -45,8 +46,8 @@ export function ConfirmDialog({
   open,
   title,
   description,
-  confirmLabel = "Confirmar",
-  cancelLabel = "Cancelar",
+  confirmLabel = m.confirm_dialog_confirm(),
+  cancelLabel = m.confirm_dialog_cancel(),
   variant = "default",
   onConfirm,
   onCancel,
@@ -59,13 +60,18 @@ export function ConfirmDialog({
           {description && <DialogDescription>{description}</DialogDescription>}
         </DialogHeader>
         <DialogFooter>
-          <Button variant="outline" onClick={onCancel}>
+          <Button
+            variant="outline"
+            onClick={onCancel}
+            data-testid="confirm-dialog-cancel"
+          >
             {cancelLabel}
           </Button>
           <Button
             variant={variant === "destructive" ? "destructive" : "default"}
             onClick={() => void onConfirm()}
             autoFocus
+            data-testid="confirm-dialog-confirm"
           >
             {confirmLabel}
           </Button>
