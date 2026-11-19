@@ -6755,6 +6755,11 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "provider": {
+            "default": "",
+            "title": "Provider",
+            "type": "string"
           }
         },
         "required": [
@@ -10176,12 +10181,21 @@
             "title": "Local Model",
             "type": "string"
           },
+          "openrouter_key_configured": {
+            "title": "Openrouter Key Configured",
+            "type": "boolean"
+          },
+          "openrouter_model": {
+            "title": "Openrouter Model",
+            "type": "string"
+          },
           "provider": {
             "enum": [
               "clef-local",
               "laya-local",
               "clef-api",
-              "jev-api"
+              "jev-api",
+              "openrouter-api"
             ],
             "title": "Provider",
             "type": "string"
@@ -10208,6 +10222,8 @@
           "jev_api_model",
           "jev_api_key_configured",
           "jev_api_key_masked",
+          "openrouter_model",
+          "openrouter_key_configured",
           "allow_remote_fallback",
           "confidence_threshold_hitl",
           "risk_assessment_timeout_s"
@@ -10858,6 +10874,32 @@
           "user"
         ],
         "title": "TokenResponse",
+        "type": "object"
+      },
+      "ToolAccessBody": {
+        "properties": {
+          "access": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Access",
+            "type": "object"
+          }
+        },
+        "required": [
+          "access"
+        ],
+        "title": "ToolAccessBody",
         "type": "object"
       },
       "ToolOption": {
@@ -11820,6 +11862,17 @@
             ],
             "title": "Local Model"
           },
+          "openrouter_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openrouter Model"
+          },
           "provider": {
             "anyOf": [
               {
@@ -11827,7 +11880,8 @@
                   "clef-local",
                   "laya-local",
                   "clef-api",
-                  "jev-api"
+                  "jev-api",
+                  "openrouter-api"
                 ],
                 "type": "string"
               },
@@ -13610,6 +13664,30 @@
         ]
       }
     },
+    "/admin/speech-models": {
+      "get": {
+        "description": "Modelos de fala do OpenRouter e as vozes de cada um, para o seletor.",
+        "operationId": "get_speech_models_admin_speech_models_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Speech Models Admin Speech Models Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Speech Models",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/admin/storage": {
       "get": {
         "description": "Retorna o status de saúde de todos os backends de storage.\n\nInclui checkpointer, store (protocolo ``StoreBackend``), LanceDB e Postgres (se configurado).\nUsado pela aba \"Storage\" do painel Admin.\n\nReturns:\n    ``{\"checkpointer\": {...}, \"store\": {...}, \"lancedb\": {...}, \"postgres\": {...}}``",
@@ -13789,6 +13867,72 @@
           }
         },
         "summary": "Patch Timezone",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/tool-access": {
+      "get": {
+        "description": "Acesso por role de cada tool (RBAC): quem pode usar o quê.",
+        "operationId": "get_tool_access_admin_tool_access_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Tool Access Admin Tool Access Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Tool Access",
+        "tags": [
+          "admin"
+        ]
+      },
+      "put": {
+        "description": "Grava o acesso por role. Só admin/root; tools e roles são validados.",
+        "operationId": "put_tool_access_admin_tool_access_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ToolAccessBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Put Tool Access Admin Tool Access Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Tool Access",
         "tags": [
           "admin"
         ]
@@ -18334,6 +18478,30 @@
         ]
       }
     },
+    "/provider-routing/decision-models/catalog": {
+      "get": {
+        "description": "Modelos de decisão conhecidos e os providers que cada um aceita.",
+        "operationId": "get_decision_models_catalog_provider_routing_decision_models_catalog_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Decision Models Catalog Provider Routing Decision Models Catalog Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Decision Models Catalog",
+        "tags": [
+          "provider-routing"
+        ]
+      }
+    },
     "/provider-routing/decision-models/config": {
       "post": {
         "description": "Atualiza as configurações e credenciais de Decision Models.",
@@ -18390,7 +18558,8 @@
                 "clef-local",
                 "laya-local",
                 "clef-api",
-                "jev-api"
+                "jev-api",
+                "openrouter-api"
               ],
               "title": "Provider",
               "type": "string"

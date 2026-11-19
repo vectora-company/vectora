@@ -345,7 +345,6 @@ export function GitTab({
         onOpenWorktrees={() => setWorktreesOpen(true)}
         onOpenPR={handleOpenPR}
         onChanged={handleChanged}
-        onOpenSettings={() => setSettingsOpen(true)}
         operation={gitOps.operation}
       />
 
