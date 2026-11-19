@@ -43,6 +43,9 @@ class DistillationResult(BaseModel):
     facts: list[str] = Field(default_factory=list)
 
 
+_MAX_TRANSCRIPT_CHARS = 20_000
+
+
 async def distill_transcript(transcript_text: str) -> DistillationResult:
     """Extrai skills/fatos do `transcript_text` via LLM com saída JSON.
 
@@ -69,7 +72,11 @@ async def distill_transcript(transcript_text: str) -> DistillationResult:
         result = await llm.agenerate(
             [
                 text_message(MessageRole.SYSTEM, system),
-                text_message(MessageRole.USER, transcript_text[:20000]),
+                # O trecho mais recente: o início de uma conversa longa já foi
+                # revisto nos gatilhos anteriores.
+                text_message(
+                    MessageRole.USER, transcript_text[-_MAX_TRANSCRIPT_CHARS:]
+                ),
             ]
         )
         return _parse_distillation(result.text())

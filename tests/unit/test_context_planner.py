@@ -843,3 +843,20 @@ def test_bloco_de_memoria_tem_limite_de_caracteres() -> None:
     bloco = planned.messages[0].text()
     assert len(bloco) <= 2210
     assert bloco.endswith("…")
+
+
+def test_compactacao_preserva_a_cauda_mais_recente_dentro_do_orcamento() -> None:
+    from backend.services.context_planner import plan_context
+    from backend.vtypes.message import MessageRole, text_message
+
+    mensagens = []
+    for i in range(40):
+        papel = MessageRole.USER if i % 2 == 0 else MessageRole.ASSISTANT
+        mensagens.append(text_message(papel, f"turno {i} " + "palavra " * 60))
+
+    planejado = plan_context(mensagens, max_tokens=800)
+    textos = [m.text() for m in planejado.messages]
+
+    assert any("turno 39" in t for t in textos)
+    assert not any("turno 0 " in t for t in textos)
+    assert any("mensagens anteriores" in t for t in textos)

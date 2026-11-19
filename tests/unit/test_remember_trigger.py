@@ -308,3 +308,29 @@ async def test_schedule_remember_nao_bloqueia_o_chamador(monkeypatch) -> None:
     await asyncio.sleep(0)
     await asyncio.sleep(0)
     assert not remember_trigger._background_tasks
+
+
+@pytest.mark.asyncio
+async def test_destilacao_usa_o_trecho_mais_recente_da_conversa(monkeypatch) -> None:
+    from backend.services import learning
+
+    capturado: dict[str, str] = {}
+
+    class _Llm:
+        async def agenerate(self, messages):
+            capturado["user"] = messages[-1].text()
+
+            class _R:
+                @staticmethod
+                def text() -> str:
+                    return '{"skills": [], "facts": []}'
+
+            return _R()
+
+    monkeypatch.setattr("backend.services.utils.load_native_llm", _Llm)
+    transcript = "INICIO " + "x" * 30_000 + " FIM"
+
+    await learning.distill_transcript(transcript)
+
+    assert capturado["user"].endswith("FIM")
+    assert "INICIO" not in capturado["user"]
