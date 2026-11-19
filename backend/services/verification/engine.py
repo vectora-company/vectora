@@ -27,6 +27,10 @@ from backend.services.verification.snapshot import compute_files_snapshot
 logger = logging.getLogger(__name__)
 
 
+# Tamanho máximo do feedback de falha guardado na evidência e reenviado ao modelo.
+FEEDBACK_MAX_CHARS = 4000
+
+
 @dataclass
 class VerificationResult:
     """Resultado consolidado do ciclo de verificação pós-execução."""
@@ -72,6 +76,8 @@ class VerificationResult:
             # the aggregate digest.  A digest alone cannot prove which files
             # were observed after a replay or a later workspace mutation.
             "file_hashes": dict(sorted(self.file_hashes.items())),
+            # Texto que o agente recebe no turno seguinte para corrigir a falha.
+            "failure_feedback": (self.failure_feedback or "")[:FEEDBACK_MAX_CHARS],
             "gates_evaluated": len(self.gate_results),
             "gate_results": [g.model_dump() for g in self.gate_results],
         }
