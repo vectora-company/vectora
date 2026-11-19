@@ -51,6 +51,7 @@ from backend.api.handlers.chat import router as chat_router
 from backend.api.handlers.connect import router as connect_router
 from backend.api.handlers.context_graph import router as graph_router
 from backend.api.handlers.dag import router as dag_router
+from backend.api.handlers.extensions import router as extensions_router
 from backend.api.handlers.feedback import router as feedback_router
 from backend.api.handlers.flags import router as flags_router
 from backend.api.handlers.gateway import router as gateway_router
@@ -560,8 +561,22 @@ async def _lifespan(app: FastAPI):  # type: ignore[return]  # noqa: ANN202
         logger.warning("api/server: falha ao iniciar adapters de Connect: %s", exc)
 
     try:
+        # Extensões que estavam ativas voltam em segundo plano: uma extensão
+        # lenta ou com falha nunca atrasa a subida do backend.
+        from backend.extensions.host import get_extension_host
+
+        extensions_task = asyncio.create_task(
+            get_extension_host().restore(), name="extensions-restore"
+        )
+    except Exception as exc:
+        extensions_task = None
+        logger.warning("api/server: falha ao restaurar extensões: %s", exc)
+
+    try:
         yield
     finally:
+        if extensions_task is not None and not extensions_task.done():
+            extensions_task.cancel()
         if not catalog_task.done():
             catalog_task.cancel()
             with suppress(asyncio.CancelledError):
@@ -689,6 +704,13 @@ async def _lifespan(app: FastAPI):  # type: ignore[return]  # noqa: ANN202
             pty_registry.close_all()
         except Exception:
             logger.debug("api/server: erro ao encerrar PTYs")
+
+        try:
+            from backend.extensions.host import get_extension_host
+
+            await get_extension_host().shutdown()
+        except Exception:
+            logger.debug("api/server: erro ao encerrar as extensões")
 
         try:
             from backend.browser.session import close_all_browser_sessions
@@ -866,6 +888,7 @@ def create_app(serve_static: bool = True) -> FastAPI:
     app.include_router(gateway_router)
     app.include_router(webhooks_router)
     app.include_router(admin_router)
+    app.include_router(extensions_router)
     app.include_router(backup_router)
     app.include_router(usage_router)
     app.include_router(github_router)

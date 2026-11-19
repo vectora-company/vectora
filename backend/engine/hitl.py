@@ -90,6 +90,8 @@ REQUIRE_APPROVAL: frozenset[str] = frozenset(
         "apply_memory_consolidation",
         "git_push",
         "call_mcp_tool",
+        # Tool de extensão roda código de terceiros fora do processo do harness.
+        "call_extension_tool",
         # Operações com custo variável: a quota e o preço estimado são
         # apresentados ao usuário antes da execução do provider.
         "generate_image",
