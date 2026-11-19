@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * MemoriaTab — lista e gerencia memórias persistentes do usuário.
+ * MemoriesPanel — lista e gerencia memórias persistentes do usuário.
  *
  * Funcionalidades:
  * - Lista todas as memórias do usuário (fetch GET /memory)
@@ -97,7 +97,7 @@ async function createMemory(key: string, content: string): Promise<void> {
 // Componente principal
 // ---------------------------------------------------------------------------
 
-export function MemoriaTab() {
+export function MemoriesPanel() {
   const [memories, setMemories] = useState<MemoryItem[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -124,8 +124,9 @@ export function MemoriaTab() {
     setError(null);
     try {
       const data = await fetchMemories();
-      setMemories(data.memories);
-      setTotal(data.total);
+      // Resposta sem a lista (backend antigo ou falha parcial) vale como vazia.
+      setMemories(data.memories ?? []);
+      setTotal(data.total ?? 0);
     } catch {
       setError(msg.memory_error_load());
     } finally {
