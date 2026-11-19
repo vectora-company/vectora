@@ -690,6 +690,7 @@ class ThreadUsageResponse(BaseModel):
     output_tokens: int = 0
     total_tokens: int = 0
     cached_input_tokens: int = 0
+    cache_write_tokens: int = 0
     runs: int = 0
     model: str = ""
     context_window: int | None = None

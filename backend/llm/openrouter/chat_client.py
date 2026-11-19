@@ -31,6 +31,7 @@ from backend.llm.media_parts import (
     resolve_native_media,
 )
 from backend.llm.openrouter.client import OpenRouterClient, OpenRouterResponseError
+from backend.llm.prompt_cache import prompt_cache_key
 from backend.vtypes.contracts import UsageSnapshot
 from backend.vtypes.message import (
     ContentBlock,
@@ -57,7 +58,7 @@ class _UsagePayload(TypedDict, total=False):
     prompt_tokens: int
     completion_tokens: int
     total_tokens: int
-    prompt_tokens_details: dict[str, int]
+    prompt_tokens_details: dict[str, Any]
 
 
 _AUDIO_FORMATS = {"audio/mpeg": "mp3", "audio/wav": "wav"}
@@ -262,9 +263,17 @@ def _usage_metadata(usage: _UsagePayload | None) -> UsageSnapshot | None:
         "output_tokens": saida,
         "total_tokens": int(usage.get("total_tokens") or entrada + saida),
     }
-    cached = int((usage.get("prompt_tokens_details") or {}).get("cached_tokens") or 0)
+    details = usage.get("prompt_tokens_details") or {}
+    cached = int(details.get("cached_tokens") or 0)
     if cached:
         snapshot["cached_input_tokens"] = cached
+    # OpenRouter chama de `cache_write_tokens`; 9Router e OmniRoute, de
+    # `cache_creation_tokens`.
+    written = int(
+        details.get("cache_write_tokens") or details.get("cache_creation_tokens") or 0
+    )
+    if written:
+        snapshot["cache_write_tokens"] = written
     return snapshot
 
 
@@ -341,6 +350,18 @@ class OpenRouterChatClient:
         self._apply_prompt_cache(corpo)
         return corpo
 
+    def _session_headers(self) -> dict[str, str] | None:
+        """``x-session-id`` com o id da conversa para OpenRouter, 9Router e OmniRoute.
+
+        Os três usam esse header como identidade da sessão (sticky routing e
+        afinidade de cache); ele passa por proxies que descartam underscores.
+        """
+        origin = (self.media_model_id or "").partition(":")[0]
+        if origin not in {"openrouter", "nine_router"}:
+            return None
+        key = prompt_cache_key.get()
+        return {"x-session-id": key[:256]} if key else None
+
     def _apply_prompt_cache(self, corpo: dict[str, Any]) -> None:
         """Cache de prompt conforme o backend por trás deste client.
 
@@ -355,10 +376,20 @@ class OpenRouterChatClient:
         origin = (self.media_model_id or "").partition(":")[0]
         if origin == "llamacpp":
             corpo["cache_prompt"] = True
-        elif origin == "openrouter" and self.model.startswith(
-            ("anthropic/", "google/gemini")
-        ):
-            mark_cache_breakpoints(corpo["messages"])
+        elif origin == "nine_router":
+            # 9Router e OmniRoute leem `prompt_cache_key` como identidade da
+            # conversa: mantém a sessão estável e manda o prefixo à mesma conta.
+            cache_key = prompt_cache_key.get()
+            if cache_key:
+                corpo["prompt_cache_key"] = cache_key
+        elif origin == "openrouter":
+            # `session_id` fixa a conversa num provedor (sticky routing, 60 min):
+            # sem isso o acerto de cache depende de o roteador cair no mesmo lugar.
+            session_id = prompt_cache_key.get()
+            if session_id:
+                corpo["session_id"] = session_id
+            if self.model.startswith(("anthropic/", "google/gemini")):
+                mark_cache_breakpoints(corpo["messages"])
 
     @staticmethod
     def _primeira_escolha(corpo: dict) -> dict:
@@ -388,7 +419,9 @@ class OpenRouterChatClient:
             max_tokens=max_tokens,
             accepted=await self._accepted_media(messages),
         )
-        resposta = await self.client.post_json("/chat/completions", corpo)
+        resposta = await self.client.post_json(
+            "/chat/completions", corpo, headers=self._session_headers()
+        )
         escolha = self._primeira_escolha(resposta)
         mensagem = escolha.get("message") or {}
 
@@ -425,7 +458,9 @@ class OpenRouterChatClient:
             accepted=await self._accepted_media(messages),
         )
 
-        async for evento in self.client.stream_sse("/chat/completions", corpo):
+        async for evento in self.client.stream_sse(
+            "/chat/completions", corpo, headers=self._session_headers()
+        ):
             # O OpenRouter manda `usage` no último evento SSE do stream —
             # às vezes junto de `choices` vazio, às vezes acompanhando o
             # chunk final com finish_reason. Captura nos dois casos.

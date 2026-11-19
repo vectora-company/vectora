@@ -1811,6 +1811,7 @@ async def get_thread_usage(thread_id: str, request: Request) -> ThreadUsageRespo
         output_tokens=int(data.get("output_tokens", 0)),
         total_tokens=int(data.get("total_tokens", 0)),
         cached_input_tokens=int(data.get("cached_input_tokens", 0)),
+        cache_write_tokens=int(data.get("cache_write_tokens", 0)),
         runs=int(data.get("runs", 0)),
         model=model,
         context_window=model_context_window(model),

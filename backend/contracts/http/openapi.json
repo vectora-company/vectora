@@ -442,6 +442,11 @@
             "title": "Attempts",
             "type": "integer"
           },
+          "cache_write_tokens": {
+            "default": 0,
+            "title": "Cache Write Tokens",
+            "type": "integer"
+          },
           "cached_input_tokens": {
             "default": 0,
             "title": "Cached Input Tokens",
@@ -10379,6 +10384,11 @@
       "ThreadUsageResponse": {
         "description": "Consumo de tokens acumulado da conversa e janela do modelo ativo.",
         "properties": {
+          "cache_write_tokens": {
+            "default": 0,
+            "title": "Cache Write Tokens",
+            "type": "integer"
+          },
           "cached_input_tokens": {
             "default": 0,
             "title": "Cached Input Tokens",
