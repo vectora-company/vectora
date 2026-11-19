@@ -9,6 +9,7 @@ type ColumnConfig = Omit<ShellColumnState, "label">;
 
 export interface ModeColumnLayoutProps {
   header: ReactNode;
+  centerOverlay?: ReactNode;
   left: ReactNode;
   center: ReactNode;
   right?: ReactNode;
@@ -28,6 +29,7 @@ export interface ModeColumnLayoutProps {
  */
 export function ModeColumnLayout({
   header,
+  centerOverlay,
   left,
   center,
   right,
@@ -40,6 +42,7 @@ export function ModeColumnLayout({
   return (
     <ThreeColumnShell
       centerHeader={header}
+      centerOverlay={centerOverlay}
       left={left}
       center={
         <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">

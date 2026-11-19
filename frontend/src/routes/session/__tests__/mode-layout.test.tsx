@@ -418,6 +418,66 @@ describe("SessionPage — posição do Header por modo", () => {
   });
 });
 
+describe("SessionPage — o Header só cobre a coluna central, em qualquer layout", () => {
+  // Largo, tablet (faixas laterais) e cada modo: as faixas e colunas laterais
+  // fazem parte do shell e ficam FORA da coluna central, então o Header nunca
+  // passa por cima delas.
+  const RAILS = [
+    "compact-sessions-rail",
+    "workbench-navbar",
+    "ide-tablet-chat-rail",
+  ];
+
+  it.each([
+    ["assistant", 1400],
+    ["assistant", 818],
+    ["kanban", 1400],
+    ["kanban", 818],
+  ] as const)(
+    "%s a %ipx: nenhuma coluna lateral ou faixa fica dentro da coluna do Header",
+    async (mode, width) => {
+      setMode(mode);
+      useWorkbenchStore.setState({ panelOpen: { t1: false } });
+      Object.defineProperty(window, "innerWidth", {
+        configurable: true,
+        value: width,
+      });
+
+      render(<SessionPage />);
+
+      const header = await screen.findByTestId("header");
+      const center = screen.getByTestId("shell-header-slot").closest("main");
+      expect(center).not.toBeNull();
+      expect(center).toContainElement(header);
+      for (const aside of screen.queryAllByRole("complementary")) {
+        expect(aside).not.toContainElement(header);
+        expect(center).not.toContainElement(aside);
+      }
+      for (const id of RAILS) {
+        for (const rail of screen.queryAllByTestId(id)) {
+          expect(center).not.toContainElement(rail);
+        }
+      }
+    },
+  );
+
+  it("nos layouts compactos as faixas existem e ficam em colunas do shell", async () => {
+    setMode("assistant");
+    useWorkbenchStore.setState({ panelOpen: { t1: false } });
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 818,
+    });
+
+    render(<SessionPage />);
+
+    const sessions = await screen.findByTestId("compact-sessions-rail");
+    const workbench = screen.getByTestId("workbench-navbar");
+    expect(sessions.closest("aside")).not.toBeNull();
+    expect(workbench.closest("aside")).not.toBeNull();
+  });
+});
+
 describe("SessionPage — sidebar de sessões", () => {
   it("fica à esquerda em Assistente/Kanban e cede lugar à workbench no IDE", () => {
     setMode("assistant");
