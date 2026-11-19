@@ -190,6 +190,26 @@ describe("useSettingsStore — hidratação remota", () => {
     );
   });
 
+  it("a escolha de modelo ainda não confirmada não é sobrescrita pela hidratação", async () => {
+    const { hydrateFromBackend, useSettingsStore } = await getStore();
+    const { fetchPrefs, pushPrefs } = await import("../lib/api/settings-prefs");
+    vi.mocked(pushPrefs).mockResolvedValueOnce(false);
+
+    useSettingsStore.getState().setSelectedModel("omniroute:auto");
+    await Promise.resolve();
+    vi.mocked(fetchPrefs).mockResolvedValueOnce({
+      selectedModel: "google:gemini-3-flash",
+    });
+    vi.mocked(pushPrefs).mockClear();
+    vi.mocked(pushPrefs).mockResolvedValue(true);
+
+    await hydrateFromBackend();
+
+    expect(useSettingsStore.getState().selectedModel).toBe("omniroute:auto");
+    // O envio que falhou é repetido na hidratação.
+    expect(pushPrefs).toHaveBeenCalledWith({ selectedModel: "omniroute:auto" });
+  });
+
   it("aplica as preferências do backend sem reenviar PATCH", async () => {
     const { hydrateFromBackend, useSettingsStore } = await getStore();
     const { fetchPrefs, pushPrefs } = await import("../lib/api/settings-prefs");
@@ -366,5 +386,20 @@ describe("useSettingsStore — migração de showToolCalls", () => {
   it("escolha salva na v8 é preservada", async () => {
     const migrated = await migrateSettings({ showToolCalls: false }, 8);
     expect(migrated.showToolCalls).toBe(false);
+  });
+});
+
+describe("useSettingsStore — migração do Solarized removido", () => {
+  it.each([
+    ["solarized-dark", "default-dark"],
+    ["solarized-light", "default-light"],
+  ])("%s volta para %s", async (antigo, novo) => {
+    const migrated = await migrateSettings({ themePreset: antigo }, 8);
+    expect(migrated.themePreset).toBe(novo);
+  });
+
+  it("outro preset salvo é preservado", async () => {
+    const migrated = await migrateSettings({ themePreset: "github-dark" }, 8);
+    expect(migrated.themePreset).toBe("github-dark");
   });
 });

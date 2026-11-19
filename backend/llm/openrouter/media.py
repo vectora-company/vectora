@@ -14,7 +14,10 @@ from __future__ import annotations
 import base64
 import binascii
 import logging
+import time
 from typing import Any
+
+import httpx
 
 from backend.llm.openrouter.client import OpenRouterClient, OpenRouterResponseError
 
@@ -68,6 +71,53 @@ async def generate_image_bytes(
     except (binascii.Error, ValueError) as exc:
         msg = f"`b64_json` de /images não é base64 válido: {exc}"
         raise OpenRouterResponseError(msg) from exc
+
+
+_SPEECH_MODELS_URL = "https://openrouter.ai/api/v1/models?output_modalities=speech"
+_FALLBACK_VOICE = "alloy"
+_LIST_TTL_S = 3600.0
+_speech_models_cache: tuple[float, list[dict[str, Any]]] | None = None
+
+
+async def list_speech_models() -> list[dict[str, Any]]:
+    """Modelos de fala do OpenRouter com as vozes de cada um (cache de 1 h).
+
+    Devolve ``[]`` quando a listagem não está acessível.
+    """
+    global _speech_models_cache
+    now = time.monotonic()
+    if _speech_models_cache is not None and now - _speech_models_cache[0] < _LIST_TTL_S:
+        return _speech_models_cache[1]
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as http:
+            res = await http.get(_SPEECH_MODELS_URL)
+        res.raise_for_status()
+        models = [
+            {
+                "id": str(item["id"]),
+                "name": str(item.get("name") or item["id"]),
+                "voices": [str(v) for v in item.get("supported_voices") or []],
+            }
+            for item in res.json().get("data", [])
+            if isinstance(item, dict) and item.get("id")
+        ]
+    except Exception:
+        logger.info("openrouter: lista de modelos de fala indisponível", exc_info=True)
+        return []
+    _speech_models_cache = (now, models)
+    return models
+
+
+async def default_speech_voice(model: str) -> str:
+    """Primeira voz que o OpenRouter declara para o modelo de fala.
+
+    Cada modelo tem o próprio conjunto de vozes (``supported_voices``); usar
+    uma voz de outro modelo dá 400. Sem informação, cai para ``alloy``.
+    """
+    for item in await list_speech_models():
+        if item["id"] == model and item["voices"]:
+            return str(item["voices"][0])
+    return _FALLBACK_VOICE
 
 
 async def synthesize_speech_bytes(
