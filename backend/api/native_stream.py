@@ -86,6 +86,7 @@ _SENTINEL = object()
 
 _TURN_FILES_TIMEOUT_SECONDS = 5.0
 _attach_tasks: set[asyncio.Task[None]] = set()
+_finalize_tasks: set[asyncio.Task[list[dict[str, object]]]] = set()
 
 
 async def _finalize_turn_files(
@@ -105,6 +106,21 @@ async def _finalize_turn_files(
             _TURN_FILES_TIMEOUT_SECONDS,
         )
         return []
+
+
+async def _finalize_and_attach(
+    finalize_fn: Callable[[Any], list[Any]],
+    encode_fn: Callable[[Any], list[dict[str, object]]],
+    snapshot: Any,
+    thread_id: str,
+    run_id: str,
+) -> list[dict[str, object]]:
+    """Varre os arquivos do turno, persiste a lista e a devolve para o stream."""
+    changes = await _finalize_turn_files(finalize_fn, snapshot)
+    payload = encode_fn(changes)
+    if payload:
+        _schedule_attach_edited_files(thread_id, run_id, payload)
+    return payload
 
 
 def _schedule_attach_edited_files(
@@ -541,7 +557,7 @@ def stream_engine_events(
         run_error: BaseException | None = None
         stopped_reason = "stop"
         empty_model_response = False
-        turn_files_payload: list[dict[str, object]] = []
+        finalize_task: asyncio.Task[list[dict[str, object]]] | None = None
         event_count = 0
         message_chunk_count = 0
         streamed_content_chars = 0
@@ -565,7 +581,7 @@ def stream_engine_events(
 
         async def _runner() -> None:
             """Executa a operação runner."""
-            nonlocal run_error, stopped_reason
+            nonlocal run_error, stopped_reason, finalize_task
             try:
                 stopped_reason = await run(on_event)
             except asyncio.CancelledError:
@@ -574,12 +590,20 @@ def stream_engine_events(
                 run_error = exc
                 stopped_reason = "error"
             finally:
-                changes = await _finalize_turn_files(finalize, turn_snapshot)
-                turn_files_payload.extend(encode_turn_files(changes))
-                if changes:
-                    _schedule_attach_edited_files(
-                        thread_id, resolved_run_id, encode_turn_files(changes)
-                    )
+                # A lista de arquivos sai depois do `done`: a varredura roda em
+                # paralelo ao resto do encerramento e o stream não espera por ela.
+                finalize_task = asyncio.create_task(
+                    _finalize_and_attach(
+                        finalize,
+                        encode_turn_files,
+                        turn_snapshot,
+                        thread_id,
+                        resolved_run_id,
+                    ),
+                    name=f"finalize-{thread_id}",
+                )
+                _finalize_tasks.add(finalize_task)
+                finalize_task.add_done_callback(_finalize_tasks.discard)
                 # Finalize durable run state from the producer as well as the
                 # SSE consumer.  If the client disconnects, the consumer stops
                 # draining after the sentinel and must not be the only place
@@ -866,13 +890,6 @@ def stream_engine_events(
 
                 yield to_sse_line(event)
 
-            if turn_files_payload:
-                yield encode_event(
-                    TurnFilesChangedEvent(
-                        run_id=resolved_run_id, files=turn_files_payload
-                    )
-                )
-
             if run_error is not None:
                 logger.error(
                     "native_stream: erro na execução do agente",
@@ -950,5 +967,20 @@ def stream_engine_events(
                     stopped_reason=stopped_reason,
                 )
             )
+            # Depois do `done` a UI já encerrou o "pensando"; o cliente segue
+            # lendo só para receber a lista de arquivos do turno.
+            if finalize_task is not None:
+                try:
+                    turn_files = await finalize_task
+                except Exception:
+                    logger.warning(
+                        "native_stream: falha ao listar arquivos do turno",
+                        exc_info=True,
+                    )
+                    turn_files = []
+                if turn_files:
+                    yield encode_event(
+                        TurnFilesChangedEvent(run_id=resolved_run_id, files=turn_files)
+                    )
 
     return sequence_stream(_gen(), run_log)

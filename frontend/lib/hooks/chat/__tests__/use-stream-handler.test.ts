@@ -26,7 +26,10 @@ const resumeChatMock = vi.fn();
 const getHistoryMock = vi.fn();
 const resumeStreamMock = vi.fn();
 
-vi.mock("@/lib/api/vectora-client", () => ({
+vi.mock("@/lib/api/vectora-client", async (importOriginal) => ({
+  withTrailingEvents: (
+    await importOriginal<typeof import("@/lib/api/vectora-client")>()
+  ).withTrailingEvents,
   resumeStream: (...args: unknown[]) => resumeStreamMock(...args),
   StreamResumeUnavailableError: class StreamResumeUnavailableError extends Error {},
   streamChat: (...args: unknown[]) => streamChatMock(...args),
@@ -50,6 +53,18 @@ function gen(events: StreamEvent[]): AsyncGenerator<StreamEvent> {
 }
 
 const seq = (n: number) => ({ seq: n, event_id: `run-1:${n}` });
+
+async function* turnoComArquivosTardios() {
+  yield { type: "thread", thread_id: "t1" };
+  yield { type: "token", content: "Pronto" };
+  yield { type: "done", thread_id: "t1", run_id: "run-1" };
+  await new Promise((r) => setTimeout(r, 30));
+  yield {
+    type: "turn_files_changed",
+    run_id: "run-1",
+    files: [{ path: "a.py", status: "modified" }],
+  };
+}
 
 describe("useStreamHandler.processStream", () => {
   let messages: Message[];
@@ -98,6 +113,22 @@ describe("useStreamHandler.processStream", () => {
     expect(assistant?.isThinking).toBe(false);
     expect(assistant?.isError).toBeFalsy();
     expect(assistant?.persistedMessageId).toBe(42);
+  });
+
+  it("encerra o turno no done e anexa os arquivos editados que chegam depois", async () => {
+    streamChatMock.mockReturnValue(turnoComArquivosTardios());
+
+    const { result } = run();
+    const out = await result.current.processStream("oi", "a1");
+
+    expect(out.runId).toBe("run-1");
+    expect(messages.find((m) => m.id === "a1")?.editedFiles).toBeUndefined();
+
+    await vi.waitFor(() => {
+      expect(messages.find((m) => m.id === "a1")?.editedFiles).toEqual([
+        { path: "a.py", status: "modified" },
+      ]);
+    });
   });
 
   it("evento repetido, reordenado ou posterior ao done não altera a resposta", async () => {

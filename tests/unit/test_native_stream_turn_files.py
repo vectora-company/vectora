@@ -47,3 +47,43 @@ async def test_persistencia_dos_arquivos_roda_em_segundo_plano(monkeypatch) -> N
     native_stream._schedule_attach_edited_files("t", "r", [{"path": "a.py"}])
 
     await asyncio.wait_for(chamado.wait(), timeout=1)
+
+
+@pytest.mark.asyncio
+async def test_finalize_and_attach_devolve_a_lista_e_agenda_a_persistencia(
+    monkeypatch,
+) -> None:
+    agendados: list[tuple] = []
+    monkeypatch.setattr(
+        native_stream,
+        "_schedule_attach_edited_files",
+        lambda *args: agendados.append(args),
+    )
+
+    payload = await native_stream._finalize_and_attach(
+        lambda _s: ["a.py"],
+        lambda changes: [{"path": c} for c in changes],
+        object(),
+        "t1",
+        "r1",
+    )
+
+    assert payload == [{"path": "a.py"}]
+    assert agendados == [("t1", "r1", [{"path": "a.py"}])]
+
+
+@pytest.mark.asyncio
+async def test_finalize_and_attach_sem_mudancas_nao_persiste(monkeypatch) -> None:
+    agendados: list[tuple] = []
+    monkeypatch.setattr(
+        native_stream,
+        "_schedule_attach_edited_files",
+        lambda *args: agendados.append(args),
+    )
+
+    payload = await native_stream._finalize_and_attach(
+        lambda _s: [], lambda changes: [], object(), "t1", "r1"
+    )
+
+    assert payload == []
+    assert agendados == []
