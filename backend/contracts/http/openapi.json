@@ -4701,10 +4701,26 @@
             ],
             "title": "Message Id"
           },
-          "reasoning": {
-            "default": "",
-            "title": "Reasoning",
-            "type": "string"
+          "parts": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "reasoning": "#/components/schemas/HistoryReasoningPart",
+                  "tool_call": "#/components/schemas/HistoryToolCallPart"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/HistoryReasoningPart"
+                },
+                {
+                  "$ref": "#/components/schemas/HistoryToolCallPart"
+                }
+              ]
+            },
+            "title": "Parts",
+            "type": "array"
           },
           "role": {
             "title": "Role",
@@ -4749,6 +4765,98 @@
           "content"
         ],
         "title": "HistoryMessage",
+        "type": "object"
+      },
+      "HistoryReasoningPart": {
+        "description": "Raciocínio que o provider devolveu para a mensagem.",
+        "properties": {
+          "kind": {
+            "const": "reasoning",
+            "default": "reasoning",
+            "title": "Kind",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "HistoryReasoningPart",
+        "type": "object"
+      },
+      "HistoryToolCallPart": {
+        "description": "Tool call da mensagem com o resultado resumido, quando já existe.",
+        "properties": {
+          "args_json": {
+            "default": "{}",
+            "title": "Args Json",
+            "type": "string"
+          },
+          "category": {
+            "default": "general",
+            "title": "Category",
+            "type": "string"
+          },
+          "destructive": {
+            "default": false,
+            "title": "Destructive",
+            "type": "boolean"
+          },
+          "icon": {
+            "default": "tool",
+            "title": "Icon",
+            "type": "string"
+          },
+          "is_error": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Error"
+          },
+          "kind": {
+            "const": "tool_call",
+            "default": "tool_call",
+            "title": "Kind",
+            "type": "string"
+          },
+          "render_hint": {
+            "default": "json",
+            "title": "Render Hint",
+            "type": "string"
+          },
+          "result_json": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Json"
+          },
+          "tool_call_id": {
+            "title": "Tool Call Id",
+            "type": "string"
+          },
+          "tool_name": {
+            "title": "Tool Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool_call_id",
+          "tool_name"
+        ],
+        "title": "HistoryToolCallPart",
         "type": "object"
       },
       "HookRuleInfo": {

@@ -53,38 +53,7 @@ import {
   markStreamEnded,
 } from "@/lib/utils/stream-interruption";
 import { m as msg } from "@/lib/paraglide/messages";
-import type { RenderHint, ToolCategory } from "@/lib/types/render";
-
-/** Únicos valores que o backend pode mandar em `render_hint`/`category` de
- * `tool_call` — um valor fora daqui vira fallback explícito (nunca cast
- * silencioso de string livre pro union type). */
-const KNOWN_RENDER_HINTS = new Set<RenderHint>([
-  "diff",
-  "code_block",
-  "terminal_output",
-  "search_results",
-  "table",
-  "queue_progress",
-  "queue_badge",
-  "artifact",
-  "image_preview",
-  "browser_screenshot",
-  "thinking_step",
-  "json_tree",
-  "chart_inline",
-  "db_result",
-  "json",
-]);
-const KNOWN_TOOL_CATEGORIES = new Set<ToolCategory>([
-  "filesystem",
-  "web",
-  "rag",
-  "memory",
-  "workspace",
-  "mcp",
-  "artifacts",
-  "general",
-]);
+import { buildToolCall, parseToolOutput } from "@/lib/utils/chat/tool-call";
 
 // ============================================================================
 // Streaming rendering
@@ -1033,27 +1002,15 @@ async function handleEvent(
     }
 
     case "tool_call": {
-      let args: Record<string, unknown> = {};
-      try {
-        args = JSON.parse(event.args_json);
-      } catch {
-        args = { _raw: event.args_json };
-      }
-
-      const toolCall: ToolCall = {
+      const toolCall = buildToolCall({
         id: event.tool_call_id,
         name: event.tool_name,
-        args,
-        output: undefined,
-        renderHint: KNOWN_RENDER_HINTS.has(event.render_hint as RenderHint)
-          ? (event.render_hint as RenderHint)
-          : "json",
-        category: KNOWN_TOOL_CATEGORIES.has(event.category as ToolCategory)
-          ? (event.category as ToolCategory)
-          : "general",
-        destructive: event.destructive ?? false,
-        icon: event.icon ?? "tool",
-      };
+        argsJson: event.args_json,
+        renderHint: event.render_hint,
+        category: event.category,
+        destructive: event.destructive,
+        icon: event.icon,
+      });
 
       setMessages((prev) =>
         updateMessageInList(prev, assistantMessageId, (m) => ({
@@ -1092,12 +1049,7 @@ async function handleEvent(
     }
 
     case "tool_result": {
-      let output: unknown;
-      try {
-        output = JSON.parse(event.content_json);
-      } catch {
-        output = event.content_json;
-      }
+      const output = parseToolOutput(event.content_json);
 
       let resolvedToolName: string | undefined;
       setMessages((prev) =>

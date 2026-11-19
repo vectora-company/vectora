@@ -313,6 +313,22 @@ export interface HistoryEditedFile {
   hunks: Array<{ header: string; lines: string[] }>;
 }
 
+export type HistoryPart =
+  | { kind: "reasoning"; text: string }
+  | {
+      kind: "tool_call";
+      tool_call_id: string;
+      tool_name: string;
+      args_json: string;
+      render_hint?: string;
+      category?: string;
+      destructive?: boolean;
+      icon?: string;
+      /** Resultado cortado pelo backend; ausente se a tool não terminou. */
+      result_json?: string | null;
+      is_error?: boolean | null;
+    };
+
 export interface HistoryMessage {
   role: "human" | "assistant";
   content: string;
@@ -325,8 +341,8 @@ export interface HistoryMessage {
   checkpoint_id?: string;
   attachments?: HistoryAttachment[];
   edited_files?: HistoryEditedFile[];
-  /** Raciocínio que o provider devolveu para esta mensagem. */
-  reasoning?: string;
+  /** Raciocínio e tool calls da mensagem, na ordem em que o stream os mostrou. */
+  parts?: HistoryPart[];
   /** Falha persistida; `null` é estado desconhecido e não marca erro. */
   is_error?: boolean | null;
 }

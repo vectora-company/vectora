@@ -23,6 +23,7 @@ from backend.services.media_types import (
     max_bytes_for,
 )
 from backend.vtypes.contracts import ToolOption
+from backend.vtypes.history import HistoryPart
 from backend.vtypes.permission import PermissionMode
 
 # ---------------------------------------------------------------------------
@@ -645,8 +646,9 @@ class HistoryMessage(BaseModel):
     checkpoint_id: str = ""
     attachments: list[dict[str, Any]] = Field(default_factory=list)
     edited_files: list[TurnFileChange] = Field(default_factory=list)
-    # Raciocínio que o provider devolveu para esta mensagem (recolhido na UI).
-    reasoning: str = ""
+    # Raciocínio e tool calls (com resultado resumido) desta mensagem, na ordem
+    # em que o stream os mostrou; o recarregamento reconstrói a mesma tela.
+    parts: list[HistoryPart] = Field(default_factory=list)
 
 
 class ListThreadsResponse(BaseModel):
