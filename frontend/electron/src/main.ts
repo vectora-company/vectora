@@ -1135,6 +1135,12 @@ async function fetchPackagedChangelog(
   }
 }
 
+function servicesDisabled(): boolean {
+  return ["1", "true", "yes", "on"].includes(
+    (process.env.VECTORA_NO_SERVICES ?? "").trim().toLowerCase(),
+  );
+}
+
 /**
  * Registra os listeners do `electron-updater` e propaga o estado pro
  * renderer via `vectora:update-status` (consumido em `UpdateBanner`,
@@ -1143,20 +1149,6 @@ async function fetchPackagedChangelog(
  * (`vectora:check-for-update`, ver `registerIpc()`) também precisa desses
  * listeners pra a UI mostrar o resultado.
  */
-function servicesDisabled(): boolean {
-  return ["1", "true", "yes", "on"].includes(
-    (process.env.VECTORA_NO_SERVICES ?? "").trim().toLowerCase(),
-  );
-}
-
-/** Register updater events and expose their merged status to the renderer. */
-function servicesDisabled(): boolean {
-  return ["1", "true", "yes", "on"].includes(
-    (process.env.VECTORA_NO_SERVICES ?? "").trim().toLowerCase(),
-  );
-}
-
-/** Register updater events and expose their merged status to the renderer. */
 function setupAutoUpdater(): void {
   if (servicesDisabled()) {
     // Registrado no log do sidecar: confirma que a flag chegou ao Electron.
