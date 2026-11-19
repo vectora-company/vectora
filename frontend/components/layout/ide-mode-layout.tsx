@@ -33,9 +33,12 @@ const MOBILE_TABS: { id: IdeMobilePanel; icon: typeof MessageSquare }[] = [
   { id: "editor", icon: Code2 },
 ];
 
+/** Tablet: editor em largura total, faixa do workbench fixa e gavetas. */
+export type IdeResponsiveState = IdeLayoutState | "tablet";
+
 interface IdeModeLayoutProps {
   /** Explicit responsive state. Mobile is reserved for smartphones. */
-  layoutState?: IdeLayoutState;
+  layoutState?: IdeResponsiveState;
   /** @deprecated use layoutState; kept for callers migrating from the boolean API. */
   isNarrow?: boolean;
   /** Header do app — vive na coluna central (navBar+workbenchContent+editor),
@@ -53,6 +56,8 @@ interface IdeModeLayoutProps {
   workbenchOpen?: boolean;
   /** Reabre a workbench quando ela foi fechada no modo compacto. */
   onOpenWorkbench?: () => void;
+  /** Fecha a workbench (gaveta do tablet). */
+  onCloseWorkbench?: () => void;
   workbenchSide?: "left" | "right";
   direction?: "ltr" | "rtl";
   workbenchWidth?: number;
@@ -80,6 +85,7 @@ export function IdeModeLayout({
   defaultMobilePanel = "editor",
   workbenchOpen = true,
   onOpenWorkbench,
+  onCloseWorkbench,
   workbenchSide = "left",
   direction = "ltr",
   workbenchWidth,
@@ -100,6 +106,15 @@ export function IdeModeLayout({
     defaultMobilePanel === "chat",
   );
   const reducedMotion = useReducedMotion();
+  const [tabletChatOpen, setTabletChatOpen] = useState(false);
+  const [tabletChatMounted, setTabletChatMounted] = useState(false);
+
+  useEffect(() => {
+    if (resolvedLayoutState === "tablet" && workbenchOpen) {
+      // Só uma gaveta lateral por vez: abrir o workbench fecha o chat.
+      setTabletChatOpen(false);
+    }
+  }, [resolvedLayoutState, workbenchOpen]);
 
   useEffect(() => {
     if (
@@ -110,6 +125,102 @@ export function IdeModeLayout({
       setMobilePanel("editor");
     }
   }, [resolvedLayoutState, mobilePanel, workbenchOpen]);
+
+  const tabletDrawerOpen =
+    resolvedLayoutState === "tablet" && (workbenchOpen || tabletChatOpen);
+  useEffect(() => {
+    if (!tabletDrawerOpen) return;
+    // Esc fecha a gaveta aberta, como em qualquer painel sobreposto.
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setTabletChatOpen(false);
+      onCloseWorkbench?.();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [tabletDrawerOpen, onCloseWorkbench]);
+
+  if (resolvedLayoutState === "tablet") {
+    const drawerOpen = workbenchOpen || tabletChatOpen;
+    const closeDrawers = () => {
+      setTabletChatOpen(false);
+      onCloseWorkbench?.();
+    };
+    const workbenchOnLeft = workbenchSide === "left";
+    return (
+      <div
+        className="flex flex-col flex-1 min-w-0 min-h-0 overflow-hidden"
+        data-testid="ide-tablet-layout"
+      >
+        {header}
+        <div className="flex flex-1 min-h-0 min-w-0 overflow-hidden">
+          {workbenchOnLeft && navBar}
+          <div className="relative flex-1 min-w-0 min-h-0 overflow-hidden">
+            <div className="absolute inset-0 min-w-0 overflow-hidden">
+              {editor}
+            </div>
+            {drawerOpen && (
+              <button
+                type="button"
+                data-testid="ide-tablet-backdrop"
+                aria-label={m.workbench_close()}
+                onClick={closeDrawers}
+                className="absolute inset-0 z-30 cursor-default bg-black/55"
+              />
+            )}
+            <div
+              data-testid="ide-tablet-workbench-drawer"
+              hidden={!workbenchOpen}
+              className={`absolute inset-y-0 z-40 flex min-w-0 w-full overflow-hidden bg-background shadow-xl sm:w-[min(32rem,85%)] ${
+                workbenchOnLeft ? "left-0 border-r" : "right-0 border-l"
+              }`}
+            >
+              {workbenchContent}
+            </div>
+            {tabletChatMounted && (
+              <div
+                data-testid="ide-tablet-chat-drawer"
+                hidden={!tabletChatOpen}
+                className="absolute inset-y-0 right-0 z-40 flex min-w-0 w-full overflow-hidden border-l bg-background shadow-xl sm:w-[min(32rem,85%)]"
+              >
+                {chat}
+              </div>
+            )}
+          </div>
+          {!workbenchOnLeft && navBar}
+          <nav
+            data-testid="ide-tablet-chat-rail"
+            aria-label={m.mobile_shell_controls()}
+            className="flex w-12 shrink-0 flex-col items-center gap-1 border-l border-border/60 bg-sidebar py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]"
+          >
+            <button
+              type="button"
+              data-testid="ide-tablet-chat-toggle"
+              aria-label={m.layout_open_chat()}
+              title={m.layout_open_chat()}
+              aria-pressed={tabletChatOpen}
+              onClick={() => {
+                if (tabletChatOpen) {
+                  setTabletChatOpen(false);
+                  return;
+                }
+                setTabletChatMounted(true);
+                onCloseWorkbench?.();
+                setTabletChatOpen(true);
+              }}
+              className={`flex h-7 w-7 pointer-coarse:h-10 pointer-coarse:w-10 items-center justify-center rounded-md transition-colors hover:bg-muted/50 hover:text-foreground ${
+                tabletChatOpen
+                  ? "bg-muted text-foreground"
+                  : "text-muted-foreground"
+              }`}
+            >
+              <MessageSquare className="size-4" aria-hidden="true" />
+            </button>
+          </nav>
+        </div>
+      </div>
+    );
+  }
 
   if (resolvedLayoutState !== "mobile") {
     return (

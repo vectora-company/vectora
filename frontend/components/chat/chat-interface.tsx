@@ -97,7 +97,10 @@ interface ChatInterfaceProps {
    * real, então precisa ser removido do cache local. */
   onThreadPersistFailed?: (threadId: string) => void;
   agentConfig?: AgentConfig;
-  onAgentConfigChange?: (config: AgentConfig) => void;
+  onAgentConfigChange?: (
+    config: AgentConfig,
+    meta?: { automatic?: boolean },
+  ) => void;
   isNewThread?: boolean;
   customTitle?: string | null;
   /** Pre-fill or auto-send a message. Use with autoSend to control behavior. */
@@ -572,7 +575,12 @@ export function ChatInterface({
       // Quota esgotada: o backend trocou de provider. Reflete no model selector
       // e avisa o usuário (igual ao aviso de VECTORA_TOKEN).
       if (onAgentConfigChange && agentConfig) {
-        onAgentConfigChange({ ...agentConfig, model: toModel });
+        // Troca automática (quota/fallback): só reflete no seletor desta
+        // sessão; a escolha persistida do usuário não é sobrescrita.
+        onAgentConfigChange(
+          { ...agentConfig, model: toModel },
+          { automatic: true },
+        );
       }
       useToastStore
         .getState()

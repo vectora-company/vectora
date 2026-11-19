@@ -25,13 +25,6 @@ const GeralTab = lazyWithRetry(
     })),
   "settings-geral-tab",
 );
-const MemoriaTab = lazyWithRetry(
-  () =>
-    import("./preferencias/tabs/memoria-tab").then((mod) => ({
-      default: mod.MemoriaTab,
-    })),
-  "settings-memoria-tab",
-);
 const ContaTab = lazyWithRetry(
   () =>
     import("./preferencias/tabs/conta-tab").then((mod) => ({
@@ -130,13 +123,6 @@ const UsersPanel = lazyWithRetry(
     })),
   "settings-admin-users",
 );
-const ToolsPanel = lazyWithRetry(
-  () =>
-    import("./administracao/admin-tab").then((mod) => ({
-      default: mod.ToolsPanel,
-    })),
-  "settings-admin-tools",
-);
 const SafeRootsPanel = lazyWithRetry(
   () =>
     import("./administracao/admin-tab").then((mod) => ({
@@ -158,39 +144,7 @@ const StoragePanel = lazyWithRetry(
     })),
   "settings-admin-storage",
 );
-const BillingPanelLazy = lazyWithRetry(
-  () =>
-    import("./billing-panel").then((mod) => ({ default: mod.BillingPanel })),
-  "settings-billing-tab",
-);
-const AboutPanelLazy = lazyWithRetry(
-  () => import("./about-panel").then((mod) => ({ default: mod.AboutPanel })),
-  "settings-about-tab",
-);
-
-/** Cobrança + Sobre empilhados numa categoria só — telas pequenas demais
- * (poucos campos cada) pra justificar 2 entradas separadas no rail. */
-function BillingAndAboutPanel() {
-  return (
-    <div className="space-y-8">
-      <div>
-        <h3 className="text-sm font-medium mb-3">
-          {m.settings_category_billing()}
-        </h3>
-        <BillingPanelLazy />
-      </div>
-      <div>
-        <h3 className="text-sm font-medium mb-3">
-          {m.settings_category_about()}
-        </h3>
-        <AboutPanelLazy />
-      </div>
-    </div>
-  );
-}
-
-export type SettingsGroupId =
-  "preferencias" | "ambiente" | "administracao" | "geral_grupo";
+export type SettingsGroupId = "preferencias" | "ambiente" | "administracao";
 
 export interface SettingsCategory {
   id: SettingsCategoryId;
@@ -223,12 +177,6 @@ export function buildSettingsCategoryGroups({
       Component: GeralTab,
     },
     {
-      id: "memoria",
-      group: "preferencias",
-      label: m.settings_category_memoria(),
-      Component: MemoriaTab,
-    },
-    {
       id: "conta",
       group: "preferencias",
       label: m.settings_category_conta(),
@@ -250,16 +198,16 @@ export function buildSettingsCategoryGroups({
       Component: AiModelsTab,
     },
     {
-      id: "media",
-      group: "ambiente",
-      label: m.settings_category_media(),
-      Component: MediaSettingsTab,
-    },
-    {
       id: "provider_routing",
       group: "ambiente",
       label: m.settings_category_provider_routing(),
       Component: ProviderRoutingTab,
+    },
+    {
+      id: "media",
+      group: "ambiente",
+      label: m.settings_category_media(),
+      Component: MediaSettingsTab,
     },
     ...(connectEnabled
       ? ([
@@ -284,12 +232,6 @@ export function buildSettingsCategoryGroups({
       Component: SkillsTab,
     },
     {
-      id: "tool_policy",
-      group: "ambiente",
-      label: m.settings_category_tool_policy(),
-      Component: ToolPolicyPanel,
-    },
-    {
       id: "hitl_allowlist",
       group: "ambiente",
       label: m.settings_category_hitl_allowlist(),
@@ -309,48 +251,44 @@ export function buildSettingsCategoryGroups({
     },
   ];
 
-  const administracao: SettingsCategory[] = isAdmin
-    ? [
-        {
-          id: "admin_users",
-          group: "administracao",
-          label: m.admin_tab_users(),
-          Component: UsersPanel,
-        },
-        {
-          id: "admin_tools",
-          group: "administracao",
-          label: m.admin_tab_tools(),
-          Component: ToolsPanel,
-        },
-        {
-          id: "admin_saferoots",
-          group: "administracao",
-          label: m.admin_tab_saferoots(),
-          Component: SafeRootsPanel,
-        },
-        {
-          id: "admin_system",
-          group: "administracao",
-          label: m.admin_tab_system(),
-          Component: SystemPanel,
-        },
-        {
-          id: "admin_storage",
-          group: "administracao",
-          label: m.admin_tab_storage(),
-          Component: StoragePanel,
-        },
-      ]
-    : [];
-
-  const geralGrupo: SettingsCategory[] = [
+  // Acesso às ferramentas é de todos: o admin define quem usa o quê, e os
+  // demais só podem remover o próprio acesso. O resto da Administração é só
+  // para admin.
+  const administracao: SettingsCategory[] = [
     {
-      id: "billing",
-      group: "geral_grupo",
-      label: m.settings_category_billing(),
-      Component: BillingAndAboutPanel,
+      id: "tool_policy",
+      group: "administracao",
+      label: m.settings_category_tool_policy(),
+      Component: ToolPolicyPanel,
     },
+    ...(isAdmin
+      ? ([
+          {
+            id: "admin_users",
+            group: "administracao",
+            label: m.admin_tab_users(),
+            Component: UsersPanel,
+          },
+          {
+            id: "admin_saferoots",
+            group: "administracao",
+            label: m.admin_tab_saferoots(),
+            Component: SafeRootsPanel,
+          },
+          {
+            id: "admin_system",
+            group: "administracao",
+            label: m.admin_tab_system(),
+            Component: SystemPanel,
+          },
+          {
+            id: "admin_storage",
+            group: "administracao",
+            label: m.admin_tab_storage(),
+            Component: StoragePanel,
+          },
+        ] as SettingsCategory[])
+      : []),
   ];
 
   const groups: SettingsCategoryGroup[] = [
@@ -372,19 +310,23 @@ export function buildSettingsCategoryGroups({
       categories: administracao,
     });
   }
-  groups.push({ id: "geral_grupo", label: "", categories: geralGrupo });
 
   return groups;
 }
 
-/** "about" foi mesclado dentro da categoria "billing" (Cobrança + Sobre
- * empilhados) — mantido como alias pra não quebrar deep-links antigos que
- * ainda abrem `openCategory("about")` diretamente. */
+/** Cobrança e Sobre agora são seções da aba Conta, Git faz parte de
+ * Workbenches e as memórias vivem no workbench de Memória: os ids antigos
+ * ficam como alias para não quebrar deep-links que ainda abrem
+ * `openCategory("billing")`, `("about")`, `("git")` ou `("memoria")`; a
+ * antiga "Ferramentas" da Administração agora é o Acesso às ferramentas. */
 const CATEGORY_ALIASES: Partial<
   Record<SettingsCategoryId, SettingsCategoryId>
 > = {
-  about: "billing",
+  about: "conta",
+  memoria: "geral",
+  billing: "conta",
   git: "workbenches",
+  admin_tools: "tool_policy",
 };
 
 export function findCategory(

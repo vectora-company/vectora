@@ -414,6 +414,64 @@ async def list_tools_admin(request: Request) -> dict:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
+class ToolAccessBody(BaseModel):
+    #: tool -> roles liberados (``null`` = todos os roles).
+    access: dict[str, list[str] | None]
+
+
+@router.get("/tool-access")
+async def get_tool_access(request: Request) -> dict:
+    """Acesso por role de cada tool (RBAC): quem pode usar o quê."""
+    require_admin(_get_user(request))
+    from backend.nodes.tools import ALL_TOOL_SPECS
+    from backend.rbac import tool_policy
+
+    access = tool_policy.get_role_access()
+    disabled_global = set(tool_policy.get_disabled(tool_policy.GLOBAL_SCOPE))
+    return {
+        "roles": list(tool_policy.GRANTABLE_ROLES),
+        "always_allowed": sorted(tool_policy.ALWAYS_ALLOWED_ROLES),
+        "tools": [
+            {
+                "name": spec.name,
+                "description": spec.description or "",
+                "category": spec.extras.category,
+                "destructive": bool(spec.extras.destructive),
+                "enabled": spec.name not in disabled_global,
+                "roles": access.get(spec.name, list(tool_policy.GRANTABLE_ROLES)),
+            }
+            for spec in sorted(ALL_TOOL_SPECS, key=lambda item: item.name)
+        ],
+    }
+
+
+@router.put("/tool-access")
+async def put_tool_access(request: Request, body: ToolAccessBody) -> dict:
+    """Grava o acesso por role. Só admin/root; tools e roles são validados."""
+    require_admin(_get_user(request))
+    from backend.nodes.tools import ALL_TOOL_NAMES
+    from backend.rbac import tool_policy
+
+    unknown = sorted(set(body.access) - set(ALL_TOOL_NAMES))
+    if unknown:
+        raise HTTPException(status_code=400, detail=f"Tools desconhecidas: {unknown}")
+    invalid = sorted(
+        {
+            role
+            for roles in body.access.values()
+            for role in (roles or [])
+            if role not in tool_policy.GRANTABLE_ROLES
+        }
+    )
+    if invalid:
+        raise HTTPException(status_code=400, detail=f"Roles inválidos: {invalid}")
+    # Edição parcial: o que não veio mantém o acesso atual.
+    merged: dict[str, list[str] | None] = {**tool_policy.get_role_access()}
+    merged.update(body.access)
+    await tool_policy.set_role_access(merged)
+    return {"status": "ok"}
+
+
 @router.get("/agents/resolve")
 async def resolve_agent(
     request: Request,
@@ -875,6 +933,15 @@ async def get_media_models(request: Request) -> dict:
             for capability in ("image", "tts", "video")
         }
     }
+
+
+@router.get("/speech-models")
+async def get_speech_models(request: Request) -> dict:
+    """Modelos de fala do OpenRouter e as vozes de cada um, para o seletor."""
+    require_admin(_get_user(request))
+    from backend.llm.openrouter.media import list_speech_models
+
+    return {"models": await list_speech_models()}
 
 
 @router.patch("/media-models")

@@ -68,7 +68,7 @@ class ClefLocalAdapter(SystemOneProvider):
 
     async def capabilities(self) -> ProviderCapabilities:
         """Capacidades declaradas para Clef local (texto, noul, choice, score; sem mídias por padrão)."""
-        models = ["clef", "clef-flash", "default"]
+        models = ["clef", "clef-flash", "clef-omni", "default"]
         if self._model is not None:
             models.append(self._model)
         return ProviderCapabilities(
