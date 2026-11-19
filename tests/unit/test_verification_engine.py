@@ -606,3 +606,32 @@ def test_deleted_touched_file_is_recorded(test_workspace: Path) -> None:
     sha_without, hashes = compute_files_snapshot(test_workspace, files=["main.py"])
     assert hashes == {"main.py": "deleted"}
     assert sha_without != sha_with
+
+
+@pytest.mark.asyncio
+async def test_run_verification_sem_arquivo_tocado_nao_varre_o_workspace(
+    test_workspace: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Conversa sem edição e sem gate não pode hashear o workspace inteiro."""
+
+    def _nao_varrer(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("o workspace não deveria ser varrido")
+
+    monkeypatch.setattr(snapshot.os, "walk", _nao_varrer)
+    profile = WorkspaceVerificationProfile(workspace_id="test_ws", enabled=False)
+
+    res = await run_verification("test_ws", test_workspace, profile=profile)
+
+    assert (res.status, res.outcome) == ("degraded", "not_run")
+    assert len(res.snapshot_sha256) == 64
+    assert res.file_hashes == {}
+
+
+def test_snapshot_do_workspace_nao_inclui_o_git(tmp_path: Path) -> None:
+    (tmp_path / ".git").mkdir()
+    (tmp_path / ".git" / "HEAD").write_text("ref")
+    (tmp_path / "a.py").write_text("x")
+
+    _digest, hashes = compute_files_snapshot(tmp_path)
+
+    assert list(hashes) == ["a.py"]
