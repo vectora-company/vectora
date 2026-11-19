@@ -29,6 +29,7 @@ import { mDyn } from "@/lib/i18n-dyn";
 import type { VectoraDmrOperation } from "@/lib/types/vectora-bridge";
 import {
   SettingsMessage,
+  SettingsPageNav,
   SettingsSectionHeader,
   SettingsStack,
   SettingsStatus,
@@ -3539,6 +3540,7 @@ function LlamaCppSection() {
 export function ProviderRoutingTab() {
   return (
     <SettingsStack>
+      <SettingsPageNav />
       <LlamaCppSection />
       <OllamaSection />
       <DmrSection />

@@ -988,7 +988,9 @@ describe("ProviderRoutingTab — 9Router", () => {
     render(<ProviderRoutingTab />);
     // Ollama também tem um botão "Detectar modelos" — escopa pela seção
     // 9Router (via o título) pra não clicar no botão errado.
-    const nineRouterHeading = await screen.findByText(/^9router/i);
+    const nineRouterHeading = await screen.findByRole("heading", {
+      name: /^9router/i,
+    });
     const nineRouterSection = nineRouterHeading.closest(
       "div.rounded-lg.border",
     )!;
@@ -1065,7 +1067,9 @@ describe("ProviderRoutingTab — 9Router", () => {
       nineRouterDiscover: { reachable: true, models },
     });
     render(<ProviderRoutingTab />);
-    const nineRouterHeading = await screen.findByText(/^9router/i);
+    const nineRouterHeading = await screen.findByRole("heading", {
+      name: /^9router/i,
+    });
     const nineRouterSection = nineRouterHeading.closest(
       "div.rounded-lg.border",
     )!;
@@ -1107,7 +1111,9 @@ describe("ProviderRoutingTab — 9Router", () => {
       nineRouterDiscover: { reachable: true, models },
     });
     render(<ProviderRoutingTab />);
-    const nineRouterHeading = await screen.findByText(/^9router/i);
+    const nineRouterHeading = await screen.findByRole("heading", {
+      name: /^9router/i,
+    });
     const nineRouterSection = nineRouterHeading.closest(
       "div.rounded-lg.border",
     )!;
@@ -1141,7 +1147,9 @@ describe("ProviderRoutingTab — 9Router", () => {
       nineRouterDiscover: { reachable: false, models: [] },
     });
     render(<ProviderRoutingTab />);
-    const nineRouterHeading = await screen.findByText(/^9router/i);
+    const nineRouterHeading = await screen.findByRole("heading", {
+      name: /^9router/i,
+    });
     const nineRouterSection = nineRouterHeading.closest(
       "div.rounded-lg.border",
     )!;
