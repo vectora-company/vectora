@@ -100,8 +100,8 @@ def build_registry_with_deferred(
 
     async def _enable(name: str) -> str:
         if name not in registry.deferred_toolsets():
-            ativos = ", ".join(sorted(registry.deferred_toolsets())) or "nenhum"
-            return f"Error: toolset '{name}' não existe ou já está ativo. Disponíveis: {ativos}."
+            active = ", ".join(sorted(registry.deferred_toolsets())) or "nenhum"
+            return f"Error: toolset '{name}' não existe ou já está ativo. Disponíveis: {active}."
         tools = registry.activate(name)
         return (
             f"Toolset '{name}' ativado: {', '.join(tools)}. "

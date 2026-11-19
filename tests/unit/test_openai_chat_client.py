@@ -29,12 +29,12 @@ def _client(handler, **kwargs) -> OpenAIChatClient:
     return OpenAIChatClient(model="gpt-5", client=http_client, **kwargs)
 
 
-def _resposta_ok(texto: str = "Olá", **extra) -> dict:
+def _ok_response(text: str = "Olá", **extra) -> dict:
     return {
         "id": "resp_1",
         "status": "completed",
         "output": [
-            {"type": "message", "content": [{"type": "output_text", "text": texto}]}
+            {"type": "message", "content": [{"type": "output_text", "text": text}]}
         ],
         "usage": {"input_tokens": 10, "output_tokens": 3, "total_tokens": 13},
         **extra,
@@ -44,7 +44,7 @@ def _resposta_ok(texto: str = "Olá", **extra) -> dict:
 class TestAgenerate:
     async def test_prompt_simples_devolve_conteudo(self):
         def handler(_req):
-            return httpx.Response(200, json=_resposta_ok("Olá da OpenAI"))
+            return httpx.Response(200, json=_ok_response("Olá da OpenAI"))
 
         resultado = await _client(handler).agenerate(
             [text_message(MessageRole.USER, "oi")]
@@ -69,7 +69,7 @@ class TestConversaoDeMensagens:
             import json as _json
 
             capturado.update(_json.loads(req.content))
-            return httpx.Response(200, json=_resposta_ok())
+            return httpx.Response(200, json=_ok_response())
 
         await _client(handler).agenerate(
             [
@@ -100,7 +100,7 @@ class TestConversaoDeMensagens:
             import json as _json
 
             capturado.update(_json.loads(req.content))
-            return httpx.Response(200, json=_resposta_ok())
+            return httpx.Response(200, json=_ok_response())
 
         mensagem = VMessage(
             role=MessageRole.USER,
@@ -121,7 +121,7 @@ class TestConversaoDeMensagens:
 
     async def test_mensagem_de_role_desconhecido_falha(self):
         def handler(_req):
-            return httpx.Response(200, json=_resposta_ok())
+            return httpx.Response(200, json=_ok_response())
 
         estranha = text_message(MessageRole.USER, "?")
         estranha.role = "extraterrestre"  # ty: ignore[invalid-assignment]
@@ -140,7 +140,7 @@ class TestToolCalling:
             import json as _json
 
             capturado.update(_json.loads(req.content))
-            return httpx.Response(200, json=_resposta_ok())
+            return httpx.Response(200, json=_ok_response())
 
         @vtool(extras=ToolExtras())
         async def buscar(query: str, limit: int | None = None) -> str:
@@ -218,7 +218,7 @@ class TestToolCalling:
 
 class TestStreaming:
     async def test_chunks_de_texto_saem_na_ordem(self):
-        corpo = (
+        body = (
             b'data: {"type":"response.output_text.delta","delta":"Oi"}\n\n'
             b'data: {"type":"response.output_text.delta","delta":" mundo"}\n\n'
             b'data: {"type":"response.completed","response":{}}\n\n'
@@ -226,7 +226,7 @@ class TestStreaming:
 
         def handler(_req):
             return httpx.Response(
-                200, content=corpo, headers={"content-type": "text/event-stream"}
+                200, content=body, headers={"content-type": "text/event-stream"}
             )
 
         chunks = [
@@ -235,9 +235,9 @@ class TestStreaming:
                 [text_message(MessageRole.USER, "oi")]
             )
         ]
-        texto = "".join(c.delta_text for c in chunks)
+        text = "".join(c.delta_text for c in chunks)
 
-        assert texto == "Oi mundo"
+        assert text == "Oi mundo"
 
     async def test_stream_sem_nenhum_chunk_util_nao_trava(self):
         def handler(_req):
@@ -263,7 +263,7 @@ class TestStreamingToolCallsEUsage:
     tool call completa a partir dos ToolCallChunk acumulados."""
 
     async def test_tool_call_fragmentada_em_varios_deltas_sai_completa(self):
-        corpo = (
+        body = (
             b'data: {"type":"response.output_item.added","item":'
             b'{"id":"item_1","type":"function_call","name":"file_read",'
             b'"call_id":"call_1"}}\n\n'
@@ -278,7 +278,7 @@ class TestStreamingToolCallsEUsage:
 
         def handler(_req):
             return httpx.Response(
-                200, content=corpo, headers={"content-type": "text/event-stream"}
+                200, content=body, headers={"content-type": "text/event-stream"}
             )
 
         chunks = [
@@ -298,7 +298,7 @@ class TestStreamingToolCallsEUsage:
     async def test_done_sem_delta_anterior_traz_json_completo(self):
         """Edge case confirmado pela doc oficial: o servidor pode pular os
         deltas e mandar o JSON completo direto no `.done`."""
-        corpo = (
+        body = (
             b'data: {"type":"response.output_item.added","item":'
             b'{"id":"item_1","type":"function_call","name":"somar",'
             b'"call_id":"call_1"}}\n\n'
@@ -309,7 +309,7 @@ class TestStreamingToolCallsEUsage:
 
         def handler(_req):
             return httpx.Response(
-                200, content=corpo, headers={"content-type": "text/event-stream"}
+                200, content=body, headers={"content-type": "text/event-stream"}
             )
 
         chunks = [
@@ -322,7 +322,7 @@ class TestStreamingToolCallsEUsage:
         assert chunks[0].tool_call_chunks[0].args_fragment == '{"a":1,"b":2}'
 
     async def test_usage_do_response_completed_vira_usage_metadata(self):
-        corpo = (
+        body = (
             b'data: {"type":"response.output_text.delta","delta":"oi"}\n\n'
             b'data: {"type":"response.completed","response":'
             b'{"usage":{"input_tokens":10,"output_tokens":3,"total_tokens":13}}}\n\n'
@@ -330,7 +330,7 @@ class TestStreamingToolCallsEUsage:
 
         def handler(_req):
             return httpx.Response(
-                200, content=corpo, headers={"content-type": "text/event-stream"}
+                200, content=body, headers={"content-type": "text/event-stream"}
             )
 
         chunks = [
@@ -349,17 +349,17 @@ class TestStreamingToolCallsEUsage:
         assert usage["total_tokens"] == 13
 
 
-def test_payload_envia_a_chave_de_cache_da_conversa() -> None:
+def test_payload_sends_thread_cache_key() -> None:
     from backend.llm.prompt_cache import prompt_cache_key
 
-    client = _client(lambda request: httpx.Response(200, json=_resposta_ok()))
+    client = _client(lambda request: httpx.Response(200, json=_ok_response()))
     token = prompt_cache_key.set("thread-1")
     try:
-        corpo = client._payload([], tools=None, temperature=None, max_tokens=None)
+        body = client._payload([], tools=None, temperature=None, max_tokens=None)
     finally:
         prompt_cache_key.reset(token)
 
-    assert corpo["prompt_cache_key"] == "thread-1"
+    assert body["prompt_cache_key"] == "thread-1"
     assert "prompt_cache_key" not in client._payload(
         [], tools=None, temperature=None, max_tokens=None
     )

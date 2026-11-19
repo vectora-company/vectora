@@ -237,20 +237,20 @@ class OpenAIChatClient:
         temperature: float | None,
         max_tokens: int | None,
     ) -> dict:
-        corpo: dict[str, Any] = {
+        body: dict[str, Any] = {
             "model": self.model,
             "input": _to_openai_input(messages),
         }
         if temperature is not None:
-            corpo["temperature"] = temperature
+            body["temperature"] = temperature
         if max_tokens is not None:
-            corpo["max_output_tokens"] = max_tokens
+            body["max_output_tokens"] = max_tokens
         if tools:
-            corpo["tools"] = [_to_openai_tool(t) for t in tools]
+            body["tools"] = [_to_openai_tool(t) for t in tools]
         cache_key = prompt_cache_key.get()
         if cache_key:
-            corpo["prompt_cache_key"] = cache_key
-        return corpo
+            body["prompt_cache_key"] = cache_key
+        return body
 
     async def agenerate(
         self,

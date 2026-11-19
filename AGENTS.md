@@ -47,6 +47,10 @@ O backend fica em `backend/`: handlers e schemas da API em `backend/api/`, o loo
 
 O runtime de agentes usa o loop de conversa nativo (`backend/engine/conversation_loop.py`) e a fábrica (`backend/services/agent_factory.py`). Estenda-o pelas ferramentas, pelas definições de subagent e Soul, pelo fluxo de HITL e pelos contextos de runtime existentes; não adicione outro framework de orquestração sem uma decisão de arquitetura.
 
+### 3.2.1. Idioma do código
+
+Todo código é escrito somente em inglês: variáveis, funções, métodos, classes, constantes, parâmetros, campos, chaves de dados internas e nomes de testes. Comentários e docstrings podem ser em português ou em inglês, e o normal neste repositório é português. Não traduza um comentário só para acompanhar uma renomeação, e nunca altere comentários, docstrings ou textos visíveis ao usuário ao renomear identificadores por regex; revise o diff antes de commitar. Textos visíveis ao usuário seguem a regra de i18n da seção 3.4.
+
 ### 3.3. I/O e erros
 
 Prefira APIs assíncronas para I/O no backend e use os padrões que o repositório já tem para HTTP, banco e subprocessos assíncronos. Não bloqueie o event loop com chamadas síncronas de rede ou de processo. As ferramentas devolvem erros úteis e limitados e registram contexto estruturado nos logs; capture exceções na fronteira em que o contrato da ferramenta exige, sem esconder cancelamentos nem erros de programação.

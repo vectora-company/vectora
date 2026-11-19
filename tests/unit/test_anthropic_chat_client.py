@@ -39,10 +39,10 @@ def _client(handler, **kwargs) -> AnthropicChatClient:
     return AnthropicChatClient(model="claude-sonnet-test", client=http_client, **kwargs)
 
 
-def _resposta_ok(texto: str = "Olá", **extra) -> dict:
+def _ok_response(text: str = "Olá", **extra) -> dict:
     return {
         "id": "msg_1",
-        "content": [{"type": "text", "text": texto}],
+        "content": [{"type": "text", "text": text}],
         "usage": {"input_tokens": 10, "output_tokens": 3},
         **extra,
     }
@@ -51,7 +51,7 @@ def _resposta_ok(texto: str = "Olá", **extra) -> dict:
 class TestAgenerate:
     async def test_prompt_simples_devolve_conteudo(self):
         def handler(_req):
-            return httpx.Response(200, json=_resposta_ok("Olá da Anthropic"))
+            return httpx.Response(200, json=_ok_response("Olá da Anthropic"))
 
         resultado = await _client(handler).agenerate(
             [text_message(MessageRole.USER, "oi")]
@@ -76,7 +76,7 @@ class TestConversaoDeMensagens:
             import json as _json
 
             capturado.update(_json.loads(req.content))
-            return httpx.Response(200, json=_resposta_ok())
+            return httpx.Response(200, json=_ok_response())
 
         await _client(handler).agenerate(
             [
@@ -97,7 +97,7 @@ class TestConversaoDeMensagens:
             import json as _json
 
             capturado.update(_json.loads(req.content))
-            return httpx.Response(200, json=_resposta_ok())
+            return httpx.Response(200, json=_ok_response())
 
         await _client(handler).agenerate(
             [
@@ -126,7 +126,7 @@ class TestConversaoDeMensagens:
             import json as _json
 
             capturado.update(_json.loads(req.content))
-            return httpx.Response(200, json=_resposta_ok())
+            return httpx.Response(200, json=_ok_response())
 
         mensagem = VMessage(
             role=MessageRole.ASSISTANT,
@@ -149,7 +149,7 @@ class TestConversaoDeMensagens:
 
     async def test_mensagem_de_role_desconhecido_falha(self):
         def handler(_req):
-            return httpx.Response(200, json=_resposta_ok())
+            return httpx.Response(200, json=_ok_response())
 
         estranha = text_message(MessageRole.USER, "?")
         estranha.role = "extraterrestre"  # ty: ignore[invalid-assignment]
@@ -167,7 +167,7 @@ class TestConversaoDeMensagens:
             import json as _json
 
             capturado.update(_json.loads(req.content))
-            return httpx.Response(200, json=_resposta_ok())
+            return httpx.Response(200, json=_ok_response())
 
         mensagem = VMessage(
             role=MessageRole.USER,
@@ -193,7 +193,7 @@ class TestConversaoDeMensagens:
             import json as _json
 
             capturado.update(_json.loads(req.content))
-            return httpx.Response(200, json=_resposta_ok())
+            return httpx.Response(200, json=_ok_response())
 
         mensagem = VMessage(
             role=MessageRole.USER,
@@ -219,7 +219,7 @@ class TestToolCalling:
             import json as _json
 
             capturado.update(_json.loads(req.content))
-            return httpx.Response(200, json=_resposta_ok())
+            return httpx.Response(200, json=_ok_response())
 
         @vtool(extras=ToolExtras())
         async def buscar(query: str) -> str:
@@ -271,7 +271,7 @@ class TestToolCalling:
 
 class TestStreaming:
     async def test_chunks_de_texto_saem_na_ordem(self):
-        corpo = (
+        body = (
             b'data: {"type":"content_block_start","index":0,'
             b'"content_block":{"type":"text"}}\n\n'
             b'data: {"type":"content_block_delta","index":0,'
@@ -283,7 +283,7 @@ class TestStreaming:
 
         def handler(_req):
             return httpx.Response(
-                200, content=corpo, headers={"content-type": "text/event-stream"}
+                200, content=body, headers={"content-type": "text/event-stream"}
             )
 
         chunks = [
@@ -292,9 +292,9 @@ class TestStreaming:
                 [text_message(MessageRole.USER, "oi")]
             )
         ]
-        texto = "".join(c.delta_text for c in chunks)
+        text = "".join(c.delta_text for c in chunks)
 
-        assert texto == "Oi mundo"
+        assert text == "Oi mundo"
 
     async def test_stream_sem_nenhum_chunk_util_nao_trava(self):
         def handler(_req):
@@ -319,7 +319,7 @@ class TestStreamingToolCallsEUsage:
     `message_delta` é cumulativo — cada emissão substitui, nunca soma."""
 
     async def test_tool_call_fragmentada_em_varios_deltas_sai_completa(self):
-        corpo = (
+        body = (
             b'data: {"type":"content_block_start","index":0,'
             b'"content_block":{"type":"tool_use","id":"call_1",'
             b'"name":"file_read"}}\n\n'
@@ -333,7 +333,7 @@ class TestStreamingToolCallsEUsage:
 
         def handler(_req):
             return httpx.Response(
-                200, content=corpo, headers={"content-type": "text/event-stream"}
+                200, content=body, headers={"content-type": "text/event-stream"}
             )
 
         chunks = [
@@ -355,7 +355,7 @@ class TestStreamingToolCallsEUsage:
         assert names == {"file_read"}
 
     async def test_usage_de_message_delta_vira_usage_metadata_cumulativo(self):
-        corpo = (
+        body = (
             b'data: {"type":"content_block_start","index":0,'
             b'"content_block":{"type":"text"}}\n\n'
             b'data: {"type":"content_block_delta","index":0,'
@@ -369,7 +369,7 @@ class TestStreamingToolCallsEUsage:
 
         def handler(_req):
             return httpx.Response(
-                200, content=corpo, headers={"content-type": "text/event-stream"}
+                200, content=body, headers={"content-type": "text/event-stream"}
             )
 
         chunks = [
@@ -390,13 +390,13 @@ class TestStreamingToolCallsEUsage:
         }
 
 
-class TestCacheDePrompt:
-    def test_marca_tools_system_e_ultimas_mensagens(self, monkeypatch) -> None:
+class TestPromptCache:
+    def test_marks_tools_system_and_last_messages(self, monkeypatch) -> None:
         from backend.llm.anthropic.chat_client import _with_prompt_cache
         from backend.settings import settings
 
         monkeypatch.setattr(settings, "prompt_cache_enabled", True)
-        corpo = {
+        body = {
             "system": "regras",
             "tools": [{"name": "a"}, {"name": "b"}],
             "messages": [
@@ -406,7 +406,7 @@ class TestCacheDePrompt:
             ],
         }
 
-        out = _with_prompt_cache(corpo)
+        out = _with_prompt_cache(body)
 
         assert "cache_control" not in out["tools"][0]
         assert out["tools"][1]["cache_control"] == {"type": "ephemeral"}
@@ -416,20 +416,20 @@ class TestCacheDePrompt:
         assert out["messages"][2]["content"][-1]["text"] == "três"
         assert out["messages"][2]["content"][-1]["cache_control"]
 
-    def test_desligado_nao_altera_o_corpo(self, monkeypatch) -> None:
+    def test_disabled_does_not_change_body(self, monkeypatch) -> None:
         from backend.llm.anthropic.chat_client import _with_prompt_cache
         from backend.settings import settings
 
         monkeypatch.setattr(settings, "prompt_cache_enabled", False)
-        corpo = {"system": "regras", "messages": [{"role": "user", "content": "oi"}]}
+        body = {"system": "regras", "messages": [{"role": "user", "content": "oi"}]}
 
-        assert _with_prompt_cache(corpo) == {
+        assert _with_prompt_cache(body) == {
             "system": "regras",
             "messages": [{"role": "user", "content": "oi"}],
         }
 
 
-def test_usage_da_anthropic_soma_cache_e_expoe_o_lido() -> None:
+def test_anthropic_usage_sums_cache_and_exposes_cache_read() -> None:
     from backend.llm.anthropic.chat_client import _usage_metadata
 
     uso = _usage_metadata(
