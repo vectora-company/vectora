@@ -75,6 +75,8 @@ async def test_harness_telemetry_records_complete_turn_lifecycle(
     start = AsyncMock()
     end = AsyncMock()
     record_error = Mock()
+    record_cancellation = Mock()
+    monkeypatch.setattr(telemetry, "record_cancellation", record_cancellation)
     monkeypatch.setattr(telemetry, "turn_start", start)
     monkeypatch.setattr(telemetry, "turn_end", end)
     monkeypatch.setattr(telemetry, "record_error", record_error)
@@ -104,6 +106,13 @@ async def test_harness_telemetry_records_complete_turn_lifecycle(
     assert end_call.args[3] >= 0
     if outcome == "success":
         record_error.assert_not_called()
+        record_cancellation.assert_not_called()
+    elif outcome == "cancel":
+        # Cancelar não é erro não tratado: vai para o log como INFO.
+        record_error.assert_not_called()
+        record_cancellation.assert_called_once_with(
+            "conversation_loop", turn_id="run-stable", thread_id="thread-1"
+        )
     else:
         record_error.assert_called_once()
         assert record_error.call_args.kwargs["turn_id"] == "run-stable"

@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any, Literal, cast
 
 from dotenv import dotenv_values, load_dotenv
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from backend.runtime_profile import resolve_runtime_home
@@ -452,9 +452,9 @@ class Settings(BaseSettings):
     evaluation_recording_enabled: bool = False
     """Persist redacted model inputs for explicit Evaluation Lab exports."""
 
-    systemone_provider: Literal["clef-local", "laya-local", "clef-api", "jev-api"] = (
-        "clef-local"
-    )
+    systemone_provider: Literal[
+        "clef-local", "laya-local", "clef-api", "jev-api", "openrouter-api"
+    ] = "clef-local"
     """Provedor ativo de Decision Models."""
 
     systemone_local_base_url: str = "http://127.0.0.1:8080"
@@ -481,11 +481,28 @@ class Settings(BaseSettings):
     systemone_clef_api_model: str = "@cf/cloudflare/clef-flash"
     """Identificador do modelo na API Clef."""
 
-    systemone_jev_api_base_url: str = "https://api.jev.ai"
-    """Endpoint da API remota JEV."""
+    systemone_jev_api_base_url: str = "https://api.typesafe.ai"
+    """Endpoint da API remota JEV (TypeSafe)."""
 
-    systemone_jev_api_model: str = "jev-fast"
-    """Identificador do modelo na API JEV."""
+    systemone_jev_api_model: str = "jev-latest"
+    """Identificador do modelo na API JEV (`jev-latest`, `jev-1.14.0`, `jev-1.13.0`)."""
+
+    @field_validator("systemone_jev_api_base_url")
+    @classmethod
+    def _migrate_jev_base_url(cls, value: str) -> str:
+        from backend.llm.systemone.endpoints import normalize_jev_base_url
+
+        return normalize_jev_base_url(value)
+
+    @field_validator("systemone_jev_api_model")
+    @classmethod
+    def _migrate_jev_model(cls, value: str) -> str:
+        from backend.llm.systemone.endpoints import normalize_jev_model
+
+        return normalize_jev_model(value)
+
+    systemone_openrouter_model: str = "typesafe/jev-1.14"
+    """Slug do modelo de decisão no OpenRouter (usa a chave `openrouter_api_key`)."""
 
     systemone_allow_remote_fallback: bool = False
     """Permite fallback para API remota se local falhar (requer consentimento explícito)."""

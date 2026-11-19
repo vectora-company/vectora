@@ -39,7 +39,7 @@ export const RailToggleButton = forwardRef<
       data-testid={dataTestId}
       aria-label={ariaLabel}
       aria-expanded={ariaExpanded}
-      className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+      className="flex h-7 w-7 pointer-coarse:h-10 pointer-coarse:w-10 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
     >
       <Icon className="size-4" aria-hidden="true" />
     </button>
