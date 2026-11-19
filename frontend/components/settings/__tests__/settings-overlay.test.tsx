@@ -71,7 +71,6 @@ vi.mock("../environment/tabs/tool-policy-panel", () => ({
 }));
 vi.mock("../administracao/admin-tab", () => ({
   UsersPanel: stubTab("tab-admin-users"),
-  ToolsPanel: stubTab("tab-admin-tools"),
   SafeRootsPanel: stubTab("tab-admin-saferoots"),
   SystemPanel: stubTab("tab-admin-system"),
   StoragePanel: stubTab("tab-admin-storage"),
@@ -141,17 +140,27 @@ describe("SettingsOverlay — categorias Skills/Tool Policy", () => {
 });
 
 describe("SettingsOverlay — gate de role (Administração)", () => {
-  it("usuário sem role admin/root não vê a categoria Administração", async () => {
+  it("usuário sem role admin/root vê só o Acesso às ferramentas em Administração", async () => {
     resetStores("member");
     await montar();
-    expect(screen.queryByText("Administração")).not.toBeInTheDocument();
+    expect(screen.getByText("Administração")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Usuários" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Acesso às ferramentas" }),
+    );
+    expect(await screen.findByTestId("tab-tool-policy")).toBeInTheDocument();
   });
 
-  it("usuário admin vê e consegue abrir as categorias de Administração", async () => {
+  it("usuário admin vê as categorias de Administração e a antiga Ferramentas não existe", async () => {
     resetStores("admin");
     await montar();
-    fireEvent.click(screen.getByRole("button", { name: "Ferramentas" }));
-    expect(await screen.findByTestId("tab-admin-tools")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Ferramentas" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Usuários" }));
+    expect(await screen.findByTestId("tab-admin-users")).toBeInTheDocument();
   });
 });
 
