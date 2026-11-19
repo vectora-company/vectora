@@ -471,6 +471,37 @@ function SessionPage() {
       setIsMobileSidebarOpen(false);
     }
   }, [isCompactSession, workbenchOpen]);
+
+  // Ao entrar no layout compacto (ou abrir já compacto) as laterais começam
+  // fechadas: o que estava aberto no layout largo viraria uma gaveta por cima
+  // do conteúdo, e no IDE duas ao mesmo tempo.
+  useEffect(() => {
+    if (!isCompactSession) return;
+    // oxlint-disable-next-line react/set-state-in-effect
+    setIsMobileSidebarOpen(false);
+    setWorkbenchOpen(threadId, false);
+  }, [isCompactSession, threadId, setWorkbenchOpen]);
+
+  // Abrir um arquivo ou documento no layout compacto leva o foco para ele:
+  // a gaveta do workbench que o abriu fecha.
+  useEffect(() => {
+    if (!isCompactSession) return;
+    const totalTabs = (state: ReturnType<typeof useWindowsStore.getState>) =>
+      state.windows.reduce((sum, window) => sum + window.tabs.length, 0);
+    const activeTabs = (state: ReturnType<typeof useWindowsStore.getState>) =>
+      state.windows.map((window) => window.activeTab).join("|");
+    return useWindowsStore.subscribe((state, previous) => {
+      const opened =
+        (state.activeCanvasDocumentId !== null &&
+          state.activeCanvasDocumentId !== previous.activeCanvasDocumentId) ||
+        (state.dockedActiveTab !== null &&
+          state.dockedActiveTab !== previous.dockedActiveTab) ||
+        totalTabs(state) > totalTabs(previous) ||
+        (activeTabs(state) !== activeTabs(previous) &&
+          totalTabs(state) >= totalTabs(previous));
+      if (opened) setWorkbenchOpen(threadId, false);
+    });
+  }, [isCompactSession, threadId, setWorkbenchOpen]);
   const showToolCalls = useSettingsStore((s) => s.showToolCalls);
   const [showShortcutsDialog, setShowShortcutsDialog] = useState(false);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
@@ -1175,7 +1206,7 @@ function SessionPage() {
 
       <div className="relative flex flex-1 min-h-0 overflow-hidden">
         <CompactDrawer
-          open={isMobileSidebarOpen}
+          open={isMobileSidebarOpen && uiMode !== "ide"}
           onOpenChange={setIsMobileSidebarOpen}
           side={sidebarOnRight ? "right" : "left"}
           title={m.mobile_open_sessions()}
@@ -1192,7 +1223,11 @@ function SessionPage() {
           })}
         </CompactDrawer>
         <CompactDrawer
-          open={isCompactSession && assistantWorkbenchVisible}
+          open={
+            uiMode === "assistant" &&
+            isCompactSession &&
+            assistantWorkbenchVisible
+          }
           onOpenChange={(open) => {
             if (!open) setWorkbenchOpen(threadId, false);
           }}

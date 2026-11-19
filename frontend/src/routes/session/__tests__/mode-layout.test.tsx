@@ -209,7 +209,11 @@ vi.mock("@/components/layout/ide-mode-layout", () => ({
     workbenchOpen?: boolean;
     onOpenWorkbench?: () => void;
   }) => (
-    <div data-testid="ide-layout" data-layout-state={layoutState}>
+    <div
+      data-testid="ide-layout"
+      data-layout-state={layoutState}
+      data-workbench-open={workbenchOpen ? "true" : "false"}
+    >
       {layoutState === "mobile" && (
         <button
           type="button"
@@ -270,6 +274,7 @@ vi.mock("../../../router", () => ({
 }));
 
 import { useSettingsStore } from "@/lib/stores/settings-store";
+import { useWindowsStore } from "@/lib/stores/windows-store";
 import { useWorkbenchStore } from "@/lib/stores/workbench-store";
 import { Route } from "../$threadId";
 
@@ -787,6 +792,7 @@ describe("SessionPage — tablet com faixas nas bordas", () => {
     });
 
     render(<SessionPage />);
+    act(() => useWorkbenchStore.getState().setPanelOpen("t1", true));
     expect(
       await screen.findByTestId("compact-workbench-overlay"),
     ).toBeInTheDocument();
@@ -803,12 +809,13 @@ describe("SessionPage — tablet com faixas nas bordas", () => {
 
 async function openWorkbenchDrawer() {
   setMode("assistant");
-  useWorkbenchStore.setState({ panelOpen: { t1: true } });
+  useWorkbenchStore.setState({ panelOpen: { t1: false } });
   Object.defineProperty(window, "innerWidth", {
     configurable: true,
     value: 818,
   });
   render(<SessionPage />);
+  act(() => useWorkbenchStore.getState().setPanelOpen("t1", true));
   return screen.findByTestId("compact-workbench-overlay");
 }
 
@@ -856,6 +863,198 @@ describe("SessionPage — gavetas compactas padronizadas", () => {
 
     await screen.findByTestId("header");
     expect(screen.queryByTestId("compact-open-sessions")).toBeNull();
+  });
+});
+
+function setWidth(value: number) {
+  Object.defineProperty(window, "innerWidth", {
+    configurable: true,
+    value,
+  });
+}
+
+describe("SessionPage — as laterais fecham ao ir para o compacto", () => {
+  it("laterais abertas no layout largo começam fechadas quando a janela fica compacta", async () => {
+    setMode("assistant");
+    useWorkbenchStore.setState({ panelOpen: { t1: true } });
+    setWidth(1400);
+    render(<SessionPage />);
+    expect(useWorkbenchStore.getState().panelOpen.t1).toBe(true);
+
+    act(() => {
+      setWidth(818);
+      window.dispatchEvent(new Event("resize"));
+    });
+
+    await waitFor(() =>
+      expect(useWorkbenchStore.getState().panelOpen.t1).toBe(false),
+    );
+    expect(screen.queryByTestId("compact-workbench-overlay")).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("abrir já compacto com o workbench aberto da sessão anterior não abre gaveta nenhuma", async () => {
+    setMode("assistant");
+    useWorkbenchStore.setState({ panelOpen: { t1: true } });
+    setWidth(818);
+
+    render(<SessionPage />);
+
+    await waitFor(() =>
+      expect(useWorkbenchStore.getState().panelOpen.t1).toBe(false),
+    );
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("voltar ao layout largo não reabre nem fecha nada à força", async () => {
+    setMode("assistant");
+    useWorkbenchStore.setState({ panelOpen: { t1: false } });
+    setWidth(818);
+    render(<SessionPage />);
+    act(() => useWorkbenchStore.getState().setPanelOpen("t1", true));
+
+    act(() => {
+      setWidth(1400);
+      window.dispatchEvent(new Event("resize"));
+    });
+
+    await waitFor(() =>
+      expect(screen.queryByTestId("compact-workbench-overlay")).toBeNull(),
+    );
+    expect(useWorkbenchStore.getState().panelOpen.t1).toBe(true);
+  });
+});
+
+describe("SessionPage — no IDE compacto só existem as gavetas do IDE", () => {
+  it("abrir o workbench abre uma gaveta só, a do IDE, e nunca a do Assistente", async () => {
+    setMode("ide");
+    useWorkbenchStore.setState({ panelOpen: { t1: false } });
+    setWidth(818);
+    render(<SessionPage />);
+
+    act(() => useWorkbenchStore.getState().setPanelOpen("t1", true));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("ide-layout")).toHaveAttribute(
+        "data-workbench-open",
+        "true",
+      ),
+    );
+    // O IDE tem a própria gaveta (IdeModeLayout); a do Assistente não abre.
+    expect(screen.queryByTestId("compact-workbench-overlay")).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("a gaveta de sessões nunca abre no IDE", async () => {
+    setMode("ide");
+    setWidth(818);
+    render(<SessionPage />);
+
+    expect(screen.queryByTestId("compact-open-sessions")).toBeNull();
+    expect(screen.queryByTestId("sidebar")).toBeNull();
+  });
+
+  it("no Kanban o workbench não abre gaveta", async () => {
+    setMode("kanban");
+    useWorkbenchStore.setState({ panelOpen: { t1: false } });
+    setWidth(818);
+    render(<SessionPage />);
+
+    act(() => useWorkbenchStore.getState().setPanelOpen("t1", true));
+
+    expect(screen.queryByTestId("compact-workbench-overlay")).toBeNull();
+  });
+});
+
+describe("SessionPage — abrir um arquivo fecha a gaveta do workbench", () => {
+  it("no Assistente compacto, abrir um arquivo na janela leva o foco para ele", async () => {
+    const drawer = await openWorkbenchDrawer();
+    expect(drawer).toBeInTheDocument();
+
+    act(() => useWindowsStore.getState().open("ws-1", "src/main.py"));
+
+    await waitFor(() =>
+      expect(screen.queryByTestId("compact-workbench-overlay")).toBeNull(),
+    );
+  });
+
+  it("no IDE compacto, abrir um arquivo no editor fecha a gaveta", async () => {
+    setMode("ide");
+    useWorkbenchStore.setState({ panelOpen: { t1: false } });
+    setWidth(818);
+    render(<SessionPage />);
+    act(() => useWorkbenchStore.getState().setPanelOpen("t1", true));
+    await waitFor(() =>
+      expect(screen.getByTestId("ide-layout")).toHaveAttribute(
+        "data-workbench-open",
+        "true",
+      ),
+    );
+
+    act(() => useWindowsStore.getState().openDocked("ws-1", "src/main.py"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("ide-layout")).toHaveAttribute(
+        "data-workbench-open",
+        "false",
+      ),
+    );
+  });
+
+  it("abrir um documento no canvas (diff, commit) também fecha a gaveta", async () => {
+    setMode("ide");
+    useWorkbenchStore.setState({ panelOpen: { t1: false } });
+    setWidth(818);
+    render(<SessionPage />);
+    act(() => useWorkbenchStore.getState().setPanelOpen("t1", true));
+    await waitFor(() =>
+      expect(screen.getByTestId("ide-layout")).toHaveAttribute(
+        "data-workbench-open",
+        "true",
+      ),
+    );
+
+    act(() =>
+      useWindowsStore.getState().openCanvasDocument({
+        id: "file:ws-1:a.py",
+        kind: "file",
+        workspaceId: "ws-1",
+        title: "a.py",
+        path: "a.py",
+      }),
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("ide-layout")).toHaveAttribute(
+        "data-workbench-open",
+        "false",
+      ),
+    );
+  });
+
+  it("no layout largo abrir um arquivo não mexe no workbench", async () => {
+    setMode("assistant");
+    useWorkbenchStore.setState({ panelOpen: { t1: true } });
+    setWidth(1400);
+    render(<SessionPage />);
+
+    act(() => useWindowsStore.getState().open("ws-1", "src/main.py"));
+
+    expect(useWorkbenchStore.getState().panelOpen.t1).toBe(true);
+  });
+
+  it("fechar uma aba de arquivo não fecha a gaveta que o usuário abriu", async () => {
+    setMode("assistant");
+    useWorkbenchStore.setState({ panelOpen: { t1: false } });
+    setWidth(818);
+    render(<SessionPage />);
+    act(() => useWindowsStore.getState().open("ws-1", "a.py"));
+    act(() => useWorkbenchStore.getState().setPanelOpen("t1", true));
+    await screen.findByTestId("compact-workbench-overlay");
+
+    act(() => useWindowsStore.getState().closeTab("ws-1", "a.py"));
+
+    expect(screen.getByTestId("compact-workbench-overlay")).toBeInTheDocument();
   });
 });
 
@@ -945,6 +1144,7 @@ describe("SessionPage — workbench do Assistente estreito", () => {
     }));
 
     render(<SessionPage />);
+    act(() => useWorkbenchStore.getState().setPanelOpen("t1", true));
 
     expect(await screen.findByTestId("workbench-navbar")).toBeInTheDocument();
     expect(await screen.findByTestId("workbench-content")).toBeInTheDocument();
