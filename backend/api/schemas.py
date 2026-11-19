@@ -273,6 +273,12 @@ class TokenEvent(BaseModel):
     node: str = ""
 
 
+class ReasoningEvent(BaseModel):
+    """Fragmento de raciocínio do modelo, mostrado recolhido no chat."""
+
+    content: str
+
+
 class ToolCallEvent(BaseModel):
     tool_name: str
     tool_call_id: str
@@ -531,6 +537,7 @@ class TodosUpdatedEvent(BaseModel):
 StreamChatEventPayload = (
     ThreadEvent
     | TokenEvent
+    | ReasoningEvent
     | ToolCallEvent
     | ToolResultEvent
     | NodeEvent
@@ -554,6 +561,7 @@ StreamChatEventPayload = (
 _TYPE_MAP: dict[type, str] = {
     ThreadEvent: "thread",
     TokenEvent: "token",
+    ReasoningEvent: "reasoning",
     ToolCallEvent: "tool_call",
     ToolResultEvent: "tool_result",
     NodeEvent: "node",
@@ -637,6 +645,8 @@ class HistoryMessage(BaseModel):
     checkpoint_id: str = ""
     attachments: list[dict[str, Any]] = Field(default_factory=list)
     edited_files: list[TurnFileChange] = Field(default_factory=list)
+    # Raciocínio que o provider devolveu para esta mensagem (recolhido na UI).
+    reasoning: str = ""
 
 
 class ListThreadsResponse(BaseModel):

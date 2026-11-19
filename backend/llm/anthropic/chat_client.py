@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any
 
 from backend.llm.anthropic.client import AnthropicClient, AnthropicResponseError
 from backend.llm.media_parts import prepare_content, split_data_url
+from backend.llm.reasoning import reasoning_effort, thinking_budget
 from backend.vtypes.contracts import UsageSnapshot
 from backend.vtypes.message import (
     ContentBlock,
@@ -259,6 +260,12 @@ class AnthropicChatClient:
             body["temperature"] = temperature
         if tools:
             body["tools"] = [_to_anthropic_tool(t) for t in tools]
+        budget = thinking_budget(reasoning_effort.get())
+        if budget is not None:
+            body["thinking"] = {"type": "enabled", "budget_tokens": budget}
+            # O thinking exige max_tokens acima do orçamento e temperatura 1.
+            body["max_tokens"] = max(body["max_tokens"], budget + 4096)
+            body.pop("temperature", None)
         return _with_prompt_cache(body)
 
     async def agenerate(
@@ -347,6 +354,10 @@ class AnthropicChatClient:
                     texto = delta.get("text", "")
                     if texto:
                         yield VMessageChunk(delta_text=texto)
+                elif tipo_delta == "thinking_delta":
+                    thought = delta.get("thinking", "")
+                    if thought:
+                        yield VMessageChunk(delta_reasoning=thought)
                 elif tipo_delta == "input_json_delta":
                     nome = (
                         nomes_por_indice.get(indice)

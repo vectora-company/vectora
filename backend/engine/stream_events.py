@@ -33,6 +33,13 @@ class MessageChunk:
 
 
 @dataclass(frozen=True, slots=True)
+class ReasoningChunk:
+    """Fragmento do raciocínio que o provider devolveu (texto do próprio modelo)."""
+
+    content: str
+
+
+@dataclass(frozen=True, slots=True)
 class MessageBreak:
     """Sinaliza quebra de bolha — sem payload, mesmo shape vazio de
     `MessageBreakEvent`."""
@@ -216,6 +223,7 @@ class Done:
 EngineEvent = (
     ThreadStarted
     | MessageChunk
+    | ReasoningChunk
     | MessageBreak
     | ToolCallStarted
     | ToolResult

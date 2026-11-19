@@ -790,6 +790,20 @@ export const MessageItem = memo(
                   </details>
                 )}
 
+              {message.role === "assistant" && message.reasoning && (
+                <details className="mb-3 text-xs" data-testid="reasoning-block">
+                  <summary
+                    className="cursor-pointer text-muted-foreground transition-colors hover:text-foreground"
+                    aria-label={m.chat_reasoning_toggle()}
+                  >
+                    {m.chat_reasoning_title()}
+                  </summary>
+                  <div className="mt-2 ml-1 border-l border-border/60 pl-3 text-[11px] whitespace-pre-wrap text-muted-foreground">
+                    {message.reasoning}
+                  </div>
+                </details>
+              )}
+
               {message.role === "user" ? (
                 isEditing ? (
                   <div>

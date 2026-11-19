@@ -852,3 +852,40 @@ describe("MessageItem — streaming incremental (token a token, como astream)", 
     expect(container.querySelector("details")).toBeNull();
   });
 });
+
+describe("MessageItem — raciocínio do modelo", () => {
+  it("mostra o raciocínio recolhido por padrão e com o texto que o provider devolveu", () => {
+    render(
+      <MessageItem
+        {...baseProps(
+          msg({ content: "Resposta final", reasoning: "primeiro somo 2 e 2" }),
+        )}
+      />,
+    );
+
+    const block = screen.getByTestId("reasoning-block") as HTMLDetailsElement;
+    expect(block.open).toBe(false);
+    expect(block.textContent).toContain(m.chat_reasoning_title());
+    expect(block.textContent).toContain("primeiro somo 2 e 2");
+  });
+
+  it("expande ao clicar no título", () => {
+    render(
+      <MessageItem
+        {...baseProps(msg({ content: "ok", reasoning: "passo" }))}
+      />,
+    );
+
+    const block = screen.getByTestId("reasoning-block") as HTMLDetailsElement;
+    fireEvent.click(block.querySelector("summary") as HTMLElement);
+    block.open = true;
+
+    expect(block.open).toBe(true);
+  });
+
+  it("não mostra o bloco quando o provider não devolveu raciocínio", () => {
+    render(<MessageItem {...baseProps(msg({ content: "ok" }))} />);
+
+    expect(screen.queryByTestId("reasoning-block")).toBeNull();
+  });
+});

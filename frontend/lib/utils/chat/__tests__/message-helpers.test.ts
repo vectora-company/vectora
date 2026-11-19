@@ -173,3 +173,23 @@ describe("historyMessageToMessage", () => {
     expect(msg.timestamp.getTime()).toBeLessThanOrEqual(after);
   });
 });
+
+describe("historyMessageToMessage — raciocínio", () => {
+  it("devolve o raciocínio persistido na mensagem recarregada", () => {
+    const message = historyMessageToMessage(
+      { role: "assistant", content: "Pronto", reasoning: "analisei o pedido" },
+      "h1",
+    );
+
+    expect(message.reasoning).toBe("analisei o pedido");
+  });
+
+  it("não cria o campo quando a mensagem não tem raciocínio", () => {
+    const message = historyMessageToMessage(
+      { role: "assistant", content: "Pronto" },
+      "h2",
+    );
+
+    expect(message.reasoning).toBeUndefined();
+  });
+});

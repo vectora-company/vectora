@@ -904,6 +904,7 @@ async def stream_chat(
         "workspace_id": workspace_id or None,
         "context_max_tokens": request.config.context_max_tokens,
         "context_compaction_enabled": request.config.context_compaction_enabled,
+        "reasoning_effort": request.config.reasoning_effort or None,
     }
     try:
         session_store = await agent_factory.get_session_store()
@@ -1103,6 +1104,7 @@ async def stream_chat(
             max_iterations=request.config.recursion_limit or 50,
             context_max_tokens=request.config.context_max_tokens,
             context_compaction_enabled=request.config.context_compaction_enabled,
+            reasoning_effort=request.config.reasoning_effort or None,
             run_id=run_id,
         )
         if native_agent.subagent_catalog:
@@ -1443,6 +1445,7 @@ async def resume_chat(
                 if request.context_compaction_enabled is not None
                 else selector_compaction_enabled
             ),
+            reasoning_effort=selector.get("reasoning_effort"),
             run_id=run_id,
         )
         if native_agent.subagent_catalog:

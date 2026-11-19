@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any
 from backend.llm.media_parts import prepare_content
 from backend.llm.openai.client import OpenAIClient, OpenAIResponseError
 from backend.llm.prompt_cache import prompt_cache_key
+from backend.llm.reasoning import openai_reasoning, reasoning_effort
 from backend.vtypes.contracts import UsageSnapshot
 from backend.vtypes.message import (
     ContentBlock,
@@ -250,6 +251,9 @@ class OpenAIChatClient:
         cache_key = prompt_cache_key.get()
         if cache_key:
             body["prompt_cache_key"] = cache_key
+        reasoning = openai_reasoning(self.model, reasoning_effort.get())
+        if reasoning is not None:
+            body["reasoning"] = reasoning
         return body
 
     async def agenerate(
@@ -356,6 +360,11 @@ class OpenAIChatClient:
                         )
                     ]
                 )
+
+            elif tipo == "response.reasoning_summary_text.delta":
+                thought = evento.get("delta", "")
+                if thought:
+                    yield VMessageChunk(delta_reasoning=thought)
 
             elif tipo == "response.output_text.delta":
                 texto = evento.get("delta", "")
