@@ -21,6 +21,8 @@ interface Skill {
   installed_at: string;
   installed_by: string;
 }
+import { settingsItemClass } from "@/components/settings/primitives";
+import { cn } from "@/lib/utils";
 
 type VerifyState = { state: "idle" | "loading" | "ok" | "error"; msg: string };
 
@@ -98,7 +100,7 @@ export function SkillsTab({ onSkillsChange }: SkillsTabProps = {}) {
           {m.skills_empty()}
         </p>
       ) : (
-        <div className="divide-y divide-border/60 rounded-md border border-border/60">
+        <div className={cn(settingsItemClass, "divide-y divide-border")}>
           {skills.map((s) => {
             const v = verify[s.id];
             return (

@@ -16,6 +16,9 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
+/** Item de lista com borda própria (integração, plugin, memória), sem padding. */
+export const settingsItemClass = "rounded-lg border border-border bg-card";
+
 /** Linha interna de um card (também usada pelo componente `SettingsRow`). */
 export const settingsRowClass =
   "flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2";
