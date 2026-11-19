@@ -100,9 +100,11 @@ class FileWatcher:
         """Inicia o Observer do watchdog em thread separada."""
         try:
             from watchdog.events import FileSystemEventHandler
-            from watchdog.observers import Observer
+
+            from backend.workspace.fs_watch import create_observer, is_ignored_path
 
             queue = self._queue
+            root = self._path
             ignore = _IGNORE_PATTERNS
 
             class _Handler(FileSystemEventHandler):
@@ -110,12 +112,12 @@ class FileWatcher:
                     if event.is_directory:
                         return
                     src = getattr(event, "src_path", "") or ""
-                    if any(pat in src for pat in ignore):
+                    if any(pat in src for pat in ignore) or is_ignored_path(src, root):
                         return
                     with contextlib.suppress(asyncio.QueueFull):
                         queue.put_nowait(src)
 
-            observer = Observer()
+            observer = create_observer()
             observer.schedule(_Handler(), self._path, recursive=True)
             observer.start()
             return observer

@@ -164,8 +164,6 @@ describe("THEME_PRESETS — catálogo expandido", () => {
       "catppuccin-dark",
       "everforest-light",
       "everforest-dark",
-      "solarized-light",
-      "solarized-dark",
       "midnight",
       "ember",
       "mono",
@@ -174,6 +172,15 @@ describe("THEME_PRESETS — catálogo expandido", () => {
     ]) {
       expect(ids.has(id), `faltando preset ${id}`).toBe(true);
     }
+  });
+
+  it("o Solarized não faz mais parte do catálogo", () => {
+    const ids = new Set(THEME_PRESETS.map((preset) => preset.id));
+    expect(ids.has("solarized-dark")).toBe(false);
+    expect(ids.has("solarized-light")).toBe(false);
+    expect(THEME_PRESETS.some((preset) => preset.family === "solarized")).toBe(
+      false,
+    );
   });
 
   it("não mistura o tema de sintaxe Godot ao catálogo visual do Vectora", () => {

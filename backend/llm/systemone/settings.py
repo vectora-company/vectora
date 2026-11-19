@@ -5,10 +5,21 @@ from __future__ import annotations
 import hashlib
 import os
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
-from backend.llm.systemone.api_adapters import ClefApiAdapter, JevApiAdapter
+from backend.llm.systemone.api_adapters import (
+    ClefApiAdapter,
+    JevApiAdapter,
+    OpenRouterDecisionAdapter,
+)
 from backend.llm.systemone.clef_local import ClefLocalAdapter
+from backend.llm.systemone.endpoints import (
+    JEV_API_BASE_URL,
+    JEV_DEFAULT_MODEL,
+    OPENROUTER_DEFAULT_DECISION_MODEL,
+    normalize_jev_base_url,
+    normalize_jev_model,
+)
 from backend.llm.systemone.laya_local import LayaLocalAdapter
 from backend.llm.systemone.protocol import SystemOneProvider
 from backend.llm.systemone.types import DecisionProviderType
@@ -22,7 +33,10 @@ class SystemOneSettings(BaseModel):
     )
     provider: DecisionProviderType = Field(
         default="clef-local",
-        description="Provedor ativo: 'clef-local', 'laya-local', 'clef-api' ou 'jev-api'.",
+        description=(
+            "Provedor ativo: 'clef-local', 'laya-local', 'clef-api', 'jev-api' "
+            "ou 'openrouter-api'."
+        ),
     )
     # Clef local
     local_base_url: str = Field(
@@ -55,13 +69,29 @@ class SystemOneSettings(BaseModel):
 
     # JEV API
     jev_api_base_url: str = Field(
-        default="https://api.jev.ai",
-        description="Base URL para JEV Cloud.",
+        default=JEV_API_BASE_URL,
+        description="Base URL da API JEV (TypeSafe).",
     )
     jev_api_model: str = Field(
-        default="jev-fast",
-        description="Identificador do modelo na API JEV.",
+        default=JEV_DEFAULT_MODEL,
+        description="Identificador do modelo na API JEV (`jev-latest`, `jev-1.14.0`, `jev-1.13.0`).",
     )
+
+    # OpenRouter Decisions (usa a chave do OpenRouter já configurada)
+    openrouter_model: str = Field(
+        default=OPENROUTER_DEFAULT_DECISION_MODEL,
+        description="Slug do modelo de decisão no OpenRouter.",
+    )
+
+    @field_validator("jev_api_base_url")
+    @classmethod
+    def _migrate_jev_base_url(cls, value: str) -> str:
+        return normalize_jev_base_url(value)
+
+    @field_validator("jev_api_model")
+    @classmethod
+    def _migrate_jev_model(cls, value: str) -> str:
+        return normalize_jev_model(value)
 
     # Fallback e políticas de execução
     allow_remote_fallback: bool = Field(
@@ -96,6 +126,7 @@ def get_systemone_provider(
     clef_api_key: str | None = None,
     jev_api_key: str | None = None,
     local_api_key: str | None = None,
+    openrouter_api_key: str | None = None,
 ) -> SystemOneProvider:
     """Instancia o provedor de Decision Models ativo de acordo com a configuração."""
     provider_type = settings.provider
@@ -131,5 +162,9 @@ def get_systemone_provider(
         return JevApiAdapter(
             api_key=key,
             base_url=settings.jev_api_base_url,
+        )
+    if provider_type == "openrouter-api":
+        return OpenRouterDecisionAdapter(
+            api_key=openrouter_api_key or os.getenv("OPENROUTER_API_KEY", ""),
         )
     raise ValueError(f"Provedor de Decision Models desconhecido: {provider_type}")

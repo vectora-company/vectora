@@ -689,7 +689,7 @@ export function ChatInput({
                             : m.input_placeholder()
                     }
                     title={offline ? m.network_disabled_offline() : undefined}
-                    className="relative z-10 min-h-[38px] max-h-60 min-w-0 flex-1 basis-0 resize-none [field-sizing:fixed] overflow-x-hidden overflow-y-hidden whitespace-pre-wrap break-words [overflow-wrap:anywhere] custom-scrollbar rounded-md border border-[#2a2a2a]/60 bg-[#252525]/30 w-full px-3 py-2 text-sm leading-relaxed text-foreground placeholder:text-muted-foreground shadow-sm focus:outline-none focus-visible:outline-none focus-visible:border-[#2a2a2a]/60 focus:ring-1 focus:ring-primary/50 focus-visible:ring-1 focus-visible:ring-primary/50 focus-visible:ring-offset-0 transition-[height] duration-150"
+                    className="relative z-10 min-h-[38px] max-h-60 min-w-0 flex-1 basis-0 resize-none [field-sizing:fixed] overflow-x-hidden overflow-y-hidden whitespace-pre-wrap break-words [overflow-wrap:anywhere] custom-scrollbar rounded-md border border-[#2a2a2a]/60 bg-[#252525]/30 w-full px-3 py-2 text-sm pointer-coarse:text-base leading-relaxed text-foreground placeholder:text-muted-foreground shadow-sm focus:outline-none focus-visible:outline-none focus-visible:border-[#2a2a2a]/60 focus:ring-1 focus:ring-primary/50 focus-visible:ring-1 focus-visible:ring-primary/50 focus-visible:ring-offset-0 transition-[height] duration-150"
                     disabled={!userId || offline}
                     rows={1}
                     wrap="soft"
