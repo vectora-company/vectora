@@ -21,7 +21,15 @@ const PROVIDERS: Array<{ value: DecisionModelProvider; label: string }> = [
   { value: "laya-local", label: "Laya local" },
   { value: "clef-api", label: "Clef Cloudflare" },
   { value: "jev-api", label: "JEV" },
+  { value: "openrouter-api", label: "OpenRouter" },
 ];
+
+interface Readiness {
+  ready: boolean;
+  configured: boolean;
+  credentialValid: boolean | null;
+  healthy: boolean;
+}
 
 /**
  * Compact decision-model control used beside effort and chat model controls.
@@ -40,23 +48,25 @@ export function DecisionModelMenu({ compact = false }: { compact?: boolean }) {
     (state) => state.setDecisionModelProvider,
   );
   const [open, setOpen] = useState(false);
-  const [readinessResult, setReadinessResult] = useState<{
-    provider: DecisionModelProvider;
-    ready: boolean;
-    configured: boolean;
-    credentialValid: boolean | null;
-    healthy: boolean;
-  } | null>(null);
+  const [readinessByProvider, setReadinessByProvider] = useState<
+    Partial<Record<DecisionModelProvider, Readiness>>
+  >({});
   const [readinessErrorProvider, setReadinessErrorProvider] =
     useState<DecisionModelProvider | null>(null);
-  const readinessState =
-    readinessResult?.provider === provider ? readinessResult : null;
+  const readinessState = readinessByProvider[provider] ?? null;
   const readiness = readinessState?.ready ?? null;
   const readinessError = readinessErrorProvider === provider;
   const selected = PROVIDERS.find((item) => item.value === provider);
   const title = enabled
     ? `Decision model: ${selected?.label ?? provider}`
     : m.decision_models_disabled();
+  // O seletor só lista modelos que o usuário já configurou em AI Models; o
+  // modelo ativo continua visível mesmo que a checagem ainda não tenha voltado.
+  const listed = PROVIDERS.filter(
+    (item) =>
+      item.value === provider ||
+      readinessByProvider[item.value]?.configured === true,
+  );
 
   useEffect(() => {
     void hydrateDecisionModelPreferences(workspaceId);
@@ -65,32 +75,36 @@ export function DecisionModelMenu({ compact = false }: { compact?: boolean }) {
   useEffect(() => {
     if (!open) return;
     let active = true;
-    void fetch(
-      `/provider-routing/decision-models/readiness?provider=${encodeURIComponent(provider)}`,
-    )
-      .then(async (response) => {
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return (await response.json()) as {
-          ready?: boolean;
-          configured?: boolean;
-          credential_valid?: boolean | null;
-          healthy?: boolean;
-        };
-      })
-      .then((value) => {
-        if (active) {
-          setReadinessResult({
-            provider,
-            ready: value.ready === true,
-            configured: value.configured === true,
-            credentialValid: value.credential_valid ?? null,
-            healthy: value.healthy === true,
-          });
-        }
-      })
-      .catch(() => {
-        if (active) setReadinessErrorProvider(provider);
-      });
+    for (const item of PROVIDERS) {
+      void fetch(
+        `/provider-routing/decision-models/readiness?provider=${encodeURIComponent(item.value)}`,
+      )
+        .then(async (response) => {
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          return (await response.json()) as {
+            ready?: boolean;
+            configured?: boolean;
+            credential_valid?: boolean | null;
+            healthy?: boolean;
+          };
+        })
+        .then((value) => {
+          if (!active) return;
+          setReadinessByProvider((previous) => ({
+            ...previous,
+            [item.value]: {
+              ready: value.ready === true,
+              configured: value.configured === true,
+              credentialValid: value.credential_valid ?? null,
+              healthy: value.healthy === true,
+            },
+          }));
+        })
+        .catch(() => {
+          if (active && item.value === provider)
+            setReadinessErrorProvider(provider);
+        });
+    }
     return () => {
       active = false;
     };
@@ -167,7 +181,7 @@ export function DecisionModelMenu({ compact = false }: { compact?: boolean }) {
             {m.decision_models_use()}
           </span>
         </button>
-        {PROVIDERS.map((item) => (
+        {listed.map((item) => (
           <button
             key={item.value}
             type="button"

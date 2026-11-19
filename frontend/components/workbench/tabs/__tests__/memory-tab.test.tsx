@@ -12,6 +12,7 @@ import {
   waitFor,
   cleanup,
   fireEvent,
+  within,
 } from "@testing-library/react";
 import { MemoryTab } from "../memory-tab";
 
@@ -85,6 +86,9 @@ vi.mock("@/lib/paraglide/messages", () => ({
   ),
 }));
 
+// O painel de memórias salvas resolve a contagem pelo `mDyn`.
+vi.mock("@/lib/i18n-dyn", () => ({ mDyn: (key: string) => key }));
+
 const mockMessages = vi.fn();
 vi.mock("@/lib/hooks/chat/use-thread-messages", () => ({
   useThreadMessages: (threadId: string) => [mockMessages(threadId), vi.fn()],
@@ -127,6 +131,39 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+});
+
+describe("MemoryTab — memórias salvas", () => {
+  it("lista as memórias que o agente salvou sobre a pessoa, na própria aba", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.startsWith("/memory?")) {
+          return new Response(
+            JSON.stringify({
+              total: 1,
+              memories: [
+                {
+                  key: "preferencia_idioma",
+                  content: "Prefere respostas em português",
+                  updated_at: null,
+                },
+              ],
+            }),
+          );
+        }
+        return new Response(JSON.stringify({ collections: [] }));
+      }),
+    );
+
+    render(<MemoryTab threadId="t1" />);
+
+    const section = await screen.findByTestId("saved-memories");
+    expect(
+      await within(section).findByText("Prefere respostas em português"),
+    ).toBeInTheDocument();
+  });
 });
 
 describe("MemoryTab", () => {
