@@ -205,11 +205,11 @@ vi.mock("@/components/layout/ide-mode-layout", () => ({
     workbenchContent: ReactNode;
     editor: ReactNode;
     chat: ReactNode;
-    layoutState?: "wide" | "mobile";
+    layoutState?: "wide" | "mobile" | "tablet";
     workbenchOpen?: boolean;
     onOpenWorkbench?: () => void;
   }) => (
-    <div data-testid="ide-layout">
+    <div data-testid="ide-layout" data-layout-state={layoutState}>
       {layoutState === "mobile" && (
         <button
           type="button"
@@ -639,6 +639,41 @@ describe("SessionPage — layout do IDE em tablet", () => {
   });
 });
 
+describe("SessionPage — IDE e Kanban no tablet", () => {
+  it("Kanban mostra a faixa de sessões e tira os botões do cabeçalho", async () => {
+    setMode("kanban");
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 818,
+    });
+
+    render(<SessionPage />);
+
+    await waitFor(() =>
+      expect(screen.getByTestId("compact-sessions-rail")).toBeVisible(),
+    );
+    expect(screen.queryByTestId("compact-open-sessions")).toBeNull();
+    fireEvent.click(screen.getByTestId("compact-rail-sessions"));
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("IDE entra no layout de tablet entre 640 e 1100 px", async () => {
+    setMode("ide");
+    useWorkbenchStore.setState({ panelOpen: { t1: false } });
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 818,
+    });
+
+    render(<SessionPage />);
+
+    expect(await screen.findByTestId("ide-layout")).toHaveAttribute(
+      "data-layout-state",
+      "tablet",
+    );
+  });
+});
+
 describe("SessionPage — tablet com faixas nas bordas", () => {
   it("mostra as faixas de sessões e do workbench e abre uma gaveta por vez", async () => {
     setMode("assistant");
@@ -650,7 +685,9 @@ describe("SessionPage — tablet com faixas nas bordas", () => {
 
     render(<SessionPage />);
 
-    expect(await screen.findByTestId("compact-sessions-rail")).toBeVisible();
+    await waitFor(() =>
+      expect(screen.getByTestId("compact-sessions-rail")).toBeVisible(),
+    );
     expect(screen.getByTestId("workbench-navbar")).toBeInTheDocument();
     // Os botões do cabeçalho só existem quando não há faixas (celular).
     expect(screen.queryByTestId("compact-open-sessions")).toBeNull();
@@ -747,10 +784,9 @@ describe("SessionPage — laterais compactas", () => {
 
     render(<SessionPage />);
 
-    expect(screen.getByTestId("kanban").parentElement).toHaveClass(
-      "w-full",
-      "min-w-0",
-    );
+    const board = screen.getByTestId("kanban");
+    expect(board.parentElement).toHaveClass("min-w-0");
+    expect(board.parentElement?.parentElement).toHaveClass("w-full", "min-w-0");
   });
 });
 

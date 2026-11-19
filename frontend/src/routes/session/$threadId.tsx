@@ -229,11 +229,12 @@ function SessionPage() {
   // Tablet: as faixas de sessões e do workbench ficam sempre nas bordas e as
   // listas abrem como gavetas. No celular (abaixo de `sm`) não há largura para
   // as faixas e a navegação fica nos botões do cabeçalho.
-  const compactRails =
-    isCompactSession &&
-    ideLayoutState === "wide" &&
-    uiMode === "assistant" &&
-    !chatMode;
+  const tabletCompact =
+    isCompactSession && ideLayoutState === "wide" && !chatMode;
+  const compactRails = tabletCompact && uiMode === "assistant";
+  // O Kanban só precisa da faixa de sessões; o IDE usa as faixas do próprio
+  // layout e mantém o botão de sessões no cabeçalho.
+  const kanbanRail = tabletCompact && uiMode === "kanban";
   const activeWorkbenchSide =
     uiMode === "ide" ? ideWorkbenchSide : assistantWorkbenchSide;
   const setChatSidebarWidth = useSettingsStore((s) => s.setChatSidebarWidth);
@@ -963,7 +964,7 @@ function SessionPage() {
         onShowShortcuts={() => setShowShortcutsDialog(true)}
         showModeSwitch={!chatMode}
         compactNavigation={
-          isCompactSession && !compactRails
+          isCompactSession && !compactRails && !kanbanRail
             ? {
                 onOpenSessions: () => {
                   if (isMobileSidebarOpen) {
@@ -993,6 +994,7 @@ function SessionPage() {
       chatMode,
       isCompactSession,
       compactRails,
+      kanbanRail,
       isMobileSidebarOpen,
       workbenchOpen,
       setWorkbenchOpen,
@@ -1155,7 +1157,25 @@ function SessionPage() {
                 left={showSidebarPanel ? sidebarPanel : null}
                 center={
                   <div className="flex w-full min-w-0 flex-1 min-h-0 overflow-hidden">
-                    <KanbanBoard threadId={threadId} />
+                    {kanbanRail && !sidebarOnRight && (
+                      <CompactSessionsRail
+                        side="left"
+                        open={isMobileSidebarOpen}
+                        onToggle={openCompactSessions}
+                        onNewChat={handleNewChat}
+                      />
+                    )}
+                    <div className="flex min-w-0 flex-1 min-h-0 overflow-hidden">
+                      <KanbanBoard threadId={threadId} />
+                    </div>
+                    {kanbanRail && sidebarOnRight && (
+                      <CompactSessionsRail
+                        side="right"
+                        open={isMobileSidebarOpen}
+                        onToggle={openCompactSessions}
+                        onNewChat={handleNewChat}
+                      />
+                    )}
                   </div>
                 }
                 right={null}
@@ -1220,7 +1240,14 @@ function SessionPage() {
               <IdeModeLayout
                 workbenchOpen={workbenchOpen}
                 onOpenWorkbench={openWorkbench}
-                layoutState={ideLayoutState}
+                layoutState={
+                  ideLayoutState === "mobile"
+                    ? "mobile"
+                    : isCompactSession
+                      ? "tablet"
+                      : "wide"
+                }
+                onCloseWorkbench={() => setWorkbenchOpen(threadId, false)}
                 direction={sidebarOnRight ? "rtl" : "ltr"}
                 workbenchSide={ideWorkbenchSide}
                 // The shell column includes the fixed 48px rail. splitSize
