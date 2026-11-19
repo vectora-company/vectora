@@ -333,6 +333,9 @@ class Settings(BaseSettings):
     max_context_tokens: int = 8000
     """Maximum tokens to keep in message history (sliding window)."""
 
+    prompt_cache_enabled: bool = True
+    """Marca o prefixo estável (tools, system, últimas mensagens) para o cache de prompt."""
+
     context_summary_enabled: bool = True
     """Resume por LLM o que a compactação descartou, em vez de deixar só um marcador."""
 

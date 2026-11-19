@@ -495,8 +495,29 @@ def _preserve_latest_tool_result(model_id: str) -> bool:
     return normalized.startswith(("ollama:", "llamacpp:", "dmr:"))
 
 
+_FROZEN_MEMORY_MAX_THREADS = 256
+_frozen_memories: dict[str, list[MemoryRecord]] = {}
+
+
 async def _load_persistent_context_memories(ctx: ToolContext) -> list[MemoryRecord]:
-    """Executa a operação  load persistent context memories."""
+    """Memórias persistentes congeladas na primeira leitura da conversa.
+
+    Reler a cada iteração mudaria o prefixo no meio da conversa e invalidaria o
+    cache de prompt; o que for salvo agora aparece na próxima conversa.
+    """
+    thread_id = ctx.thread_id or ""
+    if thread_id and thread_id in _frozen_memories:
+        return _frozen_memories[thread_id]
+    records = await _read_persistent_context_memories(ctx)
+    if thread_id:
+        if len(_frozen_memories) >= _FROZEN_MEMORY_MAX_THREADS:
+            _frozen_memories.pop(next(iter(_frozen_memories)))
+        _frozen_memories[thread_id] = records
+    return records
+
+
+async def _read_persistent_context_memories(ctx: ToolContext) -> list[MemoryRecord]:
+    """Lê as memórias persistentes do armazenamento."""
     if ctx.store is None or not hasattr(ctx.store, "asearch"):
         return []
     if ctx.user_id and ctx.user_id != "local":

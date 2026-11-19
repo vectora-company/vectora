@@ -21,6 +21,16 @@ from backend.vtypes.message import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _sem_cache_de_prompt(monkeypatch, request):
+    """Os testes de conversão comparam o corpo cru; o cache tem testes próprios."""
+    if request.node.get_closest_marker("prompt_cache"):
+        return
+    from backend.settings import settings
+
+    monkeypatch.setattr(settings, "prompt_cache_enabled", False)
+
+
 def _client(handler, **kwargs) -> AnthropicChatClient:
     http_client = AnthropicClient(
         api_key="sk-ant-test",
@@ -377,4 +387,43 @@ class TestStreamingToolCallsEUsage:
             "input_tokens": 10,
             "output_tokens": 3,
             "total_tokens": 13,
+        }
+
+
+class TestCacheDePrompt:
+    def test_marca_tools_system_e_ultimas_mensagens(self, monkeypatch) -> None:
+        from backend.llm.anthropic.chat_client import _with_prompt_cache
+        from backend.settings import settings
+
+        monkeypatch.setattr(settings, "prompt_cache_enabled", True)
+        corpo = {
+            "system": "regras",
+            "tools": [{"name": "a"}, {"name": "b"}],
+            "messages": [
+                {"role": "user", "content": "um"},
+                {"role": "assistant", "content": [{"type": "text", "text": "dois"}]},
+                {"role": "user", "content": "três"},
+            ],
+        }
+
+        out = _with_prompt_cache(corpo)
+
+        assert "cache_control" not in out["tools"][0]
+        assert out["tools"][1]["cache_control"] == {"type": "ephemeral"}
+        assert out["system"][0]["cache_control"] == {"type": "ephemeral"}
+        assert out["messages"][0]["content"] == "um"
+        assert out["messages"][1]["content"][-1]["cache_control"]
+        assert out["messages"][2]["content"][-1]["text"] == "três"
+        assert out["messages"][2]["content"][-1]["cache_control"]
+
+    def test_desligado_nao_altera_o_corpo(self, monkeypatch) -> None:
+        from backend.llm.anthropic.chat_client import _with_prompt_cache
+        from backend.settings import settings
+
+        monkeypatch.setattr(settings, "prompt_cache_enabled", False)
+        corpo = {"system": "regras", "messages": [{"role": "user", "content": "oi"}]}
+
+        assert _with_prompt_cache(corpo) == {
+            "system": "regras",
+            "messages": [{"role": "user", "content": "oi"}],
         }

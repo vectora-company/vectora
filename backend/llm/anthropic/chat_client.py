@@ -173,6 +173,40 @@ def _to_anthropic_messages(messages: list[VMessage]) -> tuple[str | None, list[d
     return system, traduzidas
 
 
+_CACHE_CONTROL = {"type": "ephemeral"}
+
+
+def _with_prompt_cache(corpo: dict[str, Any]) -> dict[str, Any]:
+    """Marca o prefixo estável para o cache de prompt da Anthropic.
+
+    Até 4 pontos: última tool, system e as duas últimas mensagens. O que está
+    antes de cada ponto é lido do cache nas chamadas seguintes do loop.
+    """
+    from backend.settings import settings
+
+    if not settings.prompt_cache_enabled:
+        return corpo
+    tools = corpo.get("tools")
+    if tools:
+        tools[-1] = {**tools[-1], "cache_control": _CACHE_CONTROL}
+    system = corpo.get("system")
+    if isinstance(system, str) and system:
+        corpo["system"] = [
+            {"type": "text", "text": system, "cache_control": _CACHE_CONTROL}
+        ]
+    for message in corpo["messages"][-2:]:
+        content = message["content"]
+        if isinstance(content, str):
+            if not content:
+                continue
+            content = [{"type": "text", "text": content}]
+        if not content:
+            continue
+        content = [*content[:-1], {**content[-1], "cache_control": _CACHE_CONTROL}]
+        message["content"] = content
+    return corpo
+
+
 def _usage_metadata(usage: dict | None) -> UsageSnapshot | None:
     if not usage:
         return None
@@ -216,7 +250,7 @@ class AnthropicChatClient:
             corpo["temperature"] = temperature
         if tools:
             corpo["tools"] = [_to_anthropic_tool(t) for t in tools]
-        return corpo
+        return _with_prompt_cache(corpo)
 
     async def agenerate(
         self,

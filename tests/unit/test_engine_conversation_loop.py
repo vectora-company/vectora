@@ -2997,3 +2997,23 @@ def test_drop_terminal_notices_une_usuarios_seguidos() -> None:
     assert len(resultado) == 1
     assert "primeira" in resultado[0].text()
     assert "segunda" in resultado[0].text()
+
+
+@pytest.mark.asyncio
+async def test_memorias_ficam_congeladas_por_conversa(monkeypatch) -> None:
+    from backend.engine import conversation_loop as cl
+    from backend.tools.context import ToolContext
+
+    cl._frozen_memories.clear()
+    leituras = iter([["primeira"], ["segunda"]])
+
+    async def _ler(ctx):
+        return next(leituras)
+
+    monkeypatch.setattr(cl, "_read_persistent_context_memories", _ler)
+    ctx = ToolContext(thread_id="t-congelada")
+
+    assert await cl._load_persistent_context_memories(ctx) == ["primeira"]
+    assert await cl._load_persistent_context_memories(ctx) == ["primeira"]
+    outra = ToolContext(thread_id="t-outra")
+    assert await cl._load_persistent_context_memories(outra) == ["segunda"]
