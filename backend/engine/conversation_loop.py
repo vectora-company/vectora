@@ -688,6 +688,28 @@ def _args_preview(args: dict[str, Any]) -> str:
 _WRITE_TODOS_TOOL_NAME = "write_todos"
 
 
+_TERMINAL_NOTICE_PREFIXES = ("[cancelado]", "[falha]")
+
+
+def _drop_terminal_notices(history: list[VMessage]) -> list[VMessage]:
+    """Remove do histórico do modelo os avisos sintéticos de cancelamento/falha.
+
+    ``_persist_terminal_outcome`` grava ``[cancelado] …`` / ``[falha] …`` como
+    mensagem de assistente para a UI e o ledger. Para o modelo isso seria uma
+    resposta dele mesmo que nunca existiu e o levaria a repetir "não consegui".
+    """
+    return [
+        m
+        for m in history
+        if not (
+            m.role is MessageRole.ASSISTANT
+            and m.is_error
+            and not m.tool_calls
+            and m.text().lstrip().startswith(_TERMINAL_NOTICE_PREFIXES)
+        )
+    ]
+
+
 def _default_context_tokens() -> int:
     """Read the configured default lazily so loop tests remain isolated."""
     from backend.settings import settings
@@ -1035,7 +1057,7 @@ async def run_conversation(  # noqa: PLR0911
     media_routed_model: str | None = None
     response_revisions = 0
     for _iteracao in range(config.max_iterations):
-        raw_history = await session_store.get_history(thread_id)
+        raw_history = _drop_terminal_notices(await session_store.get_history(thread_id))
         if ctx.permission_mode == "plan":
             await _hydrate_plan_approvals(
                 session_store, ctx, config.run_id, raw_history
