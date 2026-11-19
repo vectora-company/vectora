@@ -330,6 +330,13 @@ class TestContratoDoSConstruct:
         ):
             assert step in text
 
+    def test_sidecars_nao_tem_alvo_avulso(self) -> None:
+        """NATS, FFmpeg e o helper de fala só são preparados pelo ``install``."""
+        text = self._text()
+        for alvo in ("nats", "ffmpeg", "macos-speech"):
+            assert f'_cmd("{alvo}"' not in text
+            assert f"scons {alvo}" not in text
+
     def test_helper_de_fala_so_roda_no_macos_no_install(self) -> None:
         text = self._text()
         match = re.search(r"if host\.is_macos:\s+step\(\s+7,", text)
@@ -341,3 +348,23 @@ class TestContratoDoSConstruct:
         assert '_fetch_speech  = _node("build-macos-speech"' in text
         backend = re.search(r"_build_backend = _node\((.*?)\n\)", text, re.DOTALL)
         assert backend is not None and "_fetch_speech" in backend.group(1)
+
+
+class TestCanalDeAtualizacaoDoPacote:
+    """``scons release`` define o canal que o electron-builder exige."""
+
+    def _text(self) -> str:
+        return (REPO / "SConstruct").read_text(encoding="utf-8")
+
+    def test_o_pacote_resolve_o_canal_antes_do_electron_builder(self) -> None:
+        text = self._text()
+        assert "def _resolve_update_channel()" in text
+        assert (
+            'build_env: dict[str, str] = {"VECTORA_UPDATE_CHANNEL": _resolve_update_channel()}'
+            in text
+        )
+
+    def test_usa_o_mesmo_resolvedor_do_ci(self) -> None:
+        text = self._text()
+        assert '"update-channel"' in text
+        assert (REPO / "utils" / "release.py").is_file()

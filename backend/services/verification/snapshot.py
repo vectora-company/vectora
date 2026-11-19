@@ -7,6 +7,8 @@ import os
 import stat
 from pathlib import Path
 
+DELETED_MARKER = "deleted"
+
 
 def hash_file_sha256(file_path: Path) -> str:
     """Calcula o hash SHA-256 de um arquivo individual."""
@@ -45,6 +47,7 @@ def compute_files_snapshot(
     file_hashes: dict[str, str] = {}
 
     target_paths: list[Path] = []
+    deleted: list[str] = []
     if files:
         for f in files:
             try:
@@ -56,6 +59,10 @@ def compute_files_snapshot(
                 candidate.relative_to(root)
                 if _is_regular_file(candidate):
                     target_paths.append(candidate)
+                elif not candidate.exists() and not candidate.is_symlink():
+                    # Arquivo tocado e removido: a remoção precisa constar na
+                    # evidência, senão o snapshot parece não tê-lo visto.
+                    deleted.append(str(candidate.relative_to(root)).replace("\\", "/"))
             except (ValueError, OSError):
                 continue
     else:
@@ -85,6 +92,9 @@ def compute_files_snapshot(
             rel = str(p).replace("\\", "/")
         digest = hash_file_sha256(p)
         file_hashes[rel] = digest or "unreadable"
+
+    for rel in deleted:
+        file_hashes[rel] = DELETED_MARKER
 
     # Digest combinado de todos os arquivos ordenados por caminho relativo
     combined = hashlib.sha256()

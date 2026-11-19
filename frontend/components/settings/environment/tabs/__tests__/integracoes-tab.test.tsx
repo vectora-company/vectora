@@ -55,7 +55,7 @@ afterEach(() => overwriteGetLocale(() => baseLocale));
 
 type GatewayStatus = {
   connected: boolean;
-  state: "never_connected" | "error" | "connected";
+  state: "never_connected" | "error" | "connected" | "disabled";
   detail: string | null;
 };
 
@@ -495,6 +495,23 @@ describe("IntegracoesTab", () => {
     await waitFor(() => {
       expect(screen.getByText(/nenhuma integração oauth/i)).toBeTruthy();
       expect(screen.queryByText(/gateway indisponível/i)).toBeNull();
+    });
+  });
+
+  it("gateway desligado por --no-services diz isso, sem parecer erro nem nunca conectado", async () => {
+    mockFetch(BASE_INTEGRATIONS, {
+      connected: false,
+      state: "disabled",
+      detail: "--no-services",
+    });
+    const { IntegracoesTab } = await import("../integracoes-tab");
+    render(<IntegracoesTab />);
+    await waitFor(() => {
+      expect(
+        screen.getByText(/services desligado nesta execução/i),
+      ).toBeTruthy();
+      expect(screen.queryByText(/gateway indisponível/i)).toBeNull();
+      expect(screen.queryByText(/nenhuma integração oauth/i)).toBeNull();
     });
   });
 

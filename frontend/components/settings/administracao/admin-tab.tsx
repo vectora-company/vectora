@@ -61,6 +61,11 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { m } from "@/lib/paraglide/messages";
+import {
+  SettingsStatus,
+  settingsItemClass,
+} from "@/components/settings/primitives";
+import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
 // Tipos
@@ -254,7 +259,7 @@ function InvitesSection() {
   };
 
   return (
-    <div className="rounded-lg border bg-card/50 p-3 space-y-3">
+    <div className={cn(settingsItemClass, "p-3 space-y-3")}>
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium flex items-center gap-1.5">
           <UserPlus className="w-3.5 h-3.5 text-muted-foreground" />
@@ -278,7 +283,7 @@ function InvitesSection() {
         <div className="space-y-2 border-t pt-3">
           <div className="grid grid-cols-3 gap-2">
             <div className="space-y-1">
-              <label className="text-[10px] text-muted-foreground">
+              <label className="text-2xs text-muted-foreground">
                 {m.invite_role_label()}
               </label>
               <Select value={role} onValueChange={setRole}>
@@ -295,7 +300,7 @@ function InvitesSection() {
               </Select>
             </div>
             <div className="space-y-1 col-span-1">
-              <label className="text-[10px] text-muted-foreground">
+              <label className="text-2xs text-muted-foreground">
                 {m.invite_ttl_label()}
               </label>
               <Input
@@ -309,7 +314,7 @@ function InvitesSection() {
               />
             </div>
             <div className="space-y-1">
-              <label className="text-[10px] text-muted-foreground">
+              <label className="text-2xs text-muted-foreground">
                 {m.invite_email_label()}
               </label>
               <Input
@@ -337,9 +342,7 @@ function InvitesSection() {
 
           {link && (
             <div className="flex items-center gap-1.5 rounded-md border bg-background p-1.5">
-              <span className="text-[10px] font-mono truncate flex-1">
-                {link}
-              </span>
+              <span className="text-2xs font-mono truncate flex-1">{link}</span>
               <Button
                 variant="ghost"
                 size="sm"
@@ -347,7 +350,7 @@ function InvitesSection() {
                 onClick={handleCopy}
               >
                 {copied ? (
-                  <Check className="w-3.5 h-3.5 text-green-500" />
+                  <Check className="w-3.5 h-3.5 text-success" />
                 ) : (
                   <Copy className="w-3.5 h-3.5" />
                 )}
@@ -365,7 +368,7 @@ function InvitesSection() {
 
       {/* Convites pendentes */}
       <div className="space-y-1">
-        <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
+        <p className="text-2xs text-muted-foreground uppercase tracking-wide">
           {m.invite_pending()}
         </p>
         {invites.length === 0 ? (
@@ -376,7 +379,7 @@ function InvitesSection() {
               key={inv.token_hash}
               className="flex items-center gap-2 px-2 py-1.5 rounded-md border text-xs"
             >
-              <Badge variant="secondary" className="text-[9px] h-4">
+              <Badge variant="secondary" className="text-2xs h-4">
                 {inv.role}
               </Badge>
               <span className="flex-1 truncate text-muted-foreground">
@@ -456,14 +459,14 @@ function UserToolsRow({ userId }: { userId: string }) {
   }
 
   return (
-    <div className="rounded-lg border bg-card/50 -mt-1 p-3 space-y-2">
-      <div className="max-h-48 overflow-y-auto divide-y divide-border/60 rounded-md border">
+    <div className={cn(settingsItemClass, "-mt-1 p-3 space-y-2")}>
+      <div className="max-h-48 overflow-y-auto divide-y divide-border rounded-md border">
         {available.map((name) => (
           <div
             key={name}
             className="flex items-center justify-between px-2.5 py-1.5"
           >
-            <span className="text-[11px] font-mono">{name}</span>
+            <span className="text-xs font-mono">{name}</span>
             <Switch
               checked={!disabled.has(name)}
               onCheckedChange={() => toggle(name)}
@@ -473,9 +476,7 @@ function UserToolsRow({ userId }: { userId: string }) {
       </div>
       <div className="flex items-center justify-end gap-2">
         {saved && (
-          <span className="text-[10px] text-green-500">
-            {m.toolpolicy_saved()}
-          </span>
+          <span className="text-2xs text-success">{m.toolpolicy_saved()}</span>
         )}
         <Button
           size="sm"
@@ -547,10 +548,10 @@ export function UsersPanel() {
       </p>
       {users.map((u) => (
         <div key={u.id} className="space-y-1">
-          <div className="flex items-center gap-3 p-2.5 rounded-lg border bg-card">
+          <div className={cn(settingsItemClass, "flex items-center gap-3 p-3")}>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium truncate">{u.email}</p>
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-2xs text-muted-foreground">
                 {m.admin_users_since()}{" "}
                 {new Date(u.created_at).toLocaleDateString("pt-BR")}
                 {u.last_login_at &&
@@ -680,7 +681,9 @@ export function ToolsPanel() {
               }}
               className="pb-1.5"
             >
-              <div className="flex items-center gap-3 p-2.5 rounded-lg border bg-card">
+              <div
+                className={cn(settingsItemClass, "flex items-center gap-3 p-3")}
+              >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
                     <span className="text-xs font-mono font-medium">
@@ -689,13 +692,13 @@ export function ToolsPanel() {
                     {t.destructive && (
                       <Badge
                         variant="destructive"
-                        className="text-[9px] h-3.5 px-1"
+                        className="text-2xs h-3.5 px-1"
                       >
                         {m.admin_tools_destructive()}
                       </Badge>
                     )}
                   </div>
-                  <p className="text-[10px] text-muted-foreground truncate">
+                  <p className="text-2xs text-muted-foreground truncate">
                     {t.description}
                   </p>
                 </div>
@@ -765,14 +768,14 @@ export function SystemPanel() {
           [m.admin_system_label_python(), info.python_version.split(" ")[0]],
           [m.admin_system_label_spans(), String(info.recent_spans_count)],
         ].map(([label, value]) => (
-          <div key={label} className="rounded-lg border bg-card p-2.5">
-            <p className="text-[10px] text-muted-foreground">{label}</p>
+          <div key={label} className={cn(settingsItemClass, "p-3")}>
+            <p className="text-2xs text-muted-foreground">{label}</p>
             <p className="text-xs font-medium truncate">{value}</p>
           </div>
         ))}
       </div>
 
-      <div className="space-y-2 rounded-lg border bg-card p-3">
+      <div className={cn(settingsItemClass, "space-y-2 p-3")}>
         <div className="flex items-center justify-between gap-2">
           <p className="text-xs font-medium">{m.admin_system_label_spans()}</p>
           <Button
@@ -878,13 +881,13 @@ function ConfigSection() {
         <div className="flex items-center gap-2">
           <p className="text-sm font-medium">{TOKEN_ENV_NAME}</p>
           {config.vectora_token_configured ? (
-            <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
+            <SettingsStatus tone="success">
               {m.admin_config_token_configured()}
-            </span>
+            </SettingsStatus>
           ) : (
-            <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-orange-500/15 text-orange-700 dark:text-orange-300 border border-orange-500/30">
+            <SettingsStatus tone="warning">
               {m.admin_config_token_absent()}
-            </span>
+            </SettingsStatus>
           )}
         </div>
         <p className="text-xs text-muted-foreground">
@@ -1105,7 +1108,7 @@ export function SafeRootsPanel() {
       </div>
 
       {/* Adicionar nova */}
-      <div className="rounded-md border border-border/60 p-3 space-y-2">
+      <div className={cn(settingsItemClass, "p-3 space-y-2")}>
         <div className="text-xs font-medium text-foreground">
           {m.admin_saferoots_add_title()}
         </div>
@@ -1166,7 +1169,7 @@ export function SafeRootsPanel() {
           {m.admin_saferoots_empty()}
         </div>
       ) : (
-        <div className="rounded-md border border-border/60 divide-y divide-border/60">
+        <div className={cn(settingsItemClass, "divide-y divide-border")}>
           {roots.map((r) => (
             <div
               key={r.id}
@@ -1192,18 +1195,18 @@ export function SafeRootsPanel() {
                   <div className="font-medium text-foreground flex items-center gap-1.5">
                     {r.label}
                     {r.builtin && (
-                      <Badge variant="secondary" className="text-[10px] py-0">
+                      <Badge variant="secondary" className="text-2xs py-0">
                         {m.admin_saferoots_builtin_badge()}
                       </Badge>
                     )}
                     {r.archived_at && (
-                      <Badge variant="outline" className="text-[10px] py-0">
+                      <Badge variant="outline" className="text-2xs py-0">
                         {m.admin_saferoots_archived_badge()}
                       </Badge>
                     )}
                   </div>
                 )}
-                <div className="font-mono text-[10px] text-muted-foreground truncate">
+                <div className="font-mono text-2xs text-muted-foreground truncate">
                   {r.path}
                 </div>
               </div>
@@ -1321,7 +1324,7 @@ function StorageStatusBadge({ status }: { status: StorageBackendStatus }) {
   }
   if (status.ok) {
     return (
-      <span className="flex items-center gap-1 text-xs text-green-600">
+      <span className="flex items-center gap-1 text-xs text-success">
         <CheckCircle2 className="w-3.5 h-3.5" />
         {m.admin_storage_connected()}
         {status.latency_ms !== undefined && (
@@ -1351,7 +1354,7 @@ interface StorageTestResult {
 function StorageTestResultLine({ result }: { result: StorageTestResult }) {
   return (
     <div
-      className={`text-xs flex items-center gap-1 ${result.ok ? "text-green-600" : "text-destructive"}`}
+      className={`text-xs flex items-center gap-1 ${result.ok ? "text-success" : "text-destructive"}`}
     >
       {result.ok ? (
         <>
@@ -1439,7 +1442,7 @@ function BackendConfigCard({
   };
 
   return (
-    <div className="space-y-2 rounded border px-3 py-2">
+    <div className={cn(settingsItemClass, "space-y-2 px-3 py-2")}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Database className="w-3.5 h-3.5 text-muted-foreground" />
@@ -1568,7 +1571,7 @@ export function StoragePanel() {
       </div>
 
       {/* Modo de armazenamento */}
-      <div className="space-y-1.5 rounded border px-3 py-2">
+      <div className={cn(settingsItemClass, "space-y-1.5 px-3 py-2")}>
         <span className="text-xs font-medium">
           {m.admin_storage_mode_title()}
         </span>
@@ -1605,7 +1608,10 @@ export function StoragePanel() {
           {liteBackends.map(({ key, label }) => (
             <div
               key={key}
-              className="flex items-center justify-between rounded border px-3 py-2"
+              className={cn(
+                settingsItemClass,
+                "flex items-center justify-between px-3 py-2",
+              )}
             >
               <div className="flex items-center gap-2">
                 <Database className="w-3.5 h-3.5 text-muted-foreground" />

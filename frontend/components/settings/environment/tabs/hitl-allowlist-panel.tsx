@@ -9,6 +9,11 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { m } from "@/lib/paraglide/messages";
 import { useWorkspacesStore } from "@/lib/stores/workspaces-store";
+import {
+  settingsItemClass,
+  settingsInputClass,
+} from "@/components/settings/primitives";
+import { cn } from "@/lib/utils";
 
 interface AllowlistResponse {
   allowlist?: AllowlistItem[];
@@ -136,7 +141,7 @@ export function HitlAllowlistPanel() {
           aria-label={m.hitl_allowlist_workspace()}
           value={selectedWorkspace}
           onChange={(event) => setSelectedWorkspace(event.target.value)}
-          className="w-full h-8 rounded-md border border-border bg-background px-2"
+          className={cn(settingsInputClass, "w-full")}
         >
           {workspaces.map((workspace) => (
             <option key={workspace.id} value={workspace.id}>
@@ -147,7 +152,7 @@ export function HitlAllowlistPanel() {
       </label>
 
       {workspaceName && (
-        <p className="text-[11px] text-muted-foreground">{workspaceName}</p>
+        <p className="text-xs text-muted-foreground">{workspaceName}</p>
       )}
       {loading && (
         <div className="flex items-center gap-2 py-6 text-xs text-muted-foreground">
@@ -157,12 +162,12 @@ export function HitlAllowlistPanel() {
       )}
       {!loading && error && <p className="text-xs text-destructive">{error}</p>}
       {!loading && !error && rules.length === 0 && (
-        <p className="rounded-lg border border-dashed p-4 text-xs text-muted-foreground">
+        <p className="rounded-lg border border-dashed border-border p-4 text-xs text-muted-foreground">
           {m.hitl_allowlist_empty()}
         </p>
       )}
       {!loading && rules.length > 0 && (
-        <div className="rounded-lg border bg-card/50 divide-y divide-border/60">
+        <div className={cn(settingsItemClass, "divide-y divide-border")}>
           {rules.map((rule) => (
             <div
               key={rule.id}
@@ -191,7 +196,7 @@ export function HitlAllowlistPanel() {
           ))}
         </div>
       )}
-      {notice && <p className="text-xs text-green-600">{notice}</p>}
+      {notice && <p className="text-xs text-success">{notice}</p>}
       <ConfirmDialog
         open={pendingRevoke !== null}
         title={m.hitl_allowlist_revoke_title()}

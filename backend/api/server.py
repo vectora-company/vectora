@@ -77,6 +77,7 @@ from backend.api.handlers.workspaces import view_router as workspace_view_router
 from backend.api.handlers.workspaces import (
     workspace_scoped_router as workspace_scoped_view_router,
 )
+from backend.services.availability import require_services, services_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -174,6 +175,8 @@ async def _license_revalidation_loop() -> None:
     """
     from backend.services.license import LicenseError, validate_license_async
 
+    if not services_enabled():
+        return
     while True:
         try:
             info = await validate_license_async()
@@ -534,7 +537,7 @@ async def _lifespan(app: FastAPI):  # type: ignore[return]  # noqa: ANN202
         from backend.settings import get_settings as _gs_gateway
 
         _cfg = _gs_gateway()
-        if _cfg.gateway_enabled:
+        if services_enabled() and _cfg.gateway_enabled:
             from backend.services.gateway import GatewayClient
 
             _gateway_client = GatewayClient(
@@ -742,6 +745,16 @@ def create_app(serve_static: bool = True) -> FastAPI:
         redoc_url=None,
     )
 
+    from fastapi.responses import JSONResponse
+
+    from backend.services.availability import ServicesDisabledError
+
+    @app.exception_handler(ServicesDisabledError)
+    async def _services_disabled_response(
+        request: Request, exc: ServicesDisabledError
+    ) -> JSONResponse:
+        return JSONResponse(status_code=503, content={"detail": str(exc)})
+
     @app.middleware("http")
     async def _track_storage_operation(
         request: Request, call_next: RequestResponseEndpoint
@@ -764,7 +777,6 @@ def create_app(serve_static: bool = True) -> FastAPI:
     # captura de log do pytest) nunca vê. Mesmo padrão do achado em
     # `native_stream.py`: erro real precisa deixar rastro, nunca só o
     # genérico.
-    from fastapi.responses import JSONResponse
 
     async def _log_unhandled_exception(
         request: Request, exc: Exception

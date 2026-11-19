@@ -24,7 +24,7 @@ from backend.scheduling.nats_sidecar import (
 
 pytestmark = pytest.mark.skipif(
     _resolve_binary() is None,
-    reason="nats-server não encontrado (PATH nem resources/) — rode `scons nats`",
+    reason="nats-server não encontrado (PATH nem resources/) — rode `scons install`",
 )
 
 

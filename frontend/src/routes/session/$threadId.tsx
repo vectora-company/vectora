@@ -436,7 +436,7 @@ function SessionPage() {
       setIsMobileSidebarOpen(false);
     }
   }, [isCompactSession]);
-  const [showToolCalls, setShowToolCalls] = useState(false);
+  const showToolCalls = useSettingsStore((s) => s.showToolCalls);
   const [showShortcutsDialog, setShowShortcutsDialog] = useState(false);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [showNewChatDialog, setShowNewChatDialog] = useState(false);
@@ -932,8 +932,6 @@ function SessionPage() {
   const headerEl = useMemo(
     () => (
       <Header
-        showToolCalls={showToolCalls}
-        onToggleToolCalls={() => setShowToolCalls((v) => !v)}
         onShowShortcuts={() => setShowShortcutsDialog(true)}
         showModeSwitch={!chatMode}
         compactNavigation={
@@ -964,7 +962,6 @@ function SessionPage() {
       />
     ),
     [
-      showToolCalls,
       chatMode,
       isCompactSession,
       isMobileSidebarOpen,

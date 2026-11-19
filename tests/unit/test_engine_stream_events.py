@@ -264,6 +264,12 @@ class TestParidadeComOSchemaPydantic:
 
     def test_error_signal(self):
         nativo = to_sse_line(ErrorSignal(message="deu ruim", code="RECURSION_LIMIT"))
+        aviso = to_sse_line(
+            ErrorSignal(
+                message="repetida", code="TOOL_CALL_REPEATED", severity="warning"
+            )
+        )
+        assert '"severity":"warning"' in aviso.replace(" ", "")
         pydantic = schemas.encode_event(
             schemas.ErrorEvent(message="deu ruim", code="RECURSION_LIMIT")
         )

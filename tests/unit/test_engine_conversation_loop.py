@@ -831,6 +831,43 @@ class TestParadaNormal:
         assert stored.status == "passed"
         assert stored.evidence[-1]["snapshot_sha256"] == "snapshot"
 
+    async def test_run_sem_gates_termina_nao_verificado(
+        self, session_store, ctx, monkeypatch, tmp_path
+    ):
+        """Sem quality gates, o motor real devolve ``not_run`` e o loop grava o
+        run como ``degraded``, sem a mensagem de verificação bem-sucedida."""
+        from backend.contracts.models import WorkspaceVerificationProfile
+        from backend.persistence.native.agent_run import AgentRun
+
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(
+            "backend.services.verification.engine.get_verification_profile",
+            lambda workspace_id: WorkspaceVerificationProfile(
+                workspace_id=workspace_id or "default", enabled=True, gates=[]
+            ),
+        )
+        await session_store.upsert_agent_run(
+            AgentRun(run_id="run-no-gates", thread_id="thread-1", status="running")
+        )
+
+        resultado = await run_conversation(
+            session_store=session_store,
+            chat_client=_ScriptedChatClient([[_texto_chunk("ok")]]),
+            tool_registry=ToolRegistry(),
+            ctx=ctx,
+            thread_id="thread-1",
+            config=LoopConfig(run_id="run-no-gates"),
+        )
+
+        assert resultado.stopped_reason == "stop"
+        stored = await session_store.get_agent_run("run-no-gates")
+        assert stored is not None
+        assert stored.status == "degraded"
+        assert "Nenhum quality gate" in (stored.detail or "")
+        assert "sucesso" not in (stored.detail or "")
+        assert stored.evidence[-1]["outcome"] == "not_run"
+        assert stored.evidence[-1]["gates_evaluated"] == 0
+
     async def test_checkpoint_de_tool_impede_reexecucao_cego(self, session_store, ctx):
         """Verifica o comportamento de checkpoint de tool impede reexecucao cego."""
         from backend.persistence.native.agent_run import AgentRun
@@ -1047,6 +1084,10 @@ class TestGuardrailDeRepeticao:
         )
         sinais = [e for e in eventos if isinstance(e, ErrorSignal)]
         assert any(e.code == "TOOL_CALL_REPEATED" for e in sinais)
+        # O primeiro limiar é um aviso: o turno segue até a resposta final.
+        assert [e.severity for e in sinais if e.code == "TOOL_CALL_REPEATED"] == [
+            "warning"
+        ]
 
         # Borda: mesma tool, args diferentes a cada chamada — nunca dispara.
         await session_store.create_session("thread-2", user_id="alice")
@@ -1133,11 +1174,14 @@ class TestGuardrailDeRepeticao:
         )
 
         assert resultado.stopped_reason == "loop_cap_exceeded"
-        assert any(
-            event.code == "TOOL_CALL_REPEATED"
+        repetidos = [
+            event
             for event in eventos
-            if isinstance(event, ErrorSignal)
-        )
+            if isinstance(event, ErrorSignal) and event.code == "TOOL_CALL_REPEATED"
+        ]
+        assert repetidos
+        # O limite duro é terminal; só o aviso anterior é não fatal.
+        assert repetidos[-1].severity == "error"
         historico = await session_store.get_history("thread-repeated-hard-limit")
         assert len(historico) == 10
         assert all(

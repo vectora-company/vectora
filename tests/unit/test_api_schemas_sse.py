@@ -113,6 +113,13 @@ class TestErrorEvent:
         e = ErrorEvent(message="timeout", code="TIMEOUT")
         assert e.code == "TIMEOUT"
 
+    def test_severity_default_is_terminal_error(self):
+        from backend.api.schemas import ErrorEvent, encode_event
+
+        assert ErrorEvent(message="x").severity == "error"
+        payload = encode_event(ErrorEvent(message="x", severity="warning"))
+        assert '"severity":"warning"' in payload.replace(" ", "")
+
 
 class TestHITLEvent:
     def test_fields(self):

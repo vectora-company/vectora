@@ -48,6 +48,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { m } from "@/lib/paraglide/messages";
 import { useSettingsOverlayStore } from "@/lib/stores/settings-overlay-store";
+import {
+  SettingsMessage,
+  SettingsStatus,
+  settingsItemClass,
+  settingsRowClass,
+} from "@/components/settings/primitives";
 
 // ---------------------------------------------------------------------------
 // Tipos
@@ -97,7 +103,7 @@ async function fetchIntegrations(): Promise<Integration[]> {
   return data.integrations ?? [];
 }
 
-type GatewayState = "never_connected" | "error" | "connected";
+type GatewayState = "never_connected" | "error" | "connected" | "disabled";
 
 interface GatewayStatus {
   connected: boolean;
@@ -273,7 +279,7 @@ function IntegrationCard({
   // card próprio com botão de OAuth; apenas mostram status herdado.
   if (isChildOAuth) {
     return (
-      <div className="rounded-lg border bg-card/50">
+      <div className={settingsItemClass}>
         <div className="flex items-center gap-3 p-3">
           <div className="w-8 h-8 rounded-md bg-muted flex items-center justify-center shrink-0">
             <Link2 className="w-4 h-4 text-muted-foreground" />
@@ -281,14 +287,11 @@ function IntegrationCard({
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium">{integ.name}</span>
-              <Badge
-                variant={integ.connected ? "default" : "secondary"}
-                className="text-[10px] h-4 px-1.5"
-              >
+              <SettingsStatus tone={integ.connected ? "success" : "neutral"}>
                 {integ.connected
                   ? m.integrations_connected()
                   : m.integrations_disconnected()}
-              </Badge>
+              </SettingsStatus>
             </div>
             <p className="text-xs text-muted-foreground truncate">
               {integ.description}
@@ -300,7 +303,7 @@ function IntegrationCard({
   }
 
   return (
-    <div className="rounded-lg border bg-card">
+    <div className={settingsItemClass}>
       {/* Cabeçalho */}
       <div className="flex items-center gap-3 p-3">
         <div className="w-8 h-8 rounded-md bg-muted flex items-center justify-center shrink-0">
@@ -314,14 +317,11 @@ function IntegrationCard({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium">{integ.name}</span>
-            <Badge
-              variant={integ.connected ? "default" : "secondary"}
-              className="text-[10px] h-4 px-1.5"
-            >
+            <SettingsStatus tone={integ.connected ? "success" : "neutral"}>
               {integ.connected
                 ? m.integrations_connected()
                 : m.integrations_disconnected()}
-            </Badge>
+            </SettingsStatus>
           </div>
           <p className="text-xs text-muted-foreground truncate">
             {integ.description}
@@ -340,7 +340,7 @@ function IntegrationCard({
               {verifyState === "loading" ? (
                 <Loader2 className="w-3 h-3 animate-spin" />
               ) : verifyState === "ok" ? (
-                <CheckCircle2 className="w-3 h-3 text-green-500" />
+                <CheckCircle2 className="w-3 h-3 text-success" />
               ) : verifyState === "error" ? (
                 <XCircle className="w-3 h-3 text-destructive" />
               ) : (
@@ -372,15 +372,12 @@ function IntegrationCard({
 
       {/* Mensagem de verificação */}
       {verifyMsg && (
-        <div
-          className={`mx-3 mb-2 text-xs px-2 py-1 rounded ${
-            verifyState === "ok"
-              ? "bg-green-500/10 text-green-600 dark:text-green-400"
-              : "bg-destructive/10 text-destructive"
-          }`}
+        <SettingsMessage
+          tone={verifyState === "ok" ? "success" : "danger"}
+          className="mx-3 mb-2"
         >
           {verifyMsg}
-        </div>
+        </SettingsMessage>
       )}
 
       {/* Expansão para API key / token manual */}
@@ -530,7 +527,7 @@ function CustomVarCard({
   };
 
   return (
-    <div className="flex items-center justify-between gap-3 rounded-lg border bg-card px-3 py-2.5">
+    <div className={settingsRowClass}>
       <div className="min-w-0 flex-1">
         <div className="text-sm font-mono font-medium truncate">{varKey}</div>
         <div className="text-xs text-muted-foreground font-mono">
@@ -770,7 +767,7 @@ export function IntegracoesTab({ onOpenFullPage }: IntegracoesTabProps = {}) {
       <div
         className={`rounded-lg border px-3 py-2 text-xs space-y-0.5 ${
           gateway.state === "connected"
-            ? "border-green-500/30 bg-green-500/5"
+            ? "border-success/30 bg-success/5"
             : gateway.state === "error"
               ? "border-destructive/30 bg-destructive/5"
               : "border-border bg-muted/30"
@@ -780,7 +777,7 @@ export function IntegracoesTab({ onOpenFullPage }: IntegracoesTabProps = {}) {
           <p
             className={`font-medium ${
               gateway.state === "connected"
-                ? "text-green-600 dark:text-green-400"
+                ? "text-success"
                 : gateway.state === "error"
                   ? "text-destructive"
                   : "text-muted-foreground"
@@ -790,7 +787,9 @@ export function IntegracoesTab({ onOpenFullPage }: IntegracoesTabProps = {}) {
               ? m.gateway_connected()
               : gateway.state === "error"
                 ? m.gateway_error()
-                : m.gateway_never_connected()}
+                : gateway.state === "disabled"
+                  ? m.gateway_disabled()
+                  : m.gateway_never_connected()}
           </p>
         </div>
         {gateway.state === "error" && (

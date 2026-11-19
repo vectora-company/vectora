@@ -102,7 +102,7 @@ def test_resolve_binary_usa_bundle_pyinstaller_antes_do_path(tmp_path, monkeypat
 
 def test_resolve_binary_meipass_sem_arquivo_cai_no_path(tmp_path, monkeypatch):
     """Borda: _MEIPASS setado mas sem nats/nats-server dentro (build sem
-    `scons nats` antes do PyInstaller) — não trava, degrada pro PATH."""
+    `scons install` antes do PyInstaller) — não trava, degrada pro PATH."""
     monkeypatch.delenv("VECTORA_NATS_BINARY", raising=False)
     monkeypatch.setattr(nats_sidecar.sys, "_MEIPASS", str(tmp_path), raising=False)
     monkeypatch.setattr(nats_sidecar.shutil, "which", lambda _n: "/usr/bin/nats-server")

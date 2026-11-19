@@ -85,6 +85,16 @@
   --destructive: #f97583;
   --destructive-foreground: #1a1a1a;
 
+  /* Estados de interface (Settings e telas de formulário): sucesso, aviso e
+     informação. Erro é --destructive. Cada um tem o par "-foreground" para
+     texto sobre fundo cheio; o fundo suave usa o próprio token com alfa. */
+  --success: #3fb950;
+  --success-foreground: #1a1a1a;
+  --warning: #d29922;
+  --warning-foreground: #1a1a1a;
+  --info: #58a6ff;
+  --info-foreground: #1a1a1a;
+
   /* Git Workbench semantic tones. */
   --git-addition: #3fb950;
   --git-modification: #d29922;
@@ -214,6 +224,13 @@
   --destructive: #d32f2f;
   --destructive-foreground: #ffffff;
 
+  --success: #1a7f37;
+  --success-foreground: #ffffff;
+  --warning: #9a6700;
+  --warning-foreground: #ffffff;
+  --info: #0969da;
+  --info-foreground: #ffffff;
+
   /* Git Workbench semantic tones with light-theme contrast. */
   --git-addition: #1a7f37;
   --git-modification: #9a6700;
@@ -271,6 +288,18 @@
 
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+
+  /* Escala mínima de texto: o menor tamanho permitido em rótulos densos
+     (selos, legendas) no lugar de text-[10px]. */
+  --text-2xs: 0.625rem;
+  --text-2xs--line-height: 0.875rem;
 
   --color-git-addition: var(--git-addition);
   --color-git-modification: var(--git-modification);

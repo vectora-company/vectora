@@ -31032,6 +31032,62 @@
         ]
       }
     },
+    "/workspaces/{workspace_id}/rag/jobs/{job_id}/retry": {
+      "post": {
+        "description": "Reprocessa somente os chunks falhos de um job deste workspace.",
+        "operationId": "retry_rag_job_workspaces__workspace_id__rag_jobs__job_id__retry_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "title": "Response Retry Rag Job Workspaces  Workspace Id  Rag Jobs  Job Id  Retry Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retry Rag Job",
+        "tags": [
+          "workspaces-view"
+        ]
+      }
+    },
     "/workspaces/{workspace_id}/sandbox/audit": {
       "get": {
         "description": "Decisões do sandbox deste workspace (início do jail, recusas, saídas de\nrede permitidas e bloqueadas), do mais novo ao mais antigo.",

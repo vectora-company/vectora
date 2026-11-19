@@ -168,7 +168,9 @@ def _to_payload(event: EngineEvent) -> schemas.StreamChatEventPayload:  # noqa: 
             tool_calls=event.tool_calls,
         )
     if isinstance(event, ErrorSignal):
-        return schemas.ErrorEvent(message=event.message, code=event.code)
+        return schemas.ErrorEvent(
+            message=event.message, code=event.code, severity=event.severity
+        )
     if isinstance(event, Done):
         return schemas.DoneEvent(thread_id=event.thread_id, run_id=event.run_id)
 

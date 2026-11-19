@@ -263,3 +263,29 @@ async def test_ingest_not_a_directory(tmp_path: Path, _patched: _FakeQueue) -> N
     f.write_text("x = 1\n", encoding="utf-8")
     with pytest.raises(ValueError, match="Não é um diretório"):
         await rag_ingest.ingest_directory(str(f))
+
+
+@pytest.mark.asyncio
+async def test_ingest_reports_enqueue_failure_without_hiding_already_queued_chunks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "a.md").write_text("primeiro", encoding="utf-8")
+    (tmp_path / "b.md").write_text("segundo", encoding="utf-8")
+    queue = _FakeQueue()
+    original = queue.enqueue
+
+    async def enqueue(*args: Any, **kwargs: Any) -> str:
+        if queue.calls:
+            raise ConnectionError("database unavailable")
+        return await original(*args, **kwargs)
+
+    monkeypatch.setattr(queue, "enqueue", enqueue)
+
+    async def get_queue(_dsn: str | None) -> _FakeQueue:
+        return queue
+
+    monkeypatch.setattr(rag_ingest, "get_embedding_queue", get_queue)
+    monkeypatch.setattr(rag_ingest, "is_safe_file_path", lambda _p: True)
+    with pytest.raises(RuntimeError, match="Falha ao enfileirar"):
+        await rag_ingest.ingest_directory(str(tmp_path), file_types="markdown")
+    assert len(queue.calls) == 1

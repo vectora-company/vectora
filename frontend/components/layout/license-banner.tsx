@@ -14,9 +14,12 @@
  */
 
 import { useEffect, useState } from "react";
-import { AlertTriangle, Clock, ShieldAlert, X } from "lucide-react";
+import { AlertTriangle, Clock, Info, ShieldAlert, X } from "lucide-react";
 
-import { useLicenseStatus } from "@/lib/hooks/use-license-status";
+import {
+  servicesDisabled,
+  useLicenseStatus,
+} from "@/lib/hooks/use-license-status";
 import { useAdministracaoDialogStore } from "@/lib/stores/administracao-dialog-store";
 import { m } from "@/lib/paraglide/messages";
 
@@ -27,7 +30,7 @@ interface LicenseBannerProps {
   onBlockingChange?: (blocking: boolean) => void;
 }
 
-type Severity = "warning" | "danger" | "critical" | null;
+type Severity = "info" | "warning" | "danger" | "critical" | null;
 
 interface BannerSpec {
   severity: Severity;
@@ -116,6 +119,10 @@ const SEVERITY_COLORS: Record<
   Exclude<Severity, null>,
   { bg: string; icon: string }
 > = {
+  info: {
+    bg: "bg-sky-500/10 border-sky-500/30",
+    icon: "text-sky-500",
+  },
   warning: {
     bg: "bg-amber-500/15 border-amber-500/30",
     icon: "text-amber-500",
@@ -141,6 +148,16 @@ function openUrl(url: string): Promise<void> {
 function computeSpec(
   status: ReturnType<typeof useLicenseStatus>["status"],
 ): BannerSpec {
+  // Com o Services desligado nada de licença se renova ou cobra: um aviso
+  // informativo no lugar de "renovar" ou "gerenciar", cujo portal responderia 503.
+  if (servicesDisabled(status)) {
+    return {
+      severity: "info",
+      icon: Info,
+      message: m.services_off_notice(),
+      cta: null,
+    };
+  }
   if (!status || status.status === "offline") {
     return { severity: null, icon: AlertTriangle, message: "", cta: null };
   }

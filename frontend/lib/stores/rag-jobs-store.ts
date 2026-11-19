@@ -13,7 +13,13 @@ import { create } from "zustand";
  */
 
 export type RagJobStatus =
-  "starting" | "indexing" | "done" | "failed" | "paused" | "no_files";
+  | "starting"
+  | "indexing"
+  | "done"
+  | "failed"
+  | "paused"
+  | "unknown"
+  | "no_files";
 
 export interface RagJob {
   jobId: string;
@@ -25,10 +31,13 @@ export interface RagJob {
   status: RagJobStatus;
   /** Motivo quando o worker pausou a indexação (ex.: rate limit do Cohere). */
   errorReason?: string;
+  retrying?: boolean;
+  retryError?: boolean;
 }
 
 interface RagJobsState {
   jobs: Record<string, RagJob>;
+  load: (workspaceId: string) => Promise<void>;
   /** Dispara a indexação; retorna o jobId (ou null em falha) e inicia o poll.
    * `fileTypes` aceita os 3 atalhos ou uma lista de extensões customizadas
    * (ex. `["xml"]`). `includeExts`/`excludeExts` (string CSV ou lista) são
@@ -45,6 +54,7 @@ interface RagJobsState {
     },
   ) => Promise<string | null>;
   /** Remove um job da lista (não cancela o processamento no backend). */
+  retry: (jobId: string) => Promise<void>;
   dismiss: (jobId: string) => void;
   /** Aplica um evento SSE (`provider: "rag"`) recebido pelo bridge de webhooks. */
   applyEvent: (data: {
@@ -69,8 +79,103 @@ function stopPoll(jobId: string) {
   }
 }
 
+function startPolling(jobId: string, workspaceId: string) {
+  stopPoll(jobId);
+  const poll = async () => {
+    try {
+      const res = await fetch(
+        `/workspaces/${encodeURIComponent(workspaceId)}/rag/jobs/${encodeURIComponent(jobId)}`,
+        { credentials: "include" },
+      );
+      if (!res.ok) return;
+      const st = (await res.json()) as {
+        total: number;
+        processed: number;
+        failed: number;
+        status: RagJobStatus;
+        error_reason?: string | null;
+      };
+      useRagJobsStore.setState((s) => {
+        const prev = s.jobs[jobId];
+        if (!prev) return s;
+        return {
+          jobs: {
+            ...s.jobs,
+            [jobId]: {
+              ...prev,
+              total: st.total,
+              processed: st.processed,
+              failed: st.failed,
+              status: st.status,
+              errorReason: st.error_reason ?? undefined,
+            },
+          },
+        };
+      });
+      // "paused" é terminal (worker arquivou a fila): para o poll.
+      if (
+        st.status === "done" ||
+        st.status === "failed" ||
+        st.status === "paused"
+      )
+        stopPoll(jobId);
+    } catch {
+      // mantém o poll; falha transitória de rede
+    }
+  };
+  timers[jobId] = setInterval(() => void poll(), POLL_MS);
+  void poll();
+}
+
 export const useRagJobsStore = create<RagJobsState>((set) => ({
   jobs: {},
+
+  load: async (workspaceId) => {
+    try {
+      const response = await fetch(
+        `/workspaces/${encodeURIComponent(workspaceId)}/rag/jobs`,
+        { credentials: "include" },
+      );
+      if (!response.ok) return;
+      const jobs = (await response.json()) as Array<{
+        job_id: string;
+        path: string;
+        total: number;
+        processed: number;
+        failed: number;
+        status: RagJobStatus;
+        error_reason?: string | null;
+      }>;
+      const added: string[] = [];
+      set((state) => {
+        const next = { ...state.jobs };
+        for (const item of jobs) {
+          if (next[item.job_id]) continue;
+          next[item.job_id] = {
+            jobId: item.job_id,
+            workspaceId,
+            path: item.path,
+            total: item.total,
+            processed: item.processed,
+            failed: item.failed,
+            status: item.status,
+            errorReason: item.error_reason ?? undefined,
+          };
+          if (
+            item.status === "indexing" ||
+            item.status === "starting" ||
+            item.status === "unknown"
+          ) {
+            added.push(item.job_id);
+          }
+        }
+        return { jobs: next };
+      });
+      for (const jobId of added) startPolling(jobId, workspaceId);
+    } catch {
+      // A próxima abertura pode tentar novamente.
+    }
+  },
 
   start: async (workspaceId, path, fileTypes, opts) => {
     let data: {
@@ -118,51 +223,58 @@ export const useRagJobsStore = create<RagJobsState>((set) => ({
 
     if (data.status === "no_files") return jobId;
 
-    const poll = async () => {
-      try {
-        const res = await fetch(
-          `/workspaces/${encodeURIComponent(workspaceId)}/rag/jobs/${encodeURIComponent(jobId)}`,
-          { credentials: "include" },
-        );
-        if (!res.ok) return;
-        const st = (await res.json()) as {
-          total: number;
-          processed: number;
-          failed: number;
-          status: RagJobStatus;
-          error_reason?: string | null;
-        };
-        set((s) => {
-          const prev = s.jobs[jobId];
-          if (!prev) return s;
-          return {
-            jobs: {
-              ...s.jobs,
-              [jobId]: {
-                ...prev,
-                total: st.total,
-                processed: st.processed,
-                failed: st.failed,
-                status: st.status,
-                errorReason: st.error_reason ?? undefined,
-              },
-            },
-          };
-        });
-        // "paused" é terminal (worker arquivou a fila): para o poll.
-        if (
-          st.status === "done" ||
-          st.status === "failed" ||
-          st.status === "paused"
-        )
-          stopPoll(jobId);
-      } catch {
-        // mantém o poll; falha transitória de rede
-      }
-    };
-    timers[jobId] = setInterval(() => void poll(), POLL_MS);
-    void poll();
+    startPolling(jobId, workspaceId);
     return jobId;
+  },
+
+  retry: async (jobId) => {
+    const job = useRagJobsStore.getState().jobs[jobId];
+    if (!job || job.retrying) return;
+    set((s) => ({
+      jobs: {
+        ...s.jobs,
+        [jobId]: { ...s.jobs[jobId], retrying: true, retryError: false },
+      },
+    }));
+    try {
+      const response = await fetch(
+        `/workspaces/${encodeURIComponent(job.workspaceId)}/rag/jobs/${encodeURIComponent(jobId)}/retry`,
+        { method: "POST", credentials: "include" },
+      );
+      if (!response.ok) throw new Error("retry failed");
+      set((s) => {
+        const current = s.jobs[jobId];
+        if (!current) return s;
+        return {
+          jobs: {
+            ...s.jobs,
+            [jobId]: {
+              ...current,
+              retrying: false,
+              retryError: false,
+              status:
+                current.status === "paused" || current.status === "failed"
+                  ? "indexing"
+                  : current.status,
+              errorReason: undefined,
+            },
+          },
+        };
+      });
+      if (useRagJobsStore.getState().jobs[jobId])
+        startPolling(jobId, job.workspaceId);
+    } catch {
+      set((s) => {
+        const current = s.jobs[jobId];
+        if (!current) return s;
+        return {
+          jobs: {
+            ...s.jobs,
+            [jobId]: { ...current, retrying: false, retryError: true },
+          },
+        };
+      });
+    }
   },
 
   dismiss: (jobId) => {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plug, Save, Loader2, Mail, MessageCircle } from "lucide-react";
+import { Save, Loader2, Mail, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,6 +10,12 @@ import { Switch } from "@/components/ui/switch";
 import { ProBadge } from "@/components/ui/pro-badge";
 import { m } from "@/lib/paraglide/messages";
 import { useToastStore } from "@/lib/stores/toast-store";
+import {
+  SettingsSectionHeader,
+  SettingsStack,
+  SettingsTabHeader,
+  settingsSectionClass,
+} from "@/components/settings/primitives";
 
 interface ConnectConfig {
   TELEGRAM_BOT_TOKEN: string;
@@ -147,42 +153,34 @@ export function ConnectTab() {
   };
 
   return (
-    <div className="space-y-6 pb-6">
-      <div className="space-y-1">
-        <h3 className="text-lg font-medium flex items-center gap-2">
-          <Plug className="w-5 h-5 text-muted-foreground" />
-          Vectora Connect
-        </h3>
-        <p className="text-sm text-muted-foreground">
-          Conecte o Vectora a plataformas externas para receber e responder
-          mensagens através de mensageiros e e-mail.
-        </p>
-      </div>
+    <SettingsStack className="pb-6">
+      <SettingsTabHeader
+        title={m.connect_title()}
+        description={m.connect_description()}
+      />
 
-      <div className="space-y-4">
+      <div className="space-y-6">
         {/* Telegram */}
-        <div className="rounded-lg border bg-card p-4 space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <MessageCircle className="w-5 h-5 text-blue-500" />
-              <div>
-                <h4 className="text-sm font-semibold flex items-center gap-1.5">
-                  Telegram
-                  <ProBadge />
-                </h4>
-                <p className="text-xs text-muted-foreground">
-                  Integração via webhook oficial do Telegram Bot API
-                </p>
-              </div>
-            </div>
-            <PlatformBadgeAndToggle
-              id="telegram"
-              formConfigured={Boolean(configs.TELEGRAM_BOT_TOKEN)}
-              status={status}
-              togglingPlatform={togglingPlatform}
-              onToggle={toggleEnabled}
-            />
-          </div>
+        <div className={settingsSectionClass}>
+          <SettingsSectionHeader
+            icon={<MessageCircle className="size-4" />}
+            title={
+              <>
+                {m.connect_platform_telegram()}
+                <ProBadge />
+              </>
+            }
+            description={m.connect_telegram_description()}
+            actions={
+              <PlatformBadgeAndToggle
+                id="telegram"
+                formConfigured={Boolean(configs.TELEGRAM_BOT_TOKEN)}
+                status={status}
+                togglingPlatform={togglingPlatform}
+                onToggle={toggleEnabled}
+              />
+            }
+          />
           <div className="space-y-2">
             <Label className="text-xs">Bot Token</Label>
             <Input
@@ -197,28 +195,26 @@ export function ConnectTab() {
         </div>
 
         {/* Discord */}
-        <div className="rounded-lg border bg-card p-4 space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <MessageCircle className="w-5 h-5 text-indigo-500" />
-              <div>
-                <h4 className="text-sm font-semibold flex items-center gap-1.5">
-                  Discord
-                  <ProBadge />
-                </h4>
-                <p className="text-xs text-muted-foreground">
-                  Responda mensagens em servidores do Discord
-                </p>
-              </div>
-            </div>
-            <PlatformBadgeAndToggle
-              id="discord"
-              formConfigured={Boolean(configs.DISCORD_BOT_TOKEN)}
-              status={status}
-              togglingPlatform={togglingPlatform}
-              onToggle={toggleEnabled}
-            />
-          </div>
+        <div className={settingsSectionClass}>
+          <SettingsSectionHeader
+            icon={<MessageCircle className="size-4" />}
+            title={
+              <>
+                {m.connect_platform_discord()}
+                <ProBadge />
+              </>
+            }
+            description={m.connect_discord_description()}
+            actions={
+              <PlatformBadgeAndToggle
+                id="discord"
+                formConfigured={Boolean(configs.DISCORD_BOT_TOKEN)}
+                status={status}
+                togglingPlatform={togglingPlatform}
+                onToggle={toggleEnabled}
+              />
+            }
+          />
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label className="text-xs">Application ID</Label>
@@ -248,30 +244,28 @@ export function ConnectTab() {
         </div>
 
         {/* Slack */}
-        <div className="rounded-lg border bg-card p-4 space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <MessageCircle className="w-5 h-5 text-purple-500" />
-              <div>
-                <h4 className="text-sm font-semibold flex items-center gap-1.5">
-                  Slack
-                  <ProBadge />
-                </h4>
-                <p className="text-xs text-muted-foreground">
-                  {m.connect_slack_description()}
-                </p>
-              </div>
-            </div>
-            <PlatformBadgeAndToggle
-              id="slack"
-              formConfigured={Boolean(
-                configs.SLACK_BOT_TOKEN && configs.SLACK_APP_TOKEN,
-              )}
-              status={status}
-              togglingPlatform={togglingPlatform}
-              onToggle={toggleEnabled}
-            />
-          </div>
+        <div className={settingsSectionClass}>
+          <SettingsSectionHeader
+            icon={<MessageCircle className="size-4" />}
+            title={
+              <>
+                {m.connect_platform_slack()}
+                <ProBadge />
+              </>
+            }
+            description={m.connect_slack_description()}
+            actions={
+              <PlatformBadgeAndToggle
+                id="slack"
+                formConfigured={Boolean(
+                  configs.SLACK_BOT_TOKEN && configs.SLACK_APP_TOKEN,
+                )}
+                status={status}
+                togglingPlatform={togglingPlatform}
+                onToggle={toggleEnabled}
+              />
+            }
+          />
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label className="text-xs">{m.connect_slack_bot_token()}</Label>
@@ -299,28 +293,26 @@ export function ConnectTab() {
         </div>
 
         {/* Email */}
-        <div className="rounded-lg border bg-card p-4 space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Mail className="w-5 h-5 text-red-500" />
-              <div>
-                <h4 className="text-sm font-semibold flex items-center gap-1.5">
-                  Email (IMAP/SMTP)
-                  <ProBadge />
-                </h4>
-                <p className="text-xs text-muted-foreground">
-                  Delegue ao assistente a leitura e resposta de e-mails
-                </p>
-              </div>
-            </div>
-            <PlatformBadgeAndToggle
-              id="email"
-              formConfigured={Boolean(configs.EMAIL_IMAP_HOST)}
-              status={status}
-              togglingPlatform={togglingPlatform}
-              onToggle={toggleEnabled}
-            />
-          </div>
+        <div className={settingsSectionClass}>
+          <SettingsSectionHeader
+            icon={<Mail className="size-4" />}
+            title={
+              <>
+                {m.connect_platform_email()}
+                <ProBadge />
+              </>
+            }
+            description={m.connect_email_description()}
+            actions={
+              <PlatformBadgeAndToggle
+                id="email"
+                formConfigured={Boolean(configs.EMAIL_IMAP_HOST)}
+                status={status}
+                togglingPlatform={togglingPlatform}
+                onToggle={toggleEnabled}
+              />
+            }
+          />
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label className="text-xs">IMAP Host (Leitura)</Label>
@@ -356,6 +348,6 @@ export function ConnectTab() {
           Salvar Configurações
         </Button>
       </div>
-    </div>
+    </SettingsStack>
   );
 }

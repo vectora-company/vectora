@@ -44,6 +44,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse
 
+from backend.services.availability import require_services, services_enabled
 from backend.services.license import get_license_token
 from backend.settings import settings
 
@@ -81,6 +82,8 @@ def _purge_expired_broker_transactions(now: int | None = None) -> None:
 
 def _broker_url() -> str:
     """Executa a operação broker url."""
+    if not services_enabled():
+        return ""
     return os.getenv("VECTORA_OAUTH_BROKER_URL", "").strip()
 
 
@@ -168,6 +171,7 @@ async def _broker_providers() -> set[str]:
 
 async def _broker_start(request: Request, provider: str) -> RedirectResponse:
     """Executa a operação broker start."""
+    require_services()
     _purge_expired_broker_transactions()
     user = _get_user(request)
     broker_url = _broker_url()

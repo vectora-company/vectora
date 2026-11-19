@@ -51,7 +51,7 @@ async def test_queue_full_lifecycle(tmp_path):
         fetched_ids.extend(str(rec.queue_id) for rec in batch)
         # Marca os do lote como "processing" para não buscá-los de novo
         await asyncio.gather(
-            *[queue.mark_failed(str(rec.queue_id), "processing") for rec in batch]
+            *[queue.mark_processing(str(rec.queue_id)) for rec in batch]
         )
     elapsed_fetch = time.perf_counter() - t_fetch
 
@@ -123,6 +123,8 @@ async def test_queue_lifecycle_various_ratios(tmp_path, n, success_ratio):
     )
     n_success = int(n * success_ratio)
     success_ids, fail_ids = ids[:n_success], ids[n_success:]
+
+    await asyncio.gather(*[queue.mark_processing(qid) for qid in success_ids])
 
     await asyncio.gather(
         *[queue.mark_success(qid) for qid in success_ids],
@@ -198,6 +200,7 @@ async def test_queue_mark_success_idempotent_under_load(tmp_path, n):
     ids = await asyncio.gather(
         *[queue.enqueue(f"doc{i}", "idem_col") for i in range(n)]
     )
+    await asyncio.gather(*[queue.mark_processing(qid) for qid in ids])
     await asyncio.gather(*[queue.mark_success(qid) for qid in ids])
     # Segunda rodada sobre os mesmos ids não deve lançar nem duplicar estado.
     await asyncio.gather(*[queue.mark_success(qid) for qid in ids])

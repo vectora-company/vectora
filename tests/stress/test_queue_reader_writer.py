@@ -140,6 +140,7 @@ async def test_queue_mixed_read_write_mark_concurrency(tmp_path, n):
         return await queue.get_pending(limit=10)
 
     async def marker(qid: str) -> None:
+        await queue.mark_processing(qid)
         await queue.mark_success(qid)
 
     results = await asyncio.gather(

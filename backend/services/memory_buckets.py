@@ -18,6 +18,7 @@ from pathlib import Path
 
 import httpx
 
+from backend.services.availability import require_services, services_enabled
 from backend.services.service_auth import services_auth_headers
 
 logger = logging.getLogger(__name__)
@@ -81,6 +82,7 @@ def _memory_buckets_url() -> str:
 
 async def _request_catalog(q: str | None = None) -> list[dict]:
     """Consulta o catálogo preservando vazio e indisponibilidade."""
+    require_services()
     base_url = _memory_buckets_url().rstrip("/")
     params = {"q": q} if q else None
     try:
@@ -139,6 +141,7 @@ async def download_memory_bucket(
     de tocar em qualquer arquivo — incompatível levanta `MemoryBucketsError`
     sem baixar nada. Retorna o nome da coleção instalada.
     """
+    require_services()
     bucket_id = _validate_bucket_id(bucket_id)
     metadata = await _fetch_bucket_metadata(bucket_id)
 
@@ -231,6 +234,7 @@ async def publish_memory_bucket(
     antes de ler ou empacotar qualquer arquivo, para que nenhum chamador
     (handler HTTP ou tool do agente) publique o bucket de outro workspace.
     """
+    require_services()
     bucket_id = _validate_bucket_id(bucket_id)
     from backend.services import rag_buckets
     from backend.settings import settings

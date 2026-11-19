@@ -41,6 +41,17 @@ class VerificationResult:
     policy_snapshot_id: str | None = None
     commit_sha: str | None = None
     artifact_refs: list[str] = field(default_factory=list)
+    snapshot_after_sha256: str | None = None
+    changed_during_verification: list[str] = field(default_factory=list)
+
+    @property
+    def detail(self) -> str:
+        """Texto curto do desfecho, para o estado do AgentRun."""
+        if self.outcome == "not_run":
+            return "Nenhum quality gate foi executado: a execução não foi verificada."
+        if self.passed:
+            return "Verificação concluída com sucesso."
+        return f"Falha nos quality gates: {self.failure_feedback or ''}"
 
     def to_evidence_entry(self) -> dict[str, Any]:
         """Formata o resultado da verificação como evidência persistível no AgentRun."""
@@ -54,6 +65,8 @@ class VerificationResult:
             "status": self.status,
             "outcome": self.outcome,
             "snapshot_sha256": self.snapshot_sha256,
+            "snapshot_after_sha256": self.snapshot_after_sha256,
+            "changed_during_verification": list(self.changed_during_verification),
             # Keep the per-file material used to derive the snapshot alongside
             # the aggregate digest.  A digest alone cannot prove which files
             # were observed after a replay or a later workspace mutation.
@@ -323,7 +336,12 @@ async def run_verification(
         else []
     )
 
-    # 3. Execução dos quality gates aplicáveis
+    # 3. Snapshot do conteúdo que os gates vão validar (antes de rodá-los)
+    snapshot_sha256, file_hashes = await asyncio.to_thread(
+        compute_files_snapshot, root_dir, files=files_touched
+    )
+
+    # 4. Execução dos quality gates aplicáveis
     gate_results: list[QualityGateRunResult] = []
     has_blocking_failure = git_unclean_reason is not None
     has_degrading_failure = False
@@ -345,18 +363,33 @@ async def run_verification(
                     f"[QualityGate '{gate.id}' ({gate.name}) FALHOU com código {res.exit_code}]:\n{res.output}"
                 )
 
-    # 4. Cálculo do snapshot SHA-256 criptográfico pós-execução dos gates
-    snapshot_sha256, file_hashes = await asyncio.to_thread(
-        compute_files_snapshot, root_dir, files=files_touched
-    )
+    # 5. Snapshot depois dos gates: diverge se um gate reescreveu arquivos ou
+    # se o workspace mudou durante a verificação.
+    changed_during: list[str] = []
+    snapshot_after_sha256 = snapshot_sha256
+    if gate_results:
+        snapshot_after_sha256, after_hashes = await asyncio.to_thread(
+            compute_files_snapshot, root_dir, files=files_touched
+        )
+        if snapshot_after_sha256 != snapshot_sha256:
+            changed_during = sorted(
+                path
+                for path in file_hashes.keys() | after_hashes.keys()
+                if file_hashes.get(path) != after_hashes.get(path)
+            )
 
-    if not prof.enabled or (not prof.gates and git_unclean_reason is None):
+    if git_unclean_reason is None and not gate_results:
+        # Nenhum gate rodou (perfil desabilitado, sem gates ou sem gate
+        # aplicável aos arquivos tocados): não há bloqueio, mas também não
+        # houve verificação. ``degraded`` evita apresentar como aprovada uma
+        # execução que nada validou.
         return VerificationResult(
             passed=True,
-            status="passed",
+            status="degraded",
             outcome="not_run",
             snapshot_sha256=snapshot_sha256,
             file_hashes=file_hashes,
+            snapshot_after_sha256=snapshot_after_sha256,
             gate_results=[],
             run_id=run_id,
             policy_snapshot_id=policy_snapshot_id,
@@ -393,6 +426,14 @@ async def run_verification(
         status = "passed"
         overall_passed = True
 
+    if changed_during and status == "passed":
+        # Aprovar o que os gates viram não aprova o que ficou no workspace.
+        status = "degraded"
+        outcome = "degraded"
+        failure_feedback_parts.append(
+            "Arquivos mudaram durante a verificação: " + ", ".join(changed_during)
+        )
+
     feedback = "\n\n".join(failure_feedback_parts) if failure_feedback_parts else None
 
     return VerificationResult(
@@ -401,6 +442,8 @@ async def run_verification(
         outcome=outcome,
         snapshot_sha256=snapshot_sha256,
         file_hashes=file_hashes,
+        snapshot_after_sha256=snapshot_after_sha256,
+        changed_during_verification=changed_during,
         gate_results=gate_results,
         failure_feedback=feedback,
         run_id=run_id,

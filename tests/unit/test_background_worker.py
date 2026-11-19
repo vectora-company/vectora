@@ -119,44 +119,17 @@ async def test_process_record_rate_limit_trips_breaker_without_retry(
 
 
 @pytest.mark.asyncio
-async def test_get_queue_uses_effective_storage_mode_not_raw_config(
+async def test_get_queue_uses_shared_configured_resolver(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Storage externo segue o modo complete configurado em uma conta Free."""
     worker = BackgroundEmbeddingWorker()
-    worker.config.storage_mode = "complete"
-    worker.config.postgres_dsn = "postgresql://fake/db"
+    expected = _FakeQueue()
 
-    monkeypatch.setattr(
-        "backend.services.license.get_effective_storage_mode",
-        lambda: "complete",
-    )
+    async def resolve(_dsn: str | None) -> object:
+        return expected
 
-    postgres_queue_called = False
-
-    class _FakePostgresQueueDB:
-        def __init__(self) -> None:
-            nonlocal postgres_queue_called
-            postgres_queue_called = True
-
-        async def _ensure_table(self) -> None:
-            pass
-
-    monkeypatch.setattr("backend.embedding.queue.PostgresQueueDB", _FakePostgresQueueDB)
-
-    sqlite_queue_called = False
-
-    async def _fake_get_embedding_queue(_dsn: str) -> object:
-        nonlocal sqlite_queue_called
-        sqlite_queue_called = True
-        return _FakeQueue()
-
-    monkeypatch.setattr(_bg_mod, "get_embedding_queue", _fake_get_embedding_queue)
-
-    await worker._get_queue()
-
-    assert sqlite_queue_called is False
-    assert postgres_queue_called is True
+    monkeypatch.setattr(_bg_mod, "get_embedding_queue", resolve)
+    assert await worker._get_queue() is expected
 
 
 class _FakeVectorStoreBackend:
@@ -341,3 +314,46 @@ class TestWorkerLockSurvivesAcrossEventLoops:
         # Um Lock novo (o que o fixture faz a cada teste) não herda esse
         # estado — a mesma operação completa na hora.
         await _acquire(asyncio.Lock())
+
+
+@pytest.mark.asyncio
+async def test_ack_failure_does_not_report_success_or_repeat_embedding(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import AsyncMock
+
+    worker = BackgroundEmbeddingWorker()
+    queue = _FakeQueue()
+    mark_success = AsyncMock(side_effect=RuntimeError("database unavailable"))
+    mark_dlq = AsyncMock()
+    monkeypatch.setattr(queue, "mark_success", mark_success, raising=False)
+    monkeypatch.setattr(queue, "mark_dlq", mark_dlq, raising=False)
+    generate = AsyncMock(return_value=([0.1, 0.2], "test:model"))
+    write = AsyncMock()
+    monkeypatch.setattr(worker, "_generate_embedding", generate)
+    monkeypatch.setattr(worker, "_write_to_vector_store", write)
+    await worker._process_record(_record(), queue)
+    generate.assert_awaited_once()
+    write.assert_awaited_once()
+    mark_dlq.assert_not_awaited()
+    assert worker.processed_count == 0
+
+
+@pytest.mark.asyncio
+async def test_waiting_task_does_not_start_after_breaker_pauses() -> None:
+    import asyncio
+    from unittest.mock import AsyncMock
+
+    worker = BackgroundEmbeddingWorker()
+    worker.semaphore = asyncio.Semaphore(1)
+    await worker.semaphore.acquire()
+    queue = _FakeQueue()
+    generate = AsyncMock()
+    worker._generate_embedding = generate
+    task = asyncio.create_task(worker._process_record(_record(), queue))
+    await asyncio.sleep(0)
+    worker.paused = True
+    worker.semaphore.release()
+    await task
+    assert queue.mark_processing_calls == 0
+    generate.assert_not_awaited()

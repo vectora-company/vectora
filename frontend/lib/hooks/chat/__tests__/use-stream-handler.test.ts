@@ -41,6 +41,7 @@ vi.mock("@/lib/api/vectora-client", () => ({
 
 import { useStreamHandler, streamErrorMessage } from "../use-stream-handler";
 import { useSettingsStore } from "@/lib/stores/settings-store";
+import { useToastStore } from "@/lib/stores/toast-store";
 
 function gen(events: StreamEvent[]): AsyncGenerator<StreamEvent> {
   return (async function* () {
@@ -236,6 +237,58 @@ describe("useStreamHandler.processStream", () => {
     expect(assistant?.content).not.toContain("RESOURCE_EXHAUSTED");
     expect(assistant?.content).not.toContain("429");
     expect(assistant?.content).not.toMatch(/Erro no stream:/i);
+  });
+
+  it("aviso do runtime não encerra o turno nem marca erro: o texto continua até o done", async () => {
+    useToastStore.setState({ toasts: [] });
+    streamChatMock.mockReturnValue(
+      gen([
+        { type: "thread", thread_id: "t1" },
+        { type: "token", content: "Antes " },
+        {
+          type: "error",
+          code: "TOOL_CALL_REPEATED",
+          message: "repetida",
+          severity: "warning",
+        },
+        { type: "token", content: "depois" },
+        { type: "done", thread_id: "t1", run_id: "run-1" },
+      ]),
+    );
+
+    const { result } = run();
+    const out = await result.current.processStream("oi", "a1");
+
+    expect(out.assistantContent).toBe("Antes depois");
+    const assistant = messages.find((m) => m.id === "a1");
+    expect(assistant?.content).toBe("Antes depois");
+    expect(assistant?.isError).toBeFalsy();
+    expect(assistant?.isThinking).toBe(false);
+    const avisos = useToastStore
+      .getState()
+      .toasts.filter((t) => t.level === "warning");
+    expect(avisos.map((t) => t.title)).toEqual([
+      paraglideMessages.chat_warning_tool_call_repeated(),
+    ]);
+  });
+
+  it("erro sem severity continua terminal e marca isError", async () => {
+    streamChatMock.mockReturnValue(
+      gen([
+        { type: "thread", thread_id: "t1" },
+        { type: "token", content: "parcial" },
+        { type: "error", code: "TIMEOUT", message: "x" },
+        { type: "token", content: "nunca" },
+      ]),
+    );
+
+    const { result } = run();
+    await result.current.processStream("oi", "a1");
+
+    const assistant = messages.find((m) => m.id === "a1");
+    expect(assistant?.isError).toBe(true);
+    expect(assistant?.content).toContain("parcial");
+    expect(assistant?.content).not.toContain("nunca");
   });
 
   it("evento de erro ACCOUNT_CREDIT (402/sem crédito) vira aviso localizado", async () => {

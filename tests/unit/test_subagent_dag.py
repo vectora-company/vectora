@@ -154,7 +154,15 @@ async def test_subagent_run_creates_child_agent_run(
         assert child_row is not None
         child = await session_store.get_agent_run(child_row[0])
     assert child is not None
-    assert child.status in {"complete", "passed"}
+    # Sem quality gates configurados nada foi verificado: o run termina
+    # sem bloqueio, mas não como aprovado.
+    assert child.status == "degraded"
+    outcomes = [
+        e.get("outcome")
+        for e in child.evidence
+        if isinstance(e, dict) and e.get("kind") == "quality_gate_verification"
+    ]
+    assert outcomes == ["not_run"]
 
 
 @pytest.mark.asyncio

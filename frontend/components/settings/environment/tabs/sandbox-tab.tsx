@@ -23,6 +23,14 @@ import {
   type SandboxPolicy,
   type SandboxPolicyInput,
 } from "@/lib/api/sandbox";
+import {
+  SettingsMessage,
+  SettingsSection,
+  SettingsStack,
+  SettingsTabHeader,
+  settingsTextareaClass,
+} from "@/components/settings/primitives";
+import { cn } from "@/lib/utils";
 
 const LEVEL_LABEL: Record<IsolationLevel, () => string> = {
   effective: () => m.sandbox_level_effective(),
@@ -32,10 +40,10 @@ const LEVEL_LABEL: Record<IsolationLevel, () => string> = {
 };
 
 const LEVEL_STYLE: Record<IsolationLevel, string> = {
-  effective: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
-  partial: "bg-amber-500/15 text-amber-700 dark:text-amber-300",
-  soft: "bg-orange-500/15 text-orange-700 dark:text-orange-300",
-  off: "bg-red-500/15 text-red-700 dark:text-red-300",
+  effective: "bg-success/15 text-success",
+  partial: "bg-warning/15 text-warning",
+  soft: "bg-warning/15 text-warning",
+  off: "bg-destructive/15 text-destructive",
 };
 
 const STATE_LABEL: Record<IsolationState, () => string> = {
@@ -291,7 +299,7 @@ export function SandboxTab() {
     );
   }
   if (status.isError || policy.isError) {
-    return <p className="text-sm text-red-600">{m.sandbox_error()}</p>;
+    return <p className="text-sm text-destructive">{m.sandbox_error()}</p>;
   }
   if (status.isLoading || policy.isLoading || !draft || !policyData) {
     return (
@@ -304,28 +312,28 @@ export function SandboxTab() {
     setDraft((current) => (current ? { ...current, [key]: value } : current));
 
   return (
-    <div className="max-w-2xl space-y-6">
-      <div>
-        <h2 className="text-base font-semibold">{m.sandbox_title()}</h2>
-        <p className="mt-1 text-xs text-muted-foreground">
-          {m.sandbox_subtitle()}
-        </p>
-        <p className="mt-1 text-xs text-muted-foreground">{workspace.name}</p>
-      </div>
+    <SettingsStack className="max-w-2xl">
+      <SettingsTabHeader
+        title={m.sandbox_title()}
+        description={
+          <>
+            {m.sandbox_subtitle()}
+            <br />
+            {workspace.name}
+          </>
+        }
+      />
 
       {ignored.length > 0 && (
-        <div
-          role="alert"
-          className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm"
-        >
-          <p className="font-medium">{m.sandbox_ignored_title()}</p>
-          <p className="mt-1 text-xs text-muted-foreground">
+        <SettingsMessage tone="warning" className="space-y-1">
+          <span className="block font-medium">{m.sandbox_ignored_title()}</span>
+          <span className="block">
             {m.sandbox_ignored_description({ keys: ignored.join(", ") })}
-          </p>
-        </div>
+          </span>
+        </SettingsMessage>
       )}
 
-      <section aria-labelledby="sandbox-state">
+      <SettingsSection aria-labelledby="sandbox-state">
         {isolation ? (
           <>
             <div className="flex items-center gap-3">
@@ -340,7 +348,7 @@ export function SandboxTab() {
                 {isolation.live ? m.sandbox_live() : m.sandbox_not_live()}
               </span>
             </div>
-            <ul className="mt-3 divide-y divide-border/60">
+            <ul className="mt-3 divide-y divide-border">
               {isolation.dimensions.map((dimension) => (
                 <DimensionRow key={dimension.name} dimension={dimension} />
               ))}
@@ -351,22 +359,16 @@ export function SandboxTab() {
             {m.sandbox_disabled()}
           </p>
         )}
-      </section>
+      </SettingsSection>
 
-      <section className="space-y-3" aria-labelledby="sandbox-policy">
-        <div>
-          <h3 id="sandbox-policy" className="text-sm font-semibold">
-            {m.sandbox_policy_title()}
-          </h3>
-          <p className="text-xs text-muted-foreground">
-            {m.sandbox_policy_hint()}
-          </p>
-        </div>
-
+      <SettingsSection
+        aria-labelledby="sandbox-policy"
+        titleId="sandbox-policy"
+        title={m.sandbox_policy_title()}
+        description={m.sandbox_policy_hint()}
+      >
         {!workspace.trusted && (
-          <p className="text-xs text-amber-700 dark:text-amber-300">
-            {m.sandbox_untrusted()}
-          </p>
+          <p className="text-xs text-warning">{m.sandbox_untrusted()}</p>
         )}
 
         <fieldset
@@ -387,7 +389,7 @@ export function SandboxTab() {
               {m.sandbox_field_network()}
             </span>
             <select
-              className="w-full rounded-md border border-border bg-background p-2 text-sm"
+              className={settingsTextareaClass}
               value={draft.network}
               onChange={(e) => set("network", e.target.value as SandboxNetwork)}
             >
@@ -412,7 +414,7 @@ export function SandboxTab() {
             </span>
             <textarea
               rows={3}
-              className="w-full rounded-md border border-border bg-background p-2 font-mono text-xs"
+              className={settingsTextareaClass}
               placeholder={m.sandbox_field_allow_hosts_hint()}
               value={draft.allowHosts}
               onChange={(e) => set("allowHosts", e.target.value)}
@@ -425,7 +427,7 @@ export function SandboxTab() {
             </span>
             <textarea
               rows={2}
-              className="w-full rounded-md border border-border bg-background p-2 font-mono text-xs"
+              className={settingsTextareaClass}
               value={draft.rwPaths}
               onChange={(e) => set("rwPaths", e.target.value)}
             />
@@ -437,7 +439,7 @@ export function SandboxTab() {
             </span>
             <textarea
               rows={2}
-              className="w-full rounded-md border border-border bg-background p-2 font-mono text-xs"
+              className={settingsTextareaClass}
               value={draft.roPaths}
               onChange={(e) => set("roPaths", e.target.value)}
             />
@@ -449,7 +451,7 @@ export function SandboxTab() {
             </span>
             <textarea
               rows={2}
-              className="w-full rounded-md border border-border bg-background p-2 font-mono text-xs"
+              className={settingsTextareaClass}
               value={draft.envPass}
               onChange={(e) => set("envPass", e.target.value)}
             />
@@ -468,7 +470,7 @@ export function SandboxTab() {
                 type="number"
                 min={1}
                 inputMode="numeric"
-                className="w-full rounded-md border border-border bg-background p-2 text-sm"
+                className={settingsTextareaClass}
                 value={draft[field]}
                 onChange={(e) => set(field, e.target.value)}
               />
@@ -511,22 +513,21 @@ export function SandboxTab() {
             {message && (
               <span
                 role="status"
-                className={`text-xs ${message.ok ? "text-emerald-600" : "text-red-600"}`}
+                className={`text-xs ${message.ok ? "text-success" : "text-destructive"}`}
               >
                 {message.text}
               </span>
             )}
           </div>
         </fieldset>
-      </section>
+      </SettingsSection>
 
-      <section className="space-y-3" aria-labelledby="sandbox-credentials">
-        <h3 id="sandbox-credentials" className="text-sm font-semibold">
-          {m.sandbox_credential_title()}
-        </h3>
-        <p className="text-xs text-muted-foreground">
-          {m.sandbox_credential_description()}
-        </p>
+      <SettingsSection
+        aria-labelledby="sandbox-credentials"
+        titleId="sandbox-credentials"
+        title={m.sandbox_credential_title()}
+        description={m.sandbox_credential_description()}
+      >
         <label className="block text-sm">
           <span className="mb-1 block font-medium">
             {m.sandbox_credential_password()}
@@ -534,7 +535,7 @@ export function SandboxTab() {
           <input
             type="password"
             autoComplete="current-password"
-            className="w-full rounded-md border border-border bg-background p-2 text-sm"
+            className={settingsTextareaClass}
             value={vaultPassword}
             onChange={(event) => setVaultPassword(event.target.value)}
           />
@@ -553,7 +554,7 @@ export function SandboxTab() {
           <label className="text-xs">
             {m.sandbox_credential_name()}
             <input
-              className="mt-1 w-full rounded-md border border-border bg-background p-2 font-mono"
+              className={settingsTextareaClass}
               value={credentialName}
               onChange={(event) => setCredentialName(event.target.value)}
               placeholder={m.sandbox_credential_name_placeholder()}
@@ -562,7 +563,7 @@ export function SandboxTab() {
           <label className="text-xs">
             {m.sandbox_credential_host()}
             <input
-              className="mt-1 w-full rounded-md border border-border bg-background p-2"
+              className={cn(settingsTextareaClass, "mt-1")}
               value={credentialHost}
               onChange={(event) => setCredentialHost(event.target.value)}
               placeholder={m.sandbox_credential_host_placeholder()}
@@ -571,7 +572,7 @@ export function SandboxTab() {
           <label className="text-xs">
             {m.sandbox_credential_header()}
             <input
-              className="mt-1 w-full rounded-md border border-border bg-background p-2"
+              className={cn(settingsTextareaClass, "mt-1")}
               value={credentialHeader}
               onChange={(event) => setCredentialHeader(event.target.value)}
             />
@@ -579,7 +580,7 @@ export function SandboxTab() {
           <label className="text-xs">
             {m.sandbox_credential_prefix()}
             <input
-              className="mt-1 w-full rounded-md border border-border bg-background p-2"
+              className={cn(settingsTextareaClass, "mt-1")}
               value={credentialPrefix}
               onChange={(event) => setCredentialPrefix(event.target.value)}
             />
@@ -589,7 +590,7 @@ export function SandboxTab() {
             <input
               type="password"
               autoComplete="new-password"
-              className="mt-1 w-full rounded-md border border-border bg-background p-2 font-mono"
+              className={settingsTextareaClass}
               value={credentialValue}
               onChange={(event) => setCredentialValue(event.target.value)}
             />
@@ -615,7 +616,7 @@ export function SandboxTab() {
             {credentialMessage}
           </p>
         )}
-        <ul className="divide-y divide-border/60">
+        <ul className="divide-y divide-border">
           {(credentials.data ?? []).map((credential) => (
             <li
               className="flex items-center justify-between gap-2 py-2 text-xs"
@@ -651,12 +652,13 @@ export function SandboxTab() {
             </li>
           ))}
         </ul>
-      </section>
+      </SettingsSection>
 
-      <section className="space-y-2" aria-labelledby="sandbox-command">
-        <h3 id="sandbox-command" className="text-sm font-semibold">
-          {m.sandbox_dryrun_title()}
-        </h3>
+      <SettingsSection
+        aria-labelledby="sandbox-command"
+        titleId="sandbox-command"
+        title={m.sandbox_dryrun_title()}
+      >
         <button
           type="button"
           onClick={() => void toggleCommand()}
@@ -672,16 +674,17 @@ export function SandboxTab() {
             {command.join(" ")}
           </pre>
         )}
-      </section>
+      </SettingsSection>
 
-      <section className="space-y-2" aria-labelledby="sandbox-audit">
-        <h3 id="sandbox-audit" className="text-sm font-semibold">
-          {m.sandbox_audit_title()}
-        </h3>
+      <SettingsSection
+        aria-labelledby="sandbox-audit"
+        titleId="sandbox-audit"
+        title={m.sandbox_audit_title()}
+      >
         {audit.data && (
           <p
             role="status"
-            className={`text-xs ${audit.data.chain_ok ? "text-emerald-600" : "text-red-600"}`}
+            className={`text-xs ${audit.data.chain_ok ? "text-success" : "text-destructive"}`}
           >
             {audit.data.chain_ok
               ? m.sandbox_audit_chain_ok({
@@ -697,7 +700,7 @@ export function SandboxTab() {
             {m.sandbox_audit_empty()}
           </p>
         ) : (
-          <ul className="divide-y divide-border/60">
+          <ul className="divide-y divide-border">
             {(audit.data?.events ?? []).map((event) => (
               <li
                 key={event.seq}
@@ -711,7 +714,7 @@ export function SandboxTab() {
             ))}
           </ul>
         )}
-      </section>
-    </div>
+      </SettingsSection>
+    </SettingsStack>
   );
 }

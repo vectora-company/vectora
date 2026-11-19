@@ -95,7 +95,7 @@ async def probe_media(ctx: ToolContext, path: str) -> str:
     ffprobe = resolve_ffprobe()
     if not ffprobe:
         return json.dumps(
-            {"error": "ffprobe não disponível — instale ffmpeg ou rode `scons ffmpeg`"}
+            {"error": "ffprobe não disponível — instale ffmpeg ou rode `scons install`"}
         )
 
     code, out, err_out = await _run(
@@ -146,7 +146,7 @@ async def extract_frame(ctx: ToolContext, path: str, timestamp_s: float) -> str:
     ffmpeg = resolve_ffmpeg()
     if not ffmpeg:
         return json.dumps(
-            {"error": "ffmpeg não disponível — instale ffmpeg ou rode `scons ffmpeg`"}
+            {"error": "ffmpeg não disponível — instale ffmpeg ou rode `scons install`"}
         )
 
     out_dir = resolved.parent / ".vectora-frames"
@@ -208,7 +208,7 @@ async def extract_audio(ctx: ToolContext, path: str) -> str:
     ffmpeg = resolve_ffmpeg()
     if not ffmpeg:
         return json.dumps(
-            {"error": "ffmpeg não disponível — instale ffmpeg ou rode `scons ffmpeg`"}
+            {"error": "ffmpeg não disponível — instale ffmpeg ou rode `scons install`"}
         )
 
     out_dir = resolved.parent / ".vectora-audio"

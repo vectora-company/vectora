@@ -82,10 +82,19 @@ CREATE TABLE IF NOT EXISTS vectora_embedding_queue (
     task_json    JSONB        NOT NULL,
     status       TEXT         NOT NULL DEFAULT 'pending',
     created_at   TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at   TIMESTAMPTZ  NOT NULL DEFAULT now(),
     processed_at TIMESTAMPTZ
 );
 
+ALTER TABLE vectora_embedding_queue
+    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
 CREATE INDEX IF NOT EXISTS ix_veq_status ON vectora_embedding_queue(status);
+
+CREATE TABLE IF NOT EXISTS vectora_embedding_queue_identity (
+    singleton BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (singleton),
+    identity TEXT NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS tool_usage_events (
     id TEXT PRIMARY KEY,

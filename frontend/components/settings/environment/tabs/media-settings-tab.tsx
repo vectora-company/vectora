@@ -2,6 +2,15 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { mDyn } from "@/lib/i18n-dyn";
+import { Button } from "@/components/ui/button";
+import {
+  SettingsMessage,
+  SettingsSection,
+  SettingsStack,
+  SettingsTabHeader,
+  settingsInputClass,
+  settingsLabelClass,
+} from "@/components/settings/primitives";
 
 const MEDIA_LIMIT_FIELDS = [
   ["pdf_pages", "media_limits_pdf_pages"],
@@ -99,43 +108,31 @@ export function MediaLimitsSettings() {
 
   if (unavailable) {
     return (
-      <section
-        className="space-y-2 rounded-lg border p-3"
+      <SettingsSection
         aria-label={mDyn("media_limits_title")}
-      >
-        <h4 className="text-sm font-medium">{mDyn("media_limits_title")}</h4>
-        <p className="text-xs text-muted-foreground">
-          {mDyn("media_limits_unavailable")}
-        </p>
-      </section>
+        title={mDyn("media_limits_title")}
+        description={mDyn("media_limits_unavailable")}
+      />
     );
   }
   if (!data) return null;
 
   return (
-    <section
-      className="space-y-3 rounded-lg border p-3"
+    <SettingsSection
       aria-label={mDyn("media_limits_title")}
+      title={mDyn("media_limits_title")}
+      description={mDyn("media_limits_description")}
     >
-      <div>
-        <h4 className="text-sm font-medium">{mDyn("media_limits_title")}</h4>
-        <p className="text-xs text-muted-foreground">
-          {mDyn("media_limits_description")}
-        </p>
-      </div>
       {MEDIA_LIMIT_FIELDS.map(([name, labelKey]) => {
         const limit = data[name];
         return (
-          <label
-            key={name}
-            className="grid gap-1 text-xs text-muted-foreground"
-          >
+          <label key={name} className={settingsLabelClass}>
             {mDyn(labelKey)}
             <input
               type="number"
               inputMode="numeric"
               aria-label={mDyn(labelKey)}
-              className="h-9 rounded-md border bg-background px-2 text-sm text-foreground"
+              className={settingsInputClass}
               min={limit.min}
               max={limit.max}
               value={draft[name] ?? ""}
@@ -146,41 +143,40 @@ export function MediaLimitsSettings() {
                 }))
               }
             />
-            <span>
+            <span className="text-muted-foreground">
               {mDyn("media_limits_range")} {limit.min}–{limit.max},{" "}
               {mDyn("media_limits_default")} {limit.default}
             </span>
           </label>
         );
       })}
-      <button
+      <Button
         type="button"
-        className="h-8 rounded-md border px-3 text-xs"
+        variant="outline"
+        size="sm"
         onClick={() => void save()}
       >
         {mDyn("media_limits_save")}
-      </button>
+      </Button>
       {status === "saved" && (
-        <p role="status" className="text-xs text-muted-foreground">
+        <SettingsMessage tone="success">
           {mDyn("media_limits_saved")}
-        </p>
+        </SettingsMessage>
       )}
       {status === "error" && (
-        <p role="alert" className="text-xs text-destructive">
+        <SettingsMessage tone="danger">
           {mDyn("media_limits_error")} {errorText}
-        </p>
+        </SettingsMessage>
       )}
-    </section>
+    </SettingsSection>
   );
 }
 
 export function MediaSettingsTab() {
   return (
-    <div className="space-y-6">
-      <h3 className="text-sm font-medium text-foreground">
-        {mDyn("settings_category_media")}
-      </h3>
+    <SettingsStack>
+      <SettingsTabHeader title={mDyn("settings_category_media")} />
       <MediaLimitsSettings />
-    </div>
+    </SettingsStack>
   );
 }

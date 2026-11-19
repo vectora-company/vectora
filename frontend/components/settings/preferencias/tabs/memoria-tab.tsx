@@ -30,6 +30,8 @@ import { mDyn } from "@/lib/i18n-dyn";
 // ---------------------------------------------------------------------------
 // Tipos
 // ---------------------------------------------------------------------------
+import { settingsItemClass } from "@/components/settings/primitives";
+import { cn } from "@/lib/utils";
 
 interface MemoryItem {
   key: string;
@@ -175,8 +177,8 @@ export function MemoriaTab() {
 
   const handleAddMemory = async () => {
     if (!newContent.trim()) return;
-    // Memória é "global" do ponto de vista do usuário (como ChatGPT/Claude/Gemini):
-    // não pedimos uma chave. Geramos uma internamente quando o usuário não dá rótulo.
+    // A memória é global para o usuário e o rótulo é opcional: sem ele, a chave
+    // é gerada aqui.
     const key =
       newKey.trim() ||
       `mem_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -279,17 +281,14 @@ export function MemoriaTab() {
       {/* Lista de memórias */}
       <div className="space-y-2">
         {memories.map((mem) => (
-          <div
-            key={mem.key}
-            className="rounded-lg border bg-card p-3 space-y-2"
-          >
+          <div key={mem.key} className={cn(settingsItemClass, "space-y-2 p-3")}>
             {/* Key + data */}
             <div className="flex items-start justify-between gap-2">
               <span className="text-xs font-mono text-muted-foreground truncate">
                 {mem.key}
               </span>
               {mem.updated_at && (
-                <span className="text-[10px] text-muted-foreground/60 shrink-0">
+                <span className="text-2xs text-muted-foreground/60 shrink-0">
                   {new Date(mem.updated_at).toLocaleDateString("pt-BR")}
                 </span>
               )}

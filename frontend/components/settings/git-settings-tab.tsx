@@ -2,6 +2,12 @@
 
 import { useSettingsStore } from "@/lib/stores/settings-store";
 import { m } from "@/lib/paraglide/messages";
+import {
+  settingsItemClass,
+  SettingsStack,
+  SettingsTabHeader,
+} from "@/components/settings/primitives";
+import { cn } from "@/lib/utils";
 
 export function GitSettingsTab() {
   const hooks = useSettingsStore((s) => s.gitHooksEnabled);
@@ -11,14 +17,12 @@ export function GitSettingsTab() {
   const setSignoff = useSettingsStore((s) => s.setGitSignoffEnabled);
   const setBypass = useSettingsStore((s) => s.setGitBypassEnabled);
   return (
-    <div className="space-y-5 max-w-xl">
-      <div>
-        <h2 className="text-base font-semibold">{m.settings_category_git()}</h2>
-        <p className="mt-1 text-xs text-muted-foreground">
-          {m.settings_git_description()}
-        </p>
-      </div>
-      <label className="flex items-start gap-3 rounded-md border border-border/60 p-3">
+    <SettingsStack className="max-w-xl">
+      <SettingsTabHeader
+        title={m.settings_category_git()}
+        description={m.settings_git_description()}
+      />
+      <label className={cn(settingsItemClass, "flex items-start gap-3 p-3")}>
         <input
           type="checkbox"
           checked={hooks}
@@ -34,7 +38,7 @@ export function GitSettingsTab() {
           </span>
         </span>
       </label>
-      <label className="flex items-start gap-3 rounded-md border border-border/60 p-3">
+      <label className={cn(settingsItemClass, "flex items-start gap-3 p-3")}>
         <input
           type="checkbox"
           checked={signoff}
@@ -50,7 +54,7 @@ export function GitSettingsTab() {
           </span>
         </span>
       </label>
-      <label className="flex items-start gap-3 rounded-md border border-border/60 p-3">
+      <label className={cn(settingsItemClass, "flex items-start gap-3 p-3")}>
         <input
           type="checkbox"
           checked={bypass}
@@ -66,6 +70,6 @@ export function GitSettingsTab() {
           </span>
         </span>
       </label>
-    </div>
+    </SettingsStack>
   );
 }

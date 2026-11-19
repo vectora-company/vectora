@@ -155,7 +155,7 @@ export function SettingsOverlay() {
                     filteredGroups.map((group) => (
                       <div key={group.id} className="mb-3">
                         {group.label && (
-                          <p className="px-3 pb-1 text-[10px] uppercase tracking-wide text-muted-foreground font-medium">
+                          <p className="px-3 pb-1 text-2xs uppercase tracking-wide text-muted-foreground font-medium">
                             {group.label}
                           </p>
                         )}

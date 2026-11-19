@@ -27,9 +27,10 @@ import uuid
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
+from backend.services.availability import require_services, services_enabled
 from backend.services.license import (
     LicenseError,
     clear_license_cache,
@@ -69,6 +70,10 @@ def _require_root(request: Request) -> Any:
 async def license_status() -> dict:
     """Devolve o status atual da licença (lido do cache local)."""
     info = read_cached_status()
+    # `services_enabled` diz à interface se esta execução fala com o Services
+    # (`--no-services` desliga): sem ele, um 503 de conta, OAuth ou portal
+    # pareceria falha de rede em vez de uma escolha do usuário.
+    services = services_enabled()
     if info is None:
         return {
             "configured": False,
@@ -77,8 +82,9 @@ async def license_status() -> dict:
             "days_remaining": 0,
             "expires_at": "",
             "cached": False,
+            "services_enabled": services,
         }
-    return {"configured": True, **info.to_dict()}
+    return {"configured": True, **info.to_dict(), "services_enabled": services}
 
 
 @router.post("/validate")
@@ -109,7 +115,7 @@ class ValidateTokenBody(BaseModel):
     token: str
 
 
-@router.post("/validate-token")
+@router.post("/validate-token", dependencies=[Depends(require_services)])
 async def license_validate_token(body: ValidateTokenBody) -> dict:
     """Valida um VECTORA_TOKEN ad-hoc, antes de existir qualquer conta.
 
@@ -151,7 +157,7 @@ def _connect_url() -> str:
     return os.getenv("VECTORA_LICENSE_CONNECT_URL", DEFAULT_CONNECT_URL).strip()
 
 
-@router.post("/connect")
+@router.post("/connect", dependencies=[Depends(require_services)])
 async def license_connect(body: ConnectBody, request: Request) -> dict:
     """Login com a conta vectora.company → obtém e ativa o VECTORA_TOKEN.
 
@@ -219,7 +225,7 @@ def _oauth_secret() -> str:
     return secret
 
 
-@router.post("/oauth/init")
+@router.post("/oauth/init", dependencies=[Depends(require_services)])
 async def license_oauth_init() -> dict:
     """Gera um state para o device flow OAuth com vectora.company.
 
@@ -234,7 +240,7 @@ async def license_oauth_init() -> dict:
     return {"state": state, "auth_url": auth_url}
 
 
-@router.get("/oauth/poll")
+@router.get("/oauth/poll", dependencies=[Depends(require_services)])
 async def license_oauth_poll(state: str) -> dict:
     """Consulta o gateway para ver se o token OAuth chegou.
 
@@ -298,7 +304,7 @@ def _vectora_token() -> str:
     return token
 
 
-@router.post("/portal")
+@router.post("/portal", dependencies=[Depends(require_services)])
 async def license_portal() -> dict:
     """Cria sessão de Customer Portal (Stripe INTL ou Asaas BR).
 

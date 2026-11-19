@@ -8,6 +8,7 @@
 
 import { useLicenseQuery } from "@/lib/queries/license";
 
+export { servicesDisabled } from "@/lib/queries/license";
 export type {
   LicenseStatus,
   LicenseTier,

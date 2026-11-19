@@ -11,7 +11,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, cast
 
-from backend.embedding.queue import get_embedding_queue
+from backend.embedding.queue import (
+    get_configured_embedding_queue as get_embedding_queue,
+)
 from backend.services.text import text_service
 from backend.settings import settings
 from backend.tools.context import ToolContext

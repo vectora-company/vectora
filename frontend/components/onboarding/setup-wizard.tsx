@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { m } from "@/lib/paraglide/messages";
+import { ServicesOffNotice } from "@/components/layout/services-off-notice";
 
 /** Props comuns a todos os passos. */
 export interface StepProps {
@@ -188,6 +189,7 @@ export function StepToken(_props: StepProps) {
       <p className="text-xs text-muted-foreground">
         {m.onboarding_token_free_note()}
       </p>
+      <ServicesOffNotice />
 
       {config?.vectora_token_configured && (
         <p className="text-xs text-muted-foreground font-mono">

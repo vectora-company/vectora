@@ -15,6 +15,7 @@ from typing import TypedDict, cast
 
 import aiohttp
 
+from backend.services.availability import require_services, services_enabled
 from backend.services.gateway.token import load_token, save_token
 from backend.services.license import get_license_token
 
@@ -134,6 +135,8 @@ class GatewayClient:
 
     def start(self) -> None:
         """Inicia o loop de conexão em background (idempotente)."""
+        if not services_enabled():
+            return
         if self._task and not self._task.done():
             return
         self._task = asyncio.create_task(self._connect_loop(), name="gateway-client")

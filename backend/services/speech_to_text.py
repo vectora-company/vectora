@@ -179,7 +179,7 @@ def resolve_apple_speech() -> str | None:
     """Helper ``vectora-speech`` (framework Speech) — só no macOS.
 
     Ordem: bundle do app (pasta ``speech/``) → ``resources/`` da árvore-fonte
-    (compilado por ``scons macos-speech``).
+    (compilado por ``scons install``).
     """
     import sys
 

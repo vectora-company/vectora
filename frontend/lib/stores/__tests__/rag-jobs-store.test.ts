@@ -332,3 +332,107 @@ describe("rag-jobs-store", () => {
     vi.useRealTimers();
   });
 });
+
+describe("retomada de indexação", () => {
+  it("retoma somente o job e volta a consultar seu progresso", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === "POST") return { ok: true } as Response;
+      return {
+        ok: true,
+        json: async () => ({
+          total: 10,
+          processed: 2,
+          failed: 0,
+          status: "indexing",
+        }),
+      } as Response;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    useRagJobsStore.setState({
+      jobs: { j1: job("j1", { status: "paused", failed: 8 }) },
+    });
+    await useRagJobsStore.getState().retry("j1");
+    await vi.advanceTimersByTimeAsync(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/workspaces/ws1/rag/jobs/j1/retry",
+      { method: "POST", credentials: "include" },
+    );
+    expect(useRagJobsStore.getState().jobs.j1.status).toBe("indexing");
+    expect(useRagJobsStore.getState().jobs.j1.processed).toBe(2);
+    useRagJobsStore.getState().dismiss("j1");
+    vi.useRealTimers();
+  });
+
+  it("mantém o job pausado e mostra erro quando o servidor recusa", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: false }) as Response),
+    );
+    useRagJobsStore.setState({
+      jobs: { j1: job("j1", { status: "paused", failed: 8 }) },
+    });
+    await useRagJobsStore.getState().retry("j1");
+    expect(useRagJobsStore.getState().jobs.j1).toMatchObject({
+      status: "paused",
+      retryError: true,
+      retrying: false,
+    });
+  });
+});
+
+describe("recuperação de jobs", () => {
+  it("carrega jobs do workspace e acompanha os que ainda estão ativos", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).endsWith("/rag/jobs")) {
+        return {
+          ok: true,
+          json: async () => [
+            {
+              job_id: "j1",
+              path: "/p",
+              total: 2,
+              processed: 1,
+              failed: 0,
+              status: "indexing",
+            },
+            {
+              job_id: "j2",
+              path: "/q",
+              total: 1,
+              processed: 0,
+              failed: 1,
+              status: "paused",
+              error_reason: "quota",
+            },
+          ],
+        } as Response;
+      }
+      return {
+        ok: true,
+        json: async () => ({
+          total: 2,
+          processed: 2,
+          failed: 0,
+          status: "done",
+        }),
+      } as Response;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    await useRagJobsStore.getState().load("ws1");
+    await vi.advanceTimersByTimeAsync(1);
+    expect(useRagJobsStore.getState().jobs.j1).toMatchObject({
+      workspaceId: "ws1",
+      status: "done",
+      processed: 2,
+    });
+    expect(useRagJobsStore.getState().jobs.j2).toMatchObject({
+      status: "paused",
+      errorReason: "quota",
+    });
+    useRagJobsStore.getState().dismiss("j1");
+    useRagJobsStore.getState().dismiss("j2");
+    vi.useRealTimers();
+  });
+});

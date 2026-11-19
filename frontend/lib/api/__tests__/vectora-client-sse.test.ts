@@ -195,3 +195,55 @@ describe("revokeCurrentDevice", () => {
     expect(window.localStorage.getItem("vectora-device-id")).toBe(deviceId);
   });
 });
+
+const ev = (event: object) => `data: ${JSON.stringify(event)}\n\n`;
+
+describe("readSSEStream (via streamChat) — erro terminal x aviso do runtime", () => {
+  it("um aviso não encerra a leitura: os eventos seguintes e o done chegam", async () => {
+    fetchMock.mockResolvedValueOnce(
+      okResponse(
+        makeControlledStream([
+          ev({ type: "token", content: "a" }),
+          ev({
+            type: "error",
+            code: "TOOL_CALL_REPEATED",
+            message: "repetida",
+            severity: "warning",
+          }),
+          ev({ type: "token", content: "b" }),
+          ev({ type: "done", thread_id: "t1", run_id: "r1" }),
+        ]),
+      ),
+    );
+
+    const events = await collect(
+      streamChat({ thread_id: "t1", content: "oi" }),
+    );
+
+    expect(events.map((e) => e.type)).toEqual([
+      "token",
+      "error",
+      "token",
+      "done",
+    ]);
+  });
+
+  it("erro terminal encerra a leitura, com ou sem severity", async () => {
+    for (const severity of [undefined, "error"] as const) {
+      fetchMock.mockResolvedValueOnce(
+        okResponse(
+          makeControlledStream([
+            ev({ type: "error", code: "RATE_LIMIT", message: "x", severity }),
+            ev({ type: "token", content: "nunca" }),
+          ]),
+        ),
+      );
+
+      const events = await collect(
+        streamChat({ thread_id: "t1", content: "oi" }),
+      );
+
+      expect(events.map((e) => e.type)).toEqual(["error"]);
+    }
+  });
+});
