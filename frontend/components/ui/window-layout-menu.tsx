@@ -42,37 +42,69 @@ export function WindowLayoutMenu({
   className,
 }: WindowLayoutMenuProps) {
   const [open, setOpen] = React.useState(false);
+  // Fixado por clique: não fecha ao tirar o mouse (só no 2º clique, Esc, ao
+  // escolher ou ao clicar fora). Aberto só por hover, fecha ao sair.
+  const [pinned, setPinned] = React.useState(false);
+  const rootRef = React.useRef<HTMLDivElement>(null);
   const timer = React.useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const show = () => {
     clearTimeout(timer.current);
     setOpen(true);
   };
+  const close = React.useCallback(() => {
+    clearTimeout(timer.current);
+    setOpen(false);
+    setPinned(false);
+  }, []);
   const hideSoon = () => {
+    if (pinned) return;
     clearTimeout(timer.current);
     timer.current = setTimeout(() => setOpen(false), CLOSE_DELAY_MS);
   };
   React.useEffect(() => () => clearTimeout(timer.current), []);
 
+  // Fixado, clicar em qualquer lugar fora do menu o fecha.
+  React.useEffect(() => {
+    if (!pinned) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) close();
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () =>
+      document.removeEventListener("pointerdown", onPointerDown, true);
+  }, [pinned, close]);
+
   const choose = (target: LayoutTarget) => {
     onSelect(target);
-    setOpen(false);
+    close();
+  };
+
+  const onTriggerClick = () => {
+    if (open && pinned) {
+      close();
+      return;
+    }
+    clearTimeout(timer.current);
+    setOpen(true);
+    setPinned(true);
   };
 
   return (
     // z-index alto: o painel precisa ficar acima do editor (minimap, rolagem).
     <div
+      ref={rootRef}
       className="relative z-[1000]"
       onMouseEnter={show}
       onMouseLeave={hideSoon}
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget as Node | null))
-          setOpen(false);
+          close();
       }}
       onKeyDown={(event) => {
         if (event.key === "Escape" && open) {
           event.stopPropagation();
-          setOpen(false);
+          close();
         }
       }}
     >
@@ -81,7 +113,7 @@ export function WindowLayoutMenu({
         aria-label={m.window_layout()}
         aria-haspopup="true"
         aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
+        onClick={onTriggerClick}
         className={className}
       >
         <LayoutGrid />

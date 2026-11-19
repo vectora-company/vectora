@@ -139,4 +139,68 @@ describe("WindowLayoutMenu", () => {
       screen.getByRole("button", { name: "window_layout_third_center" }),
     ).toBeTruthy();
   });
+
+  it("clicar no botão aberto só por hover fixa o painel: sair com o mouse não fecha", () => {
+    render(<WindowLayoutMenu onSelect={vi.fn()} />);
+    const root = trigger().parentElement!;
+
+    fireEvent.mouseEnter(root);
+    fireEvent.click(trigger());
+    fireEvent.mouseLeave(root);
+    act(() => vi.advanceTimersByTime(1000));
+
+    expect(panel()).toBeTruthy();
+  });
+
+  it("um segundo clique fecha o painel fixado", () => {
+    render(<WindowLayoutMenu onSelect={vi.fn()} />);
+
+    fireEvent.mouseEnter(trigger().parentElement!);
+    fireEvent.click(trigger());
+    fireEvent.click(trigger());
+
+    expect(panel()).toBeNull();
+  });
+
+  it("com o painel fechado, clicar o abre e fixa", () => {
+    render(<WindowLayoutMenu onSelect={vi.fn()} />);
+    const root = trigger().parentElement!;
+
+    fireEvent.click(trigger());
+    fireEvent.mouseLeave(root);
+    act(() => vi.advanceTimersByTime(1000));
+
+    expect(panel()).toBeTruthy();
+  });
+
+  it("fixado, clicar fora fecha; clicar dentro do painel não", () => {
+    render(
+      <div>
+        <WindowLayoutMenu onSelect={vi.fn()} />
+        <button type="button">fora</button>
+      </div>,
+    );
+    fireEvent.click(trigger());
+
+    fireEvent.pointerDown(screen.getByTestId("window-layout-panel"));
+    expect(panel()).toBeTruthy();
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: "fora" }));
+    expect(panel()).toBeNull();
+  });
+
+  it("depois de fechar, passar o mouse de novo volta a abrir em hover", () => {
+    render(<WindowLayoutMenu onSelect={vi.fn()} />);
+    const root = trigger().parentElement!;
+
+    fireEvent.click(trigger());
+    fireEvent.click(trigger());
+    fireEvent.mouseLeave(root);
+    fireEvent.mouseEnter(root);
+    expect(panel()).toBeTruthy();
+
+    fireEvent.mouseLeave(root);
+    act(() => vi.advanceTimersByTime(200));
+    expect(panel()).toBeNull();
+  });
 });
