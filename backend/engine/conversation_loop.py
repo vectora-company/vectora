@@ -698,7 +698,7 @@ def _drop_terminal_notices(history: list[VMessage]) -> list[VMessage]:
     mensagem de assistente para a UI e o ledger. Para o modelo isso seria uma
     resposta dele mesmo que nunca existiu e o levaria a repetir "não consegui".
     """
-    return [
+    kept = [
         m
         for m in history
         if not (
@@ -708,6 +708,29 @@ def _drop_terminal_notices(history: list[VMessage]) -> list[VMessage]:
             and m.text().lstrip().startswith(_TERMINAL_NOTICE_PREFIXES)
         )
     ]
+    return _merge_consecutive_user_messages(kept)
+
+
+def _merge_consecutive_user_messages(history: list[VMessage]) -> list[VMessage]:
+    """Une perguntas seguidas sem resposta no meio numa só mensagem de usuário.
+
+    Depois de descartar um aviso de cancelamento sobram dois turnos de usuário
+    adjacentes, o que vários provedores rejeitam. O texto fica na ordem original.
+    """
+    merged: list[VMessage] = []
+    for m in history:
+        prev = merged[-1] if merged else None
+        if (
+            prev is not None
+            and prev.role is MessageRole.USER
+            and m.role is MessageRole.USER
+            and not prev.tool_calls
+            and not m.tool_calls
+        ):
+            merged[-1] = replace(prev, content=[*prev.content, *m.content])
+            continue
+        merged.append(m)
+    return merged
 
 
 def _default_context_tokens() -> int:

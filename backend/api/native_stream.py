@@ -82,6 +82,33 @@ def _workspace_run_lock(workspace_id: str) -> asyncio.Lock:
 _DISCONNECT_CONFIRM_DELAY_S = 0.3
 
 _SENTINEL = object()
+
+
+_checkpoint_tasks: set[asyncio.Task[None]] = set()
+
+
+def _schedule_turn_checkpoint(workspace_id: str, thread_id: str) -> None:
+    """Registra o checkpoint do turno depois do fim do stream.
+
+    O checkpoint percorre o workspace; o cliente não precisa esperar por ele
+    para ver a resposta terminar.
+    """
+
+    async def _run() -> None:
+        try:
+            await _record_turn_checkpoint(
+                workspace_id, thread_id, {"run_id": str(uuid.uuid4())}
+            )
+        except Exception:
+            logger.warning(
+                "native_stream: falha ao registrar checkpoint", exc_info=True
+            )
+
+    task = asyncio.create_task(_run(), name=f"checkpoint-{thread_id}")
+    _checkpoint_tasks.add(task)
+    task.add_done_callback(_checkpoint_tasks.discard)
+
+
 """Marca o fim da fila de eventos — devolvida pelo runner depois que a
 chamada ao motor nativo termina (sucesso, pausa HITL, ou exceção)."""
 
@@ -566,17 +593,7 @@ def stream_engine_events(
                                 exc_info=True,
                             )
                         if workspace_id:
-                            try:
-                                await _record_turn_checkpoint(
-                                    workspace_id,
-                                    thread_id,
-                                    {"run_id": str(uuid.uuid4())},
-                                )
-                            except Exception:
-                                logger.warning(
-                                    "native_stream: falha ao registrar checkpoint",
-                                    exc_info=True,
-                                )
+                            _schedule_turn_checkpoint(workspace_id, thread_id)
                         from backend.services.remember_trigger import (
                             schedule_remember,
                         )

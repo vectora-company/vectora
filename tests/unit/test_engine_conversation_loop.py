@@ -2985,4 +2985,24 @@ def test_drop_terminal_notices_remove_avisos_sinteticos() -> None:
 
     resultado = _drop_terminal_notices([pergunta, cancelado, pergunta, falha, resposta])
 
-    assert resultado == [pergunta, pergunta, resposta]
+    assert [m.role for m in resultado] == [MessageRole.USER, MessageRole.ASSISTANT]
+    assert resultado[1] == resposta
+
+
+def test_drop_terminal_notices_une_usuarios_seguidos() -> None:
+    from backend.engine.conversation_loop import _drop_terminal_notices
+    from backend.vtypes.message import MessageRole, VMessage, text_message
+
+    a = text_message(MessageRole.USER, "primeira")
+    b = text_message(MessageRole.USER, "segunda")
+    cancelado = VMessage(
+        role=MessageRole.ASSISTANT,
+        content=text_message(MessageRole.ASSISTANT, "[cancelado] x").content,
+        is_error=True,
+    )
+
+    resultado = _drop_terminal_notices([a, cancelado, b])
+
+    assert len(resultado) == 1
+    assert "primeira" in resultado[0].text()
+    assert "segunda" in resultado[0].text()
