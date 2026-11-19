@@ -171,3 +171,81 @@ async def test_set_disabled_com_banco_fora_ainda_grava_arquivo_e_avanca_local(
     await tool_policy.set_disabled("u1", ["terminal"])
     assert tool_policy.is_allowed("u1", "terminal") is False
     assert tool_policy.policy_version("u1") == 1
+
+
+# ── Acesso por role (RBAC) ───────────────────────────────────────────────────
+
+
+@pytest.fixture
+def roles(monkeypatch):
+    """Roles por usuário, sem banco: ``roles['u']`` define o role de ``u``."""
+    table: dict[str, str] = {}
+    monkeypatch.setattr(tool_policy, "user_role", lambda uid: table.get(uid or ""))
+    return table
+
+
+async def test_sem_restricao_todos_os_roles_usam(roles):
+    roles["m"] = "member"
+    assert tool_policy.is_allowed("m", "terminal") is True
+
+
+async def test_tool_liberada_so_para_member_bloqueia_viewer(roles):
+    roles.update({"m": "member", "v": "viewer"})
+    await tool_policy.set_role_access({"terminal": ["member"]})
+
+    assert tool_policy.is_allowed("m", "terminal") is True
+    assert tool_policy.is_allowed("v", "terminal") is False
+    assert "terminal" in tool_policy.effective_disabled("v")
+    assert "terminal" not in tool_policy.effective_disabled("m")
+
+
+async def test_admin_e_root_sempre_tem_acesso(roles):
+    roles.update({"a": "admin", "r": "root"})
+    await tool_policy.set_role_access({"terminal": []})
+
+    assert tool_policy.is_allowed("a", "terminal") is True
+    assert tool_policy.is_allowed("r", "terminal") is True
+
+
+async def test_role_desconhecido_nao_usa_tool_restrita(roles):
+    await tool_policy.set_role_access({"terminal": ["member"]})
+
+    assert tool_policy.is_allowed("fantasma", "terminal") is False
+    assert tool_policy.is_allowed("fantasma", "file_read") is True
+
+
+async def test_liberar_todos_os_roles_remove_a_restricao(roles):
+    roles["v"] = "viewer"
+    await tool_policy.set_role_access({"terminal": ["member"]})
+    await tool_policy.set_role_access({"terminal": ["member", "viewer"]})
+
+    assert tool_policy.get_role_access() == {}
+    assert tool_policy.is_allowed("v", "terminal") is True
+
+
+async def test_usuario_pode_remover_o_proprio_acesso_mas_nao_recuperar_o_bloqueado(
+    roles,
+):
+    roles["m"] = "member"
+    await tool_policy.set_role_access({"terminal": []})
+    await tool_policy.set_disabled("m", ["file_read"])
+
+    # Zerar a própria lista não devolve o que o admin bloqueou.
+    await tool_policy.set_disabled("m", [])
+    assert tool_policy.is_allowed("m", "terminal") is False
+
+    await tool_policy.set_disabled("m", ["file_read"])
+    assert tool_policy.is_allowed("m", "file_read") is False
+
+
+async def test_sessao_local_sem_login_vale_como_root():
+    assert tool_policy.user_role(None) == "root"
+    assert tool_policy.user_role("local") == "root"
+    await tool_policy.set_role_access({"terminal": []})
+    assert tool_policy.is_allowed("local", "terminal") is True
+
+
+async def test_alteracao_de_role_sobe_a_versao_global():
+    before = tool_policy.policy_version(tool_policy.GLOBAL_SCOPE)
+    await tool_policy.set_role_access({"terminal": ["member"]})
+    assert tool_policy.policy_version(tool_policy.GLOBAL_SCOPE) == before + 1

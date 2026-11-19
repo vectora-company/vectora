@@ -152,6 +152,14 @@
   },
   {
     "methods": [
+      "GET",
+      "PUT"
+    ],
+    "name": "get_tool_access_admin_tool_access_get",
+    "path": "/admin/tool-access"
+  },
+  {
+    "methods": [
       "GET"
     ],
     "name": "list_tools_admin_admin_tools_get",
