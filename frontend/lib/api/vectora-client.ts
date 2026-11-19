@@ -1182,13 +1182,78 @@ async function* readSSEStream(
         const event = parseSSELine(line);
         if (!event) continue;
         yield event;
-        // Só `done` e erro terminal encerram a leitura: um aviso do runtime
-        // (`severity: "warning"`) deixa o stream aberto até o `done`.
-        if (event.type === "done") return;
+        // O erro terminal encerra a leitura: um aviso do runtime
+        // (`severity: "warning"`) deixa o stream aberto até o `done`. Depois do
+        // `done` a leitura segue até o servidor fechar o stream, porque a lista
+        // de arquivos do turno chega por último; quem não quer esperar por ela
+        // encerra o gerador no `done` (ver `withTrailingEvents`).
         if (event.type === "error" && event.severity !== "warning") return;
       }
     }
   } finally {
     reader.releaseLock();
+  }
+}
+
+const TRAILING_EVENTS_TIMEOUT_MS = 15_000;
+
+/**
+ * Entrega o `done` assim que ele chega e, se quem consome encerrar o laço ali,
+ * segue lendo o stream em segundo plano só para a lista de arquivos do turno
+ * (`turn_files_changed`), que o servidor emite depois do `done`.
+ */
+export async function* withTrailingEvents(
+  source: AsyncGenerator<StreamEvent>,
+  onTrailing: (event: StreamEvent) => void | Promise<void>,
+  timeoutMs: number = TRAILING_EVENTS_TIMEOUT_MS,
+): AsyncGenerator<StreamEvent> {
+  let afterDone = false;
+  try {
+    while (true) {
+      // eslint-disable-next-line no-await-in-loop
+      const next = await source.next();
+      if (next.done) return;
+      afterDone = next.value.type === "done";
+      yield next.value;
+      afterDone = false;
+    }
+  } finally {
+    if (afterDone) {
+      void drainTrailingEvents(source, onTrailing, timeoutMs);
+    } else {
+      await source.return(undefined);
+    }
+  }
+}
+
+async function drainTrailingEvents(
+  source: AsyncGenerator<StreamEvent>,
+  onTrailing: (event: StreamEvent) => void | Promise<void>,
+  timeoutMs: number,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  try {
+    while (true) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) break;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      // eslint-disable-next-line no-await-in-loop
+      const next = await Promise.race([
+        source.next(),
+        new Promise<null>((resolve) => {
+          timer = setTimeout(() => resolve(null), remaining);
+        }),
+      ]);
+      clearTimeout(timer);
+      if (next === null || next.done) break;
+      if (next.value.type === "turn_files_changed") {
+        // eslint-disable-next-line no-await-in-loop
+        await onTrailing(next.value);
+      }
+    }
+  } catch {
+    // Sem a lista de arquivos o turno já está completo; nada a reportar.
+  } finally {
+    await source.return(undefined).catch(() => undefined);
   }
 }

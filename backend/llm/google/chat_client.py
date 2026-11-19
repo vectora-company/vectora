@@ -26,6 +26,7 @@ from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any
 
 from backend.llm.google.client import GoogleGenAIClient, GoogleGenAIResponseError
+from backend.llm.google.prompt_cache import apply_cached_content, invalidate
 from backend.llm.media_parts import prepare_content, split_data_url
 from backend.vtypes.contracts import UsageSnapshot
 from backend.vtypes.message import (
@@ -292,10 +293,18 @@ class GoogleChatClient:
         temperature: float | None = None,
         max_tokens: int | None = None,
     ) -> VMessage:
-        corpo = self._payload(
+        original = self._payload(
             messages, tools=tools, temperature=temperature, max_tokens=max_tokens
         )
-        resposta = await self.client.generate_content(self.model, corpo)
+        corpo, cached = await apply_cached_content(self.client, self.model, original)
+        try:
+            resposta = await self.client.generate_content(self.model, corpo)
+        except GoogleGenAIResponseError:
+            if not cached:
+                raise
+            # Cache vencido ou recusado: refaz a chamada sem ele.
+            invalidate(original, self.model)
+            resposta = await self.client.generate_content(self.model, original)
         candidatos = resposta.get("candidates")
         if not isinstance(candidatos, list) or not candidatos:
             msg = (
@@ -315,6 +324,27 @@ class GoogleChatClient:
             finish_reason="tool_calls" if chamadas else "stop",
         )
 
+    async def _stream_events(self, original: dict) -> AsyncIterator[dict]:
+        """Eventos do stream, usando o cache de contexto quando disponível.
+
+        Se a API recusar o cache antes de o primeiro evento chegar, refaz a
+        chamada sem ele.
+        """
+        corpo, cached = await apply_cached_content(self.client, self.model, original)
+        started = False
+        try:
+            async for evento in self.client.stream_generate_content(self.model, corpo):
+                started = True
+                yield evento
+        except GoogleGenAIResponseError:
+            if not cached or started:
+                raise
+            invalidate(original, self.model)
+            async for evento in self.client.stream_generate_content(
+                self.model, original
+            ):
+                yield evento
+
     async def astream(
         self,
         messages: list[VMessage],
@@ -323,7 +353,7 @@ class GoogleChatClient:
         temperature: float | None = None,
         max_tokens: int | None = None,
     ) -> AsyncIterator[VMessageChunk]:
-        corpo = self._payload(
+        original = self._payload(
             messages, tools=tools, temperature=temperature, max_tokens=max_tokens
         )
         proximo_index = 0
@@ -332,7 +362,7 @@ class GoogleChatClient:
         # só o último visto e emite UM chunk de uso ao final do stream.
         ultimo_usage: dict | None = None
 
-        async for evento in self.client.stream_generate_content(self.model, corpo):
+        async for evento in self._stream_events(original):
             candidatos = evento.get("candidates")
             if not isinstance(candidatos, list) or not candidatos:
                 feedback = evento.get("promptFeedback")
