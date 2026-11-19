@@ -832,7 +832,6 @@ def test_pr_gate_is_one_queue_that_does_not_cancel_code_checks_on_metadata_event
     ):
         assert not (WORKFLOW.parent / old).exists(), old
 
-
 def test_local_llm_only_starts_a_machine_when_requested() -> None:
     """Sem a marcação no commit nem disparo manual o job nem inicia, e o push da
     branch é o único gatilho automático (sem `pull_request`, que duplicaria)."""
