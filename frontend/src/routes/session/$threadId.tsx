@@ -23,6 +23,7 @@ import {
 import { IdeModeLayout } from "@/components/layout/ide-mode-layout";
 import { CenterCanvas } from "@/components/layout/center-canvas";
 import { getModeComposition } from "@/components/layout/mode-composition";
+import { shouldCloseDrawerOnEscape } from "@/lib/layout/drawer-escape";
 import { ExtensionModeSurface } from "@/components/extensions/extension-mode-surface";
 import { ThreeColumnShell } from "@/components/layout/three-column-shell";
 import { LicenseBanner } from "@/components/layout/license-banner";
@@ -466,7 +467,7 @@ function SessionPage() {
     if (!isCompactSession || !workbenchOpen || uiMode !== "assistant") return;
     // Esc fecha a gaveta do workbench no layout compacto.
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setWorkbenchOpen(threadId, false);
+      if (shouldCloseDrawerOnEscape(event)) setWorkbenchOpen(threadId, false);
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
@@ -1440,6 +1441,25 @@ function SessionPage() {
               <ThreeColumnShell
                 centerHeader={headerEl}
                 centerOverlay={<ExtensionModeSurface />}
+                centerCover={
+                  isCompactSession && assistantWorkbenchVisible ? (
+                    <>
+                      <button
+                        type="button"
+                        data-testid="compact-workbench-backdrop"
+                        aria-label={m.workbench_close()}
+                        onClick={() => setWorkbenchOpen(threadId, false)}
+                        className="absolute inset-0 z-30 cursor-default bg-black/50"
+                      />
+                      <div
+                        data-testid="compact-workbench-overlay"
+                        className={`absolute inset-y-0 z-40 flex min-w-0 min-h-0 w-full overflow-hidden bg-background shadow-xl sm:w-[min(32rem,85%)] ${assistantWorkbenchSide === "left" ? "left-0 border-r" : "right-0 border-l"}`}
+                      >
+                        {assistantWorkbenchPanel}
+                      </div>
+                    </>
+                  ) : null
+                }
                 left={
                   showSidebarPanel
                     ? sidebarPanel
@@ -1459,10 +1479,6 @@ function SessionPage() {
                         }
                         className="absolute inset-0 min-w-0 min-h-0 overflow-hidden"
                         style={{
-                          opacity:
-                            isCompactSession && assistantWorkbenchVisible
-                              ? 0
-                              : 1,
                           pointerEvents:
                             isCompactSession && assistantWorkbenchVisible
                               ? "none"
@@ -1471,23 +1487,6 @@ function SessionPage() {
                       >
                         {renderChatPanel(false)}
                       </div>
-                      {isCompactSession && assistantWorkbenchVisible && (
-                        <>
-                          <button
-                            type="button"
-                            data-testid="compact-workbench-backdrop"
-                            aria-label={m.workbench_close()}
-                            onClick={() => setWorkbenchOpen(threadId, false)}
-                            className="absolute inset-0 z-30 cursor-default bg-black/55"
-                          />
-                          <div
-                            data-testid="compact-workbench-overlay"
-                            className={`absolute inset-y-0 z-40 flex min-w-0 min-h-0 w-full overflow-hidden bg-background shadow-xl sm:w-[min(32rem,85%)] ${assistantWorkbenchSide === "left" ? "left-0 border-r" : "right-0 border-l"}`}
-                          >
-                            {assistantWorkbenchPanel}
-                          </div>
-                        </>
-                      )}
                     </div>
                   </div>
                 }

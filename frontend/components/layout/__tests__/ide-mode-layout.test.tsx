@@ -382,3 +382,53 @@ describe("IdeModeLayout — o Header só cobre a coluna central", () => {
     );
   });
 });
+
+function renderDrawerTablet(extra = {}) {
+  return render(
+    <IdeModeLayout
+      layoutState="tablet"
+      workbenchOpen
+      header={<div data-testid="panel-header">Header</div>}
+      navBar={<div data-testid="panel-navbar">NavBar</div>}
+      workbenchContent={<div data-testid="panel-workbench">Workbench</div>}
+      editor={<div data-testid="panel-editor">Editor</div>}
+      chat={<div data-testid="panel-chat">Chat</div>}
+      {...extra}
+    />,
+  );
+}
+
+describe("IdeModeLayout — gavetas do tablet cobrem a coluna central inteira", () => {
+  it("a gaveta e o fundo são filhos diretos da coluna central, ao lado do Header, e não do corpo", () => {
+    renderDrawerTablet();
+
+    const main = screen.getByTestId("shell-header-slot").closest("main");
+    const drawer = screen.getByTestId("ide-tablet-workbench-drawer");
+    const backdrop = screen.getByTestId("ide-tablet-backdrop");
+    expect(drawer.parentElement).toBe(main);
+    expect(backdrop.parentElement).toBe(main);
+    expect(screen.getByTestId("shell-header-slot").parentElement).toBe(main);
+  });
+
+  it("o fundo usa o mesmo escurecimento do Sheet de sessões", () => {
+    renderDrawerTablet();
+
+    expect(screen.getByTestId("ide-tablet-backdrop")).toHaveClass(
+      "bg-black/50",
+    );
+  });
+
+  it("os filhos das gavetas preenchem a gaveta inteira", () => {
+    renderDrawerTablet();
+    fireEvent.click(screen.getByTestId("ide-tablet-chat-toggle"));
+
+    for (const id of [
+      "ide-tablet-workbench-drawer",
+      "ide-tablet-chat-drawer",
+    ]) {
+      const drawer = screen.getByTestId(id);
+      expect(drawer.className).toContain("[&>*]:w-full");
+      expect(drawer.className).toContain("[&>*]:flex-1");
+    }
+  });
+});

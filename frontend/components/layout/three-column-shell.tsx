@@ -50,6 +50,11 @@ export interface ThreeColumnShellProps {
   centerHeader: ReactNode;
   /** Cobre só o corpo da coluna central; o header e as laterais ficam livres. */
   centerOverlay?: ReactNode;
+  /**
+   * Cobre a coluna central inteira, header incluído: o header é só mais um
+   * elemento da coluna, então gavetas do modo compacto passam por cima dele.
+   */
+  centerCover?: ReactNode;
   left: ReactNode | null;
   center: ReactNode;
   right: ReactNode | null;
@@ -67,6 +72,7 @@ export interface ThreeColumnShellProps {
 export function ThreeColumnShell({
   centerHeader,
   centerOverlay,
+  centerCover,
   left,
   center,
   right,
@@ -98,7 +104,7 @@ export function ThreeColumnShell({
         <main
           aria-label={columns.center?.label ?? "Conteúdo principal"}
           data-column-visibility="visible"
-          className="flex w-full flex-[1_1_0%] min-h-0 min-w-0 flex-col overflow-hidden"
+          className="relative flex w-full flex-[1_1_0%] min-h-0 min-w-0 flex-col overflow-hidden"
         >
           <div
             data-testid="shell-header-slot"
@@ -110,6 +116,7 @@ export function ThreeColumnShell({
             {center}
             {centerOverlay}
           </div>
+          {centerCover}
         </main>
         <SideColumn
           side={direction === "rtl" ? "left" : "right"}

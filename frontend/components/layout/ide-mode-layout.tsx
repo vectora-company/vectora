@@ -26,6 +26,7 @@ import {
   ThreeColumnShell,
   type ShellColumnResize,
 } from "@/components/layout/three-column-shell";
+import { shouldCloseDrawerOnEscape } from "@/lib/layout/drawer-escape";
 import { WORKBENCH_RAIL_WIDTH } from "@/lib/layout/workbench-geometry";
 import type { IdeLayoutState } from "@/lib/hooks/use-media-query";
 
@@ -139,7 +140,7 @@ export function IdeModeLayout({
     if (!tabletDrawerOpen) return;
     // Esc fecha a gaveta aberta, como em qualquer painel sobreposto.
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
+      if (!shouldCloseDrawerOnEscape(event)) return;
       setTabletChatOpen(false);
       onCloseWorkbench?.();
     };
@@ -208,19 +209,23 @@ export function IdeModeLayout({
             <div className="absolute inset-0 min-w-0 overflow-hidden">
               {editor}
             </div>
+          </div>
+        }
+        centerCover={
+          <>
             {drawerOpen && (
               <button
                 type="button"
                 data-testid="ide-tablet-backdrop"
                 aria-label={m.workbench_close()}
                 onClick={closeDrawers}
-                className="absolute inset-0 z-30 cursor-default bg-black/55"
+                className="absolute inset-0 z-30 cursor-default bg-black/50"
               />
             )}
             <div
               data-testid="ide-tablet-workbench-drawer"
               hidden={!workbenchOpen}
-              className={`absolute inset-y-0 z-40 flex min-w-0 w-full overflow-hidden bg-background shadow-xl sm:w-[min(32rem,85%)] ${
+              className={`absolute inset-y-0 z-40 flex min-w-0 w-full overflow-hidden bg-background shadow-xl sm:w-[min(32rem,85%)] [&>*]:w-full [&>*]:flex-1 ${
                 workbenchOnLeft ? "left-0 border-r" : "right-0 border-l"
               }`}
             >
@@ -230,12 +235,12 @@ export function IdeModeLayout({
               <div
                 data-testid="ide-tablet-chat-drawer"
                 hidden={!tabletChatOpen}
-                className="absolute inset-y-0 right-0 z-40 flex min-w-0 w-full overflow-hidden border-l bg-background shadow-xl sm:w-[min(32rem,85%)]"
+                className="absolute inset-y-0 right-0 z-40 flex min-w-0 w-full overflow-hidden border-l bg-background shadow-xl sm:w-[min(32rem,85%)] [&>*]:w-full [&>*]:flex-1"
               >
                 {chat}
               </div>
             )}
-          </div>
+          </>
         }
         right={<div className="flex h-full">{rightRails}</div>}
         columns={{

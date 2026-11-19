@@ -545,7 +545,7 @@ describe("SessionPage — chat compacto no IDE", () => {
     expect(await screen.findByTestId("workbench-content")).toBeInTheDocument();
     expect(
       screen.getByTestId("chat").parentElement?.parentElement?.parentElement,
-    ).toHaveStyle({ opacity: "0", pointerEvents: "none" });
+    ).toHaveStyle({ pointerEvents: "none" });
     expect(
       screen.getByTestId("chat").parentElement?.parentElement?.parentElement,
     ).toHaveAttribute("inert");
@@ -561,7 +561,7 @@ describe("SessionPage — chat compacto no IDE", () => {
     await waitFor(() =>
       expect(
         screen.getByTestId("chat").parentElement?.parentElement?.parentElement,
-      ).toHaveStyle({ opacity: "1", pointerEvents: "auto" }),
+      ).toHaveStyle({ pointerEvents: "auto" }),
     );
     expect(screen.getByTestId("stream-response")).toHaveTextContent(
       "Resposta parcial atualizada",
@@ -657,7 +657,7 @@ describe("SessionPage — chat compacto no IDE", () => {
     expect(screen.getByTestId("stream-response")).toBeEmptyDOMElement();
     expect(
       screen.getByTestId("chat").parentElement?.parentElement?.parentElement,
-    ).toHaveStyle({ opacity: "0", pointerEvents: "none" });
+    ).toHaveStyle({ pointerEvents: "none" });
   });
 
   it("mantém o chat central ao abrir a Workbench no layout largo", async () => {
@@ -674,7 +674,7 @@ describe("SessionPage — chat compacto no IDE", () => {
     expect(await screen.findByTestId("chat")).toBeInTheDocument();
     expect(
       screen.getByTestId("chat").parentElement?.parentElement?.parentElement,
-    ).toHaveStyle({ opacity: "1", pointerEvents: "auto" });
+    ).toHaveStyle({ pointerEvents: "auto" });
   });
 });
 
@@ -830,6 +830,47 @@ describe("SessionPage — gaveta do workbench no layout compacto", () => {
   });
 });
 
+describe("SessionPage — a gaveta do workbench cobre a coluna central inteira", () => {
+  it("o header é só mais um elemento da coluna: a gaveta e o fundo ficam por cima dele", async () => {
+    setMode("assistant");
+    useWorkbenchStore.setState({ panelOpen: { t1: true } });
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 818,
+    });
+
+    render(<SessionPage />);
+
+    const overlay = await screen.findByTestId("compact-workbench-overlay");
+    const backdrop = screen.getByTestId("compact-workbench-backdrop");
+    const main = screen.getByTestId("shell-header-slot").closest("main");
+    expect(overlay.parentElement).toBe(main);
+    expect(backdrop.parentElement).toBe(main);
+    // Acima do header (z-20) e abaixo dos diálogos.
+    expect(backdrop).toHaveClass("z-30");
+    expect(overlay).toHaveClass("z-40");
+  });
+
+  it("o fundo escurece igual ao Sheet de sessões e o chat continua visível por baixo", async () => {
+    setMode("assistant");
+    useWorkbenchStore.setState({ panelOpen: { t1: true } });
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 818,
+    });
+
+    render(<SessionPage />);
+
+    expect(await screen.findByTestId("compact-workbench-backdrop")).toHaveClass(
+      "bg-black/50",
+    );
+    const chatWrapper = (await screen.findByTestId("chat")).parentElement
+      ?.parentElement?.parentElement;
+    expect(chatWrapper).toHaveAttribute("inert");
+    expect(chatWrapper?.style.opacity).toBe("");
+  });
+});
+
 describe("SessionPage — laterais compactas", () => {
   it("abre uma sidebar por vez e renderiza sessões dentro do Sheet", async () => {
     setMode("assistant");
@@ -921,7 +962,7 @@ describe("SessionPage — workbench do Assistente estreito", () => {
     expect(
       (await screen.findByTestId("chat")).parentElement?.parentElement
         ?.parentElement,
-    ).toHaveStyle({ opacity: "0", pointerEvents: "none" });
+    ).toHaveStyle({ pointerEvents: "none" });
     Object.defineProperty(window, "outerWidth", {
       configurable: true,
       value: 1024,
