@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Any
 
 from backend.llm.media_parts import prepare_content
 from backend.llm.openai.client import OpenAIClient, OpenAIResponseError
+from backend.llm.prompt_cache import prompt_cache_key
 from backend.vtypes.contracts import UsageSnapshot
 from backend.vtypes.message import (
     ContentBlock,
@@ -246,6 +247,9 @@ class OpenAIChatClient:
             corpo["max_output_tokens"] = max_tokens
         if tools:
             corpo["tools"] = [_to_openai_tool(t) for t in tools]
+        cache_key = prompt_cache_key.get()
+        if cache_key:
+            corpo["prompt_cache_key"] = cache_key
         return corpo
 
     async def agenerate(

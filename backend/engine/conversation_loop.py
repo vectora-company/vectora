@@ -967,6 +967,9 @@ async def run_conversation(  # noqa: PLR0911
     from backend.services.policy_compiler import compile_policy_snapshot
 
     await apply_media_billing_source(ctx)
+    from backend.llm.prompt_cache import prompt_cache_key
+
+    prompt_cache_key.set(thread_id)
     if hasattr(session_store, "get_session") and not (
         isinstance(ctx._extra, dict) and ctx._extra.get("untrusted_content")
     ):

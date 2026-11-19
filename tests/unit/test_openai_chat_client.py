@@ -347,3 +347,19 @@ class TestStreamingToolCallsEUsage:
         assert usage["input_tokens"] == 10
         assert usage["output_tokens"] == 3
         assert usage["total_tokens"] == 13
+
+
+def test_payload_envia_a_chave_de_cache_da_conversa() -> None:
+    from backend.llm.prompt_cache import prompt_cache_key
+
+    client = _client(lambda request: httpx.Response(200, json=_resposta_ok()))
+    token = prompt_cache_key.set("thread-1")
+    try:
+        corpo = client._payload([], tools=None, temperature=None, max_tokens=None)
+    finally:
+        prompt_cache_key.reset(token)
+
+    assert corpo["prompt_cache_key"] == "thread-1"
+    assert "prompt_cache_key" not in client._payload(
+        [], tools=None, temperature=None, max_tokens=None
+    )
