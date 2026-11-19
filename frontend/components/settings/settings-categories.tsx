@@ -123,13 +123,6 @@ const UsersPanel = lazyWithRetry(
     })),
   "settings-admin-users",
 );
-const ToolsPanel = lazyWithRetry(
-  () =>
-    import("./administracao/admin-tab").then((mod) => ({
-      default: mod.ToolsPanel,
-    })),
-  "settings-admin-tools",
-);
 const SafeRootsPanel = lazyWithRetry(
   () =>
     import("./administracao/admin-tab").then((mod) => ({
@@ -239,12 +232,6 @@ export function buildSettingsCategoryGroups({
       Component: SkillsTab,
     },
     {
-      id: "tool_policy",
-      group: "ambiente",
-      label: m.settings_category_tool_policy(),
-      Component: ToolPolicyPanel,
-    },
-    {
       id: "hitl_allowlist",
       group: "ambiente",
       label: m.settings_category_hitl_allowlist(),
@@ -264,40 +251,45 @@ export function buildSettingsCategoryGroups({
     },
   ];
 
-  const administracao: SettingsCategory[] = isAdmin
-    ? [
-        {
-          id: "admin_users",
-          group: "administracao",
-          label: m.admin_tab_users(),
-          Component: UsersPanel,
-        },
-        {
-          id: "admin_tools",
-          group: "administracao",
-          label: m.admin_tab_tools(),
-          Component: ToolsPanel,
-        },
-        {
-          id: "admin_saferoots",
-          group: "administracao",
-          label: m.admin_tab_saferoots(),
-          Component: SafeRootsPanel,
-        },
-        {
-          id: "admin_system",
-          group: "administracao",
-          label: m.admin_tab_system(),
-          Component: SystemPanel,
-        },
-        {
-          id: "admin_storage",
-          group: "administracao",
-          label: m.admin_tab_storage(),
-          Component: StoragePanel,
-        },
-      ]
-    : [];
+  // Acesso às ferramentas é de todos: o admin define quem usa o quê, e os
+  // demais só podem remover o próprio acesso. O resto da Administração é só
+  // para admin.
+  const administracao: SettingsCategory[] = [
+    {
+      id: "tool_policy",
+      group: "administracao",
+      label: m.settings_category_tool_policy(),
+      Component: ToolPolicyPanel,
+    },
+    ...(isAdmin
+      ? ([
+          {
+            id: "admin_users",
+            group: "administracao",
+            label: m.admin_tab_users(),
+            Component: UsersPanel,
+          },
+          {
+            id: "admin_saferoots",
+            group: "administracao",
+            label: m.admin_tab_saferoots(),
+            Component: SafeRootsPanel,
+          },
+          {
+            id: "admin_system",
+            group: "administracao",
+            label: m.admin_tab_system(),
+            Component: SystemPanel,
+          },
+          {
+            id: "admin_storage",
+            group: "administracao",
+            label: m.admin_tab_storage(),
+            Component: StoragePanel,
+          },
+        ] as SettingsCategory[])
+      : []),
+  ];
 
   const groups: SettingsCategoryGroup[] = [
     {
@@ -325,7 +317,8 @@ export function buildSettingsCategoryGroups({
 /** Cobrança e Sobre agora são seções da aba Conta, Git faz parte de
  * Workbenches e as memórias vivem no workbench de Memória: os ids antigos
  * ficam como alias para não quebrar deep-links que ainda abrem
- * `openCategory("billing")`, `("about")`, `("git")` ou `("memoria")`. */
+ * `openCategory("billing")`, `("about")`, `("git")` ou `("memoria")`; a
+ * antiga "Ferramentas" da Administração agora é o Acesso às ferramentas. */
 const CATEGORY_ALIASES: Partial<
   Record<SettingsCategoryId, SettingsCategoryId>
 > = {
@@ -333,6 +326,7 @@ const CATEGORY_ALIASES: Partial<
   memoria: "geral",
   billing: "conta",
   git: "workbenches",
+  admin_tools: "tool_policy",
 };
 
 export function findCategory(
