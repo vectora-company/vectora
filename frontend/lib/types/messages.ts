@@ -45,6 +45,8 @@ export interface Message {
   // Thinking/streaming state
   isThinking?: boolean;
   thinkingSteps?: string[];
+  /** Texto do raciocínio que o provider devolveu; mostrado recolhido. */
+  reasoning?: string;
   thinkingStartTime?: number;
   thinkingDuration?: number;
 

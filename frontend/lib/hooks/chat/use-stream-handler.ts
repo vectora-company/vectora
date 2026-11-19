@@ -1320,6 +1320,16 @@ async function handleEvent(
       break;
     }
 
+    case "reasoning": {
+      setMessages((prev) =>
+        updateMessageInList(prev, assistantMessageId, (m) => ({
+          ...m,
+          reasoning: `${m.reasoning ?? ""}${event.content}`,
+        })),
+      );
+      break;
+    }
+
     case "turn_files_changed": {
       setMessages((prev) =>
         updateMessageInList(prev, assistantMessageId, (m) => ({

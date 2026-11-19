@@ -486,6 +486,37 @@
       "title": "RagCitationEvent",
       "type": "object"
     },
+    "ReasoningEvent": {
+      "description": "Fragmento de raciocínio do modelo, mostrado recolhido no chat.",
+      "properties": {
+        "content": {
+          "title": "Content",
+          "type": "string"
+        },
+        "event_id": {
+          "description": "Identidade do evento: <run_id>:<seq>.",
+          "title": "Event Id",
+          "type": "string"
+        },
+        "seq": {
+          "description": "Posição do evento no stream do run, a partir de 1.",
+          "minimum": 1,
+          "title": "Seq",
+          "type": "integer"
+        },
+        "type": {
+          "const": "reasoning",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "content",
+        "type"
+      ],
+      "title": "ReasoningEvent",
+      "type": "object"
+    },
     "StructuredQuestionEvent": {
       "description": "Pergunta aguardando uma resposta explícita do usuário no stream.",
       "properties": {
@@ -1211,6 +1242,9 @@
     },
     {
       "$ref": "#/$defs/TokenEvent"
+    },
+    {
+      "$ref": "#/$defs/ReasoningEvent"
     },
     {
       "$ref": "#/$defs/ToolCallEvent"

@@ -4701,6 +4701,11 @@
             ],
             "title": "Message Id"
           },
+          "reasoning": {
+            "default": "",
+            "title": "Reasoning",
+            "type": "string"
+          },
           "role": {
             "title": "Role",
             "type": "string"

@@ -355,6 +355,8 @@
   "chat_rag_sources": "{count} source(s)",
   "chat_rag_sources_one": "1 source",
   "chat_rag_sources_plural": "{count} sources",
+  "chat_reasoning_title": "Reasoning",
+  "chat_reasoning_toggle": "Show the model's reasoning",
   "chat_regenerate": "Regenerate",
   "chat_retry": "Try again",
   "chat_rewind": "Rewind to here",

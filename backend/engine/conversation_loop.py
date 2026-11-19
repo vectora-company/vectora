@@ -47,6 +47,7 @@ from backend.engine.stream_events import (
     MediaRouted,
     MessageBreak,
     MessageChunk,
+    ReasoningChunk,
     TodoItem,
     TodosUpdated,
     ToolActivity,
@@ -574,6 +575,7 @@ class LoopConfig:
     max_tokens: int | None = None
     loop_caps: LoopCapConfig = field(default_factory=LoopCapConfig)
     context_max_tokens: int | None = None
+    reasoning_effort: str | None = None
     context_compaction_enabled: bool = True
     run_id: str | None = None
     """Tetos de volume por turno (`backend/engine/guardrails.py`) —
@@ -733,7 +735,27 @@ def _drop_terminal_notices(history: list[VMessage]) -> list[VMessage]:
             and m.text().lstrip().startswith(_TERMINAL_NOTICE_PREFIXES)
         )
     ]
-    return _merge_consecutive_user_messages(kept)
+    return _merge_consecutive_user_messages(_strip_reasoning_blocks(kept))
+
+
+def _strip_reasoning_blocks(history: list[VMessage]) -> list[VMessage]:
+    """Tira o raciocínio persistido do que vai ao modelo.
+
+    O raciocínio guardado serve à UI; reenviá-lo gastaria tokens e, em alguns
+    provedores, exigiria a assinatura original do bloco.
+    """
+    cleaned: list[VMessage] = []
+    for message in history:
+        has_reasoning = any(block.kind == "reasoning" for block in message.content)
+        cleaned.append(
+            replace(
+                message,
+                content=[b for b in message.content if b.kind != "reasoning"],
+            )
+            if has_reasoning
+            else message
+        )
+    return cleaned
 
 
 def _merge_consecutive_user_messages(history: list[VMessage]) -> list[VMessage]:
@@ -970,6 +992,9 @@ async def run_conversation(  # noqa: PLR0911
     from backend.llm.prompt_cache import prompt_cache_key
 
     prompt_cache_key.set(thread_id)
+    from backend.llm.reasoning import reasoning_effort
+
+    reasoning_effort.set(config.reasoning_effort)
     if hasattr(session_store, "get_session") and not (
         isinstance(ctx._extra, dict) and ctx._extra.get("untrusted_content")
     ):
@@ -1233,6 +1258,7 @@ async def run_conversation(  # noqa: PLR0911
         chunk_count = 0
         text_chunk_count = 0
         reasoning_chars = 0
+        reasoning_parts: list[str] = []
         tool_chunk_count = 0
         finish_reasons: list[str] = []
 
@@ -1266,7 +1292,10 @@ async def run_conversation(  # noqa: PLR0911
                 partes_texto.append(chunk.delta_text)
                 await emit(MessageChunk(content=chunk.delta_text))
 
-            reasoning_chars += len(chunk.delta_reasoning or "")
+            if chunk.delta_reasoning:
+                reasoning_chars += len(chunk.delta_reasoning)
+                reasoning_parts.append(chunk.delta_reasoning)
+                await emit(ReasoningChunk(content=chunk.delta_reasoning))
             tool_chunk_count += len(chunk.tool_call_chunks)
 
             for tc_chunk in chunk.tool_call_chunks:
@@ -1426,9 +1455,14 @@ async def run_conversation(  # noqa: PLR0911
         tool_calls_for_history = [_sanitize_tool_call(tc, ctx) for tc in tool_calls]
         assistant_msg = VMessage(
             role=MessageRole.ASSISTANT,
-            content=[ContentBlock(kind="text", text=texto_final)]
-            if texto_final
-            else [],
+            content=[
+                *(
+                    [ContentBlock(kind="reasoning", reasoning_text=reasoning_text)]
+                    if (reasoning_text := "".join(reasoning_parts))
+                    else []
+                ),
+                *([ContentBlock(kind="text", text=texto_final)] if texto_final else []),
+            ],
             tool_calls=tool_calls_for_history,
             finish_reason="tool_calls" if tool_calls else "stop",
         )

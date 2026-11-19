@@ -103,6 +103,7 @@ export type StreamEvent =
       run_id?: string;
     }
   | { type: "token"; content: string; node?: string }
+  | { type: "reasoning"; content: string }
   | {
       type: "tool_call";
       tool_name: string;
@@ -324,6 +325,8 @@ export interface HistoryMessage {
   checkpoint_id?: string;
   attachments?: HistoryAttachment[];
   edited_files?: HistoryEditedFile[];
+  /** Raciocínio que o provider devolveu para esta mensagem. */
+  reasoning?: string;
   /** Falha persistida; `null` é estado desconhecido e não marca erro. */
   is_error?: boolean | null;
 }

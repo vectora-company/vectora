@@ -1002,6 +1002,15 @@ async def aget_thread_messages_with_files(
         for message_id, message in history_snapshot
     }
 
+    reasoning_by_id: dict[str, str] = {
+        str(message_id): "".join(
+            block.reasoning_text or ""
+            for block in message.content
+            if block.kind == "reasoning"
+        )
+        for message_id, message in history_snapshot
+    }
+
     pairs = _history_pairs_from_messages(thread_id, history_snapshot)
     return [
         ThreadHistoryEntry(
@@ -1010,6 +1019,7 @@ async def aget_thread_messages_with_files(
             checkpoint_id=item[2],
             message_id=int(item[2]) if item[2].isdigit() else None,
             is_error=error_by_id.get(item[2]),
+            reasoning=reasoning_by_id.get(item[2], ""),
             attachments=item[3],
             edited_files=files_for_checkpoint(item[2]),
         )

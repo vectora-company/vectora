@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING, Any
 from backend.llm.google.client import GoogleGenAIClient, GoogleGenAIResponseError
 from backend.llm.google.prompt_cache import apply_cached_content, invalidate
 from backend.llm.media_parts import prepare_content, split_data_url
+from backend.llm.reasoning import gemini_thinking_config, reasoning_effort
 from backend.vtypes.contracts import UsageSnapshot
 from backend.vtypes.message import (
     ContentBlock,
@@ -214,10 +215,19 @@ def _to_google_contents(messages: list[VMessage]) -> tuple[dict | None, list[dic
     return system, contents
 
 
+def _thought_text(parts: list) -> str:
+    """Texto dos pensamentos (``thought: true``) que o Gemini devolve."""
+    return "".join(
+        part.get("text", "") for part in parts or [] if part.get("thought") is True
+    )
+
+
 def _parse_candidate_parts(parts: list) -> tuple[str, list[ToolCall]]:
     texto_partes: list[str] = []
     chamadas: list[ToolCall] = []
     for parte in parts or []:
+        if parte.get("thought") is True:
+            continue
         if "text" in parte:
             texto_partes.append(parte["text"])
         elif "functionCall" in parte:
@@ -277,6 +287,9 @@ class GoogleChatClient:
             generation_config["temperature"] = temperature
         if max_tokens is not None:
             generation_config["maxOutputTokens"] = max_tokens
+        thinking = gemini_thinking_config(self.model, reasoning_effort.get())
+        if thinking is not None:
+            generation_config["thinkingConfig"] = thinking
         if generation_config:
             corpo["generationConfig"] = generation_config
         if tools:
@@ -375,6 +388,9 @@ class GoogleChatClient:
             parts = (candidato.get("content") or {}).get("parts") or []
             texto, chamadas = _parse_candidate_parts(parts)
 
+            thought = _thought_text(parts)
+            if thought:
+                yield VMessageChunk(delta_reasoning=thought)
             if texto:
                 yield VMessageChunk(delta_text=texto)
 

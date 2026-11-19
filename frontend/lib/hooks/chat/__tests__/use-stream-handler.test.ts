@@ -115,6 +115,25 @@ describe("useStreamHandler.processStream", () => {
     expect(assistant?.persistedMessageId).toBe(42);
   });
 
+  it("acumula os eventos reasoning na mensagem do assistente", async () => {
+    streamChatMock.mockReturnValue(
+      gen([
+        { type: "thread", thread_id: "t1" },
+        { type: "reasoning", content: "analiso " },
+        { type: "reasoning", content: "o pedido" },
+        { type: "token", content: "Pronto" },
+        { type: "done", thread_id: "t1", run_id: "run-1" },
+      ]),
+    );
+
+    const { result } = run();
+    await result.current.processStream("oi", "a1");
+
+    expect(messages.find((m) => m.id === "a1")?.reasoning).toBe(
+      "analiso o pedido",
+    );
+  });
+
   it("encerra o turno no done e anexa os arquivos editados que chegam depois", async () => {
     streamChatMock.mockReturnValue(turnWithLateFiles());
 

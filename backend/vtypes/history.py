@@ -35,5 +35,6 @@ class ThreadHistoryEntry(BaseModel):
     # intentionally distinct from ``False`` so a transient read failure never
     # masquerades as a known non-error message.
     is_error: bool | None = False
+    reasoning: str = ""
     attachments: list[dict[str, object]] = Field(default_factory=list)
     edited_files: list[HistoryEditedFile] = Field(default_factory=list)
