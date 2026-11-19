@@ -116,14 +116,10 @@ def _record_turn_telemetry[**RunArgs, RunResult](
             result = await function(*args, **kwargs)
             status = str(getattr(result, "stopped_reason", "ok"))
             return result
-        except asyncio.CancelledError as exc:
+        except asyncio.CancelledError:
             status = "cancelled"
-            telemetry.record_error(
-                "conversation_loop",
-                exc,
-                include_message=False,
-                turn_id=turn_id,
-                thread_id=thread_id,
+            telemetry.record_cancellation(
+                "conversation_loop", turn_id=turn_id, thread_id=thread_id
             )
             raise
         except Exception as exc:
@@ -183,6 +179,7 @@ async def _bind_decision_model_snapshot(
         "laya-local": settings.systemone_laya_model,
         "clef-api": settings.systemone_clef_api_model,
         "jev-api": settings.systemone_jev_api_model,
+        "openrouter-api": settings.systemone_openrouter_model,
     }
     runtime = {
         "preferences_revision": await asyncio.to_thread(

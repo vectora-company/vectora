@@ -17,7 +17,9 @@ import {
   getModelProvider,
 } from "@/lib/config/deployment-config";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import {
+  SettingsPageNav,
   SettingsSection,
   SettingsStack,
   SettingsTabHeader,
@@ -25,6 +27,7 @@ import {
   settingsLabelClass,
   settingsOptionClass,
   settingsRowClass,
+  settingsScrollListClass,
 } from "@/components/settings/primitives";
 import { cn } from "@/lib/utils";
 import { useRagSettings } from "@/components/workbench/rag-settings-panel";
@@ -146,7 +149,7 @@ function CapabilityModelList({
         </p>
       ) : options.length ? (
         <div
-          className={`grid gap-2 md:grid-cols-2 xl:grid-cols-3 ${options.length > 6 ? "max-h-[26rem] overflow-y-auto pr-1" : ""}`}
+          className={`grid gap-2 md:grid-cols-2 xl:grid-cols-3 ${options.length > 6 ? settingsScrollListClass : ""}`}
         >
           {options.map((model) => (
             <div key={model.id} className={cn(settingsRowClass, "min-w-0")}>
@@ -178,14 +181,6 @@ function CapabilityModelList({
     </SettingsSection>
   );
 }
-
-const DECISION_PROVIDERS: Array<{ id: DecisionModelProvider; label: string }> =
-  [
-    { id: "clef-local", label: "ai_models_provider_clef_local" },
-    { id: "laya-local", label: "ai_models_provider_laya_local" },
-    { id: "clef-api", label: "ai_models_provider_clef_api" },
-    { id: "jev-api", label: "ai_models_provider_jev_api" },
-  ];
 
 const DECISION_SURFACES = [
   ["hitl", "ai_models_surface_hitl"],
@@ -224,6 +219,7 @@ interface SystemOneConfig {
   jev_api_base_url: string;
   jev_api_model: string;
   jev_api_key_configured: boolean;
+  openrouter_model: string;
   allow_remote_fallback: boolean;
   confidence_threshold_hitl: number;
   risk_assessment_timeout_s: number;
@@ -319,6 +315,11 @@ export function SystemOneConfiguration() {
         : selected === "jev-api"
           ? "jev_api_key"
           : null;
+  // Nas APIs o modelo vem do catálogo; só os servidores locais pedem o nome
+  // do modelo carregado.
+  const isRouter = selected === "openrouter-api";
+  const isApiProvider =
+    selected === "clef-api" || selected === "jev-api" || isRouter;
   const accountKey = selected === "clef-api" ? "clef_account_id" : null;
   const accountValue = selected === "clef-api" ? config.clef_account_id : "";
   const baseUrl = config[baseUrlKey as keyof SystemOneConfig] as string;
@@ -330,54 +331,34 @@ export function SystemOneConfiguration() {
       title={mDyn("ai_models_systemone_runtime_credentials")}
       description={mDyn("ai_models_systemone_config_description")}
     >
-      <label className={settingsOptionClass}>
-        <input
-          type="checkbox"
-          checked={config.enabled}
-          onChange={(event) => void save({ enabled: event.target.checked })}
-        />
-        {mDyn("ai_models_systemone_enable_runtime")}
-      </label>
-      <label className={settingsLabelClass}>
-        {mDyn("ai_models_systemone_default_provider")}
-        <div className="flex items-center gap-2">
-          <ProviderIcon
-            provider={config.provider}
-            className="size-4 shrink-0 text-muted-foreground"
+      {isRouter ? (
+        <p className="text-xs text-muted-foreground">
+          {m.ai_models_openrouter_decision_hint()}
+        </p>
+      ) : (
+        <label className={settingsLabelClass}>
+          {mDyn("ai_models_base_url")}
+          <input
+            className={cn(settingsInputClass)}
+            value={baseUrl}
+            onChange={(event) =>
+              setConfig({ ...config, [baseUrlKey]: event.target.value })
+            }
           />
-          <select
-            className={cn(settingsInputClass, "min-w-0 flex-1")}
-            value={config.provider}
-            onChange={(event) => void save({ provider: event.target.value })}
-          >
-            {DECISION_PROVIDERS.map((item) => (
-              <option key={item.id} value={item.id}>
-                {mDyn(item.label)}
-              </option>
-            ))}
-          </select>
-        </div>
-      </label>
-      <label className={settingsLabelClass}>
-        {mDyn("ai_models_base_url")}
-        <input
-          className={cn(settingsInputClass)}
-          value={baseUrl}
-          onChange={(event) =>
-            setConfig({ ...config, [baseUrlKey]: event.target.value })
-          }
-        />
-      </label>
-      <label className={settingsLabelClass}>
-        {mDyn("ai_models_model")}
-        <input
-          className={cn(settingsInputClass)}
-          value={model}
-          onChange={(event) =>
-            setConfig({ ...config, [modelKey]: event.target.value })
-          }
-        />
-      </label>
+        </label>
+      )}
+      {!isApiProvider && (
+        <label className={settingsLabelClass}>
+          {mDyn("ai_models_model")}
+          <input
+            className={cn(settingsInputClass)}
+            value={model}
+            onChange={(event) =>
+              setConfig({ ...config, [modelKey]: event.target.value })
+            }
+          />
+        </label>
+      )}
       {accountKey && (
         <label className={settingsLabelClass}>
           {mDyn("ai_models_cloudflare_account_id")}
@@ -462,8 +443,8 @@ export function SystemOneConfiguration() {
         }
         onClick={() =>
           void save({
-            [baseUrlKey]: baseUrl,
-            [modelKey]: model,
+            ...(isRouter ? {} : { [baseUrlKey]: baseUrl }),
+            ...(isApiProvider ? {} : { [modelKey]: model }),
             ...(accountKey ? { [accountKey]: accountValue } : {}),
             ...(credentialKey && secret ? { [credentialKey]: secret } : {}),
             confidence_threshold_hitl: config.confidence_threshold_hitl,
@@ -483,6 +464,46 @@ export function SystemOneConfiguration() {
   );
 }
 
+interface CatalogTransport {
+  id: string;
+  label: string;
+  kind: "local" | "api" | "router";
+  provider: DecisionModelProvider | null;
+  model_id: string | null;
+  supported: boolean;
+}
+
+interface DecisionCatalogModel {
+  id: string;
+  family: string;
+  label: string;
+  transports: CatalogTransport[];
+}
+
+const FAMILY_ICON: Record<string, string> = {
+  jev: "jev-api",
+  clef: "clef-local",
+  laya: "laya-local",
+  gemini: "google-genai",
+  openai: "openai",
+};
+
+const API_MODEL_KEY: Partial<Record<DecisionModelProvider, string>> = {
+  "clef-api": "clef_api_model",
+  "jev-api": "jev_api_model",
+  "openrouter-api": "openrouter_model",
+};
+
+function isTransportActive(
+  transport: CatalogTransport,
+  provider: DecisionModelProvider,
+  apiModels: Record<string, string>,
+): boolean {
+  if (!transport.provider || transport.provider !== provider) return false;
+  const key = API_MODEL_KEY[transport.provider];
+  return !key || !transport.model_id || apiModels[key] === transport.model_id;
+}
+
 function DecisionModelsSection() {
   const workspaceId = useWorkspacesStore((state) => state.active_id);
   const enabled = useSettingsStore((state) => state.decisionModelsEnabled);
@@ -499,6 +520,9 @@ function DecisionModelsSection() {
   );
   const [status, setStatus] = useState<DecisionStatus | null>(null);
   const [statusError, setStatusError] = useState(false);
+  const [catalog, setCatalog] = useState<DecisionCatalogModel[]>([]);
+  const [apiModels, setApiModels] = useState<Record<string, string>>({});
+  const [configVersion, setConfigVersion] = useState(0);
 
   useEffect(() => {
     void hydrateDecisionModelPreferences(workspaceId);
@@ -506,6 +530,39 @@ function DecisionModelsSection() {
 
   useEffect(() => {
     let active = true;
+    void fetch("/provider-routing/decision-models/catalog")
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return (await response.json()) as { models: DecisionCatalogModel[] };
+      })
+      .then((value) => {
+        if (active) setCatalog(value.models);
+      })
+      .catch(() => {
+        if (active) setCatalog([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const loadApiModels = useCallback(() => {
+    void fetch("/provider-routing/decision-models/status")
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return (await response.json()) as SystemOneConfig;
+      })
+      .then((value) =>
+        setApiModels({
+          clef_api_model: value.clef_api_model,
+          jev_api_model: value.jev_api_model,
+          openrouter_model: value.openrouter_model,
+        }),
+      )
+      .catch(() => {});
+  }, []);
+
+  const loadReadiness = useCallback(() => {
     void fetch(
       `/provider-routing/decision-models/readiness?provider=${encodeURIComponent(provider)}`,
     )
@@ -514,19 +571,50 @@ function DecisionModelsSection() {
         return (await response.json()) as DecisionStatus;
       })
       .then((value) => {
-        if (active) setStatus(value);
+        setStatus(value);
+        setStatusError(false);
       })
-      .catch(() => {
-        if (active) setStatusError(true);
-      });
-    return () => {
-      active = false;
-    };
+      .catch(() => setStatusError(true));
   }, [provider]);
 
-  const activeProvider = DECISION_PROVIDERS.find(
-    (item) => item.id === provider,
-  );
+  useEffect(() => {
+    loadApiModels();
+  }, [loadApiModels]);
+
+  useEffect(() => {
+    loadReadiness();
+  }, [loadReadiness]);
+
+  async function saveRuntime(changes: Record<string, unknown>) {
+    try {
+      await fetch("/provider-routing/decision-models/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(changes),
+      });
+    } finally {
+      loadApiModels();
+      loadReadiness();
+      setConfigVersion((value) => value + 1);
+    }
+  }
+
+  function choose(transport: CatalogTransport) {
+    if (!transport.provider) return;
+    setProvider(transport.provider);
+    const key = API_MODEL_KEY[transport.provider];
+    void saveRuntime({
+      provider: transport.provider,
+      ...(key && transport.model_id ? { [key]: transport.model_id } : {}),
+    });
+  }
+
+  function toggleEnabled() {
+    const next = !enabled;
+    setEnabled(next);
+    void saveRuntime({ enabled: next });
+  }
+
   const readiness = !enabled
     ? m.decision_models_readiness_no_guardrail()
     : statusError
@@ -542,50 +630,56 @@ function DecisionModelsSection() {
       aria-label={mDyn("ai_models_decision_models")}
       title={mDyn("ai_models_decision_models")}
       description={mDyn("ai_models_decision_models_description")}
+      actions={
+        <Switch
+          checked={enabled}
+          onCheckedChange={toggleEnabled}
+          aria-label={mDyn("ai_models_decision_models")}
+        />
+      }
     >
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-sm text-muted-foreground">
-          {mDyn("ai_models_decision_models")}:{" "}
-          {enabled ? mDyn("ai_models_enabled") : mDyn("ai_models_disabled")}
-        </span>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => setEnabled(!enabled)}
-        >
-          {enabled
-            ? mDyn("ai_models_disable_decision_models")
-            : mDyn("ai_models_enable_decision_models")}
-        </Button>
-      </div>
-      <div className={settingsRowClass}>
-        <span className="flex min-w-0 items-center gap-2 truncate text-sm">
-          <ProviderIcon provider={provider} className="size-4 shrink-0" />
-          {status?.model ||
-            (activeProvider ? mDyn(activeProvider.label) : provider)}
-        </span>
-        <span className="text-sm font-medium">
-          {m.provider_routing_already_registered()}
-        </span>
-      </div>
-      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-        {DECISION_PROVIDERS.filter((item) => item.id !== provider).map(
-          (item) => (
-            <div key={item.id} className={cn(settingsRowClass, "min-w-0")}>
-              <span className="flex min-w-0 items-center gap-2 truncate text-sm">
-                <ProviderIcon provider={item.id} className="size-4 shrink-0" />
-                {mDyn(item.label)}
-              </span>
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => setProvider(item.id)}
-              >
-                {m.provider_routing_register()}
-              </Button>
+      <div className={cn("space-y-2", settingsScrollListClass)}>
+        {catalog.map((model) => (
+          <div
+            key={model.id}
+            className={cn(settingsRowClass, "flex-wrap gap-y-2")}
+          >
+            <span className="flex min-w-0 items-center gap-2 text-sm">
+              <ProviderIcon
+                provider={FAMILY_ICON[model.family] ?? model.family}
+                className="size-4 shrink-0"
+              />
+              {model.label}
+            </span>
+            <div className="flex flex-wrap justify-end gap-1.5">
+              {model.transports.map((transport) => {
+                const active = isTransportActive(
+                  transport,
+                  provider,
+                  apiModels,
+                );
+                return (
+                  <Button
+                    key={transport.id}
+                    type="button"
+                    size="sm"
+                    variant={active ? "default" : "outline"}
+                    disabled={!transport.supported}
+                    aria-pressed={active}
+                    title={
+                      transport.supported
+                        ? undefined
+                        : m.ai_models_decision_transport_unavailable()
+                    }
+                    onClick={() => choose(transport)}
+                  >
+                    {transport.label}
+                  </Button>
+                );
+              })}
             </div>
-          ),
-        )}
+          </div>
+        ))}
       </div>
       <p role="status" className="text-xs text-muted-foreground">
         {readiness}
@@ -609,7 +703,7 @@ function DecisionModelsSection() {
           ))}
         </div>
       </fieldset>
-      <SystemOneConfiguration />
+      <SystemOneConfiguration key={configVersion} />
     </SettingsSection>
   );
 }
@@ -1091,7 +1185,7 @@ export function ChatModelSettings() {
         </span>
       </div>
       <div
-        className={`grid gap-2 md:grid-cols-2 xl:grid-cols-3 ${registerable.length > 6 ? "max-h-[26rem] overflow-y-auto pr-1" : ""}`}
+        className={`grid gap-2 md:grid-cols-2 xl:grid-cols-3 ${registerable.length > 6 ? settingsScrollListClass : ""}`}
       >
         {registerable.map((model) => (
           <div key={model} className={cn(settingsRowClass, "min-w-0")}>
@@ -1119,6 +1213,7 @@ export function AiModelsTab() {
         title={m.settings_category_ai_models()}
         description={m.ai_models_description()}
       />
+      <SettingsPageNav />
       <ChatModelSettings />
       <DecisionModelsSection />
       <SettingsSection

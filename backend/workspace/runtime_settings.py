@@ -603,6 +603,7 @@ class RuntimeSettings:
                 "laya-local",
                 "clef-api",
                 "jev-api",
+                "openrouter-api",
             }
         ):
             allowed.pop("decisionModelProvider")

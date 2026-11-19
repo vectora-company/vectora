@@ -61,6 +61,8 @@ class DecisionPolicyEngine:
             return self._settings.clef_api_model
         if provider_id == "jev-api":
             return self._settings.jev_api_model
+        if provider_id == "openrouter-api":
+            return self._settings.openrouter_model
         return None
 
     def evaluate_response(  # noqa: PLR0911 - each policy violation has a distinct terminal reason

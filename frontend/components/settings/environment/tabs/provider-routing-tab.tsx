@@ -29,10 +29,12 @@ import { mDyn } from "@/lib/i18n-dyn";
 import type { VectoraDmrOperation } from "@/lib/types/vectora-bridge";
 import {
   SettingsMessage,
+  SettingsPageNav,
   SettingsSectionHeader,
   SettingsStack,
   SettingsStatus,
   settingsRowClass,
+  settingsScrollListClass,
   settingsSectionClass,
 } from "@/components/settings/primitives";
 import { cn } from "@/lib/utils";
@@ -107,6 +109,8 @@ interface NineRouterStatus {
 interface NineRouterModelInfo {
   id: string;
   name: string;
+  /** Provider de origem informado pelo roteador (`owned_by`). */
+  provider?: string;
 }
 
 interface LlamaCppModelInfo {
@@ -1875,7 +1879,7 @@ function RegisteredModelsList({
         </p>
       ) : (
         <div
-          className={`space-y-1.5 ${registered.length > 6 ? "max-h-[26rem] overflow-y-auto pr-1" : ""}`}
+          className={`space-y-1.5 ${registered.length > 6 ? settingsScrollListClass : ""}`}
         >
           {registered.map((model) => (
             <div key={model.id} className={settingsRowClass}>
@@ -2331,7 +2335,7 @@ function OllamaSection() {
             </p>
           )}
         {filteredDiscovered && filteredDiscovered.length > 0 && (
-          <div className="space-y-1.5">
+          <div className={cn("space-y-1.5", settingsScrollListClass)}>
             {filteredDiscovered.map((model) => {
               const already = registeredTags.has(model.name);
               return (
@@ -2915,13 +2919,20 @@ function NineRouterSection() {
                   {m.provider_routing_nine_router_search_empty()}
                 </p>
               ) : (
-                <div className="space-y-1.5">
+                <div className={cn("space-y-1.5", settingsScrollListClass)}>
                   {(filteredDiscovered ?? discovered).map((model) => {
                     const already = registeredTags.has(model.id);
                     return (
                       <div key={model.id} className={settingsRowClass}>
-                        <span className="text-sm font-mono truncate">
-                          {model.id}
+                        <span className="flex min-w-0 items-center gap-2">
+                          <span className="truncate font-mono text-sm">
+                            {model.id}
+                          </span>
+                          {model.provider ? (
+                            <SettingsStatus className="shrink-0">
+                              {model.provider}
+                            </SettingsStatus>
+                          ) : null}
                         </span>
                         <Button
                           variant="ghost"
@@ -2972,7 +2983,29 @@ function NineRouterSection() {
  * não desliga a capacidade. */
 export function MediaModelsSection() {
   const [models, setModels] = useState<Record<string, string>>({});
+  const [speechModels, setSpeechModels] = useState<
+    Array<{ id: string; name: string; voices: string[] }>
+  >([]);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      try {
+        const res = await fetch("/admin/speech-models");
+        if (!res.ok || !alive) return;
+        const data = (await res.json()) as {
+          models?: Array<{ id: string; name: string; voices: string[] }>;
+        };
+        if (alive) setSpeechModels(data.models ?? []);
+      } catch {
+        if (alive) setSpeechModels([]);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -3047,6 +3080,11 @@ export function MediaModelsSection() {
             className="w-[240px]"
             value={models[key] ?? ""}
             autoComplete="off"
+            list={
+              key === "openrouter_tts_model"
+                ? "openrouter-speech-models"
+                : undefined
+            }
             onChange={(e) =>
               setModels((prev) => ({ ...prev, [key]: e.target.value }))
             }
@@ -3054,6 +3092,13 @@ export function MediaModelsSection() {
           />
         </div>
       ))}
+      <datalist id="openrouter-speech-models">
+        {speechModels.map((model) => (
+          <option key={model.id} value={model.id}>
+            {model.name}
+          </option>
+        ))}
+      </datalist>
       {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
   );
@@ -3466,7 +3511,7 @@ function LlamaCppSection() {
       <div
         className={
           filteredModels.length > 6
-            ? "max-h-[26rem] space-y-2 overflow-y-auto pr-1"
+            ? cn("space-y-2", settingsScrollListClass)
             : "space-y-2"
         }
       >
@@ -3529,6 +3574,7 @@ function LlamaCppSection() {
 export function ProviderRoutingTab() {
   return (
     <SettingsStack>
+      <SettingsPageNav />
       <LlamaCppSection />
       <OllamaSection />
       <DmrSection />

@@ -159,9 +159,9 @@ describe("SettingsOverlay — busca por categoria", () => {
   it("filtra o rail pelo texto digitado", async () => {
     await montar();
     fireEvent.change(screen.getByPlaceholderText("Buscar categoria…"), {
-      target: { value: "mem" },
+      target: { value: "sandb" },
     });
-    expect(screen.getByText("Memória")).toBeInTheDocument();
+    expect(screen.getByText("Sandbox")).toBeInTheDocument();
     expect(screen.queryByText("Fallbacks")).not.toBeInTheDocument();
   });
 

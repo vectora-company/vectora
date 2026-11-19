@@ -4687,6 +4687,8 @@ class NineRouterModelInfo(BaseModel):
     id: str
     name: str
     input_modalities: list[str] = []
+    #: Provider de origem informado pelo roteador (`owned_by`), quando houver.
+    provider: str = ""
 
 
 class NineRouterCatalogResponse(BaseModel):
@@ -4764,15 +4766,20 @@ async def discover_nine_router_models(
         return NineRouterCatalogResponse(reachable=False, models=[])
 
     try:
+        # `kind=chat` é um filtro do OmniRoute; roteadores que o ignoram
+        # devolvem tudo e o filtro por `type` abaixo cobre esse caso.
         resp = await client.get(
             f"{base_url.rstrip('/')}/models",
             headers={"Authorization": f"Bearer {api_key}"},
+            params={"kind": "chat"},
         )
         resp.raise_for_status()
         data = resp.json()
-    except Exception:
+    except Exception as exc:
         logger.info(
-            "provider_routing: 9Router em %s inacessível", base_url, exc_info=True
+            "provider_routing: 9Router em %s inacessível (%s)",
+            base_url,
+            type(exc).__name__,
         )
         return NineRouterCatalogResponse(reachable=False, models=[])
 
@@ -4785,9 +4792,12 @@ async def discover_nine_router_models(
                 or m.get("input_modalities")
                 or []
             ),
+            provider=str(m.get("owned_by") or ""),
         )
         for m in data.get("data", [])
-        if m.get("id")
+        # Sem `type` o modelo é de chat; imagem, áudio, embedding, rerank,
+        # moderação, vídeo e música não entram na lista de modelos de chat.
+        if m.get("id") and (m.get("type") or "chat") == "chat"
     ]
     return NineRouterCatalogResponse(reachable=True, models=models)
 
@@ -4927,6 +4937,8 @@ class SystemOneStatusResponse(BaseModel):
     jev_api_model: str
     jev_api_key_configured: bool
     jev_api_key_masked: str | None
+    openrouter_model: str
+    openrouter_key_configured: bool
     allow_remote_fallback: bool
     confidence_threshold_hitl: float
     risk_assessment_timeout_s: float
@@ -4950,9 +4962,22 @@ class UpdateSystemOneConfigRequest(BaseModel):
     jev_api_base_url: str | None = None
     jev_api_model: str | None = None
     jev_api_key: str | None = None
+    openrouter_model: str | None = None
     allow_remote_fallback: bool | None = None
     confidence_threshold_hitl: float | None = Field(default=None, ge=0.0, le=1.0)
     risk_assessment_timeout_s: float | None = Field(default=None, gt=0.0, le=120.0)
+
+
+@router.get("/decision-models/catalog")
+async def get_decision_models_catalog() -> dict[str, object]:
+    """Modelos de decisão conhecidos e os providers que cada um aceita."""
+    from backend.llm.systemone.catalog import live_decision_catalog
+
+    catalog = (await live_decision_catalog()).model_dump()
+    for model in catalog["models"]:
+        for transport in model["transports"]:
+            transport["supported"] = transport["provider"] is not None
+    return catalog
 
 
 @router.get("/decision-models/status")
@@ -4976,6 +5001,7 @@ async def get_decision_models_status(
             clef_api_model=settings.systemone_clef_api_model,
             jev_api_base_url=settings.systemone_jev_api_base_url,
             jev_api_model=settings.systemone_jev_api_model,
+            openrouter_model=settings.systemone_openrouter_model,
             allow_remote_fallback=settings.systemone_allow_remote_fallback,
             confidence_threshold_hitl=settings.systemone_confidence_threshold_hitl,
             risk_assessment_timeout_s=settings.systemone_risk_assessment_timeout_s,
@@ -4993,6 +5019,7 @@ async def get_decision_models_status(
             sys_settings,
             clef_api_key=settings.clef_api_key,
             jev_api_key=settings.jev_api_key,
+            openrouter_api_key=settings.openrouter_api_key,
         )
         caps = await prov.capabilities()
         is_healthy = await prov.health()
@@ -5007,13 +5034,20 @@ async def get_decision_models_status(
     # selected provider, whose health probe ran above; non-selected providers
     # stay explicitly non-ready instead of being presented as live.
     capability_matrix: list[ProviderCapability] = []
-    for provider_name in ("clef-local", "laya-local", "clef-api", "jev-api"):
+    for provider_name in (
+        "clef-local",
+        "laya-local",
+        "clef-api",
+        "jev-api",
+        "openrouter-api",
+    ):
         provider_settings = sys_settings.model_copy(update={"provider": provider_name})
         model_name = {
             "clef-local": sys_settings.local_model,
             "laya-local": sys_settings.laya_model,
             "clef-api": sys_settings.clef_api_model,
             "jev-api": sys_settings.jev_api_model,
+            "openrouter-api": sys_settings.openrouter_model,
         }[provider_name].strip() or "unconfigured"
         try:
             # Capabilities are declarative and must remain visible even when
@@ -5034,6 +5068,7 @@ async def get_decision_models_status(
                     provider_settings,
                     clef_api_key=settings.clef_api_key,
                     jev_api_key=settings.jev_api_key,
+                    openrouter_api_key=settings.openrouter_api_key,
                 )
                 discovered = True
             provider_caps = await provider.capabilities()
@@ -5098,6 +5133,10 @@ async def get_decision_models_status(
         jev_api_model=settings.systemone_jev_api_model,
         jev_api_key_configured=bool(settings.jev_api_key),
         jev_api_key_masked=None,
+        openrouter_model=settings.systemone_openrouter_model,
+        openrouter_key_configured=bool(
+            settings.openrouter_api_key or os.getenv("OPENROUTER_API_KEY")
+        ),
         allow_remote_fallback=settings.systemone_allow_remote_fallback,
         confidence_threshold_hitl=settings.systemone_confidence_threshold_hitl,
         risk_assessment_timeout_s=settings.systemone_risk_assessment_timeout_s,
@@ -5121,7 +5160,9 @@ class DecisionModelReadinessResponse(BaseModel):
 
 @router.get("/decision-models/readiness", response_model=DecisionModelReadinessResponse)
 async def get_decision_model_readiness(
-    provider: Literal["clef-local", "laya-local", "clef-api", "jev-api"],
+    provider: Literal[
+        "clef-local", "laya-local", "clef-api", "jev-api", "openrouter-api"
+    ],
 ) -> DecisionModelReadinessResponse:
     """Probe only the selected provider and return no secret or admin settings."""
     from backend.settings import settings
@@ -5141,7 +5182,11 @@ async def get_decision_model_readiness(
         "laya-local": getattr(settings, "systemone_laya_model", ""),
         "clef-api": getattr(settings, "systemone_clef_api_model", ""),
         "jev-api": getattr(settings, "systemone_jev_api_model", ""),
+        "openrouter-api": getattr(settings, "systemone_openrouter_model", ""),
     }
+    openrouter_api_key = getattr(settings, "openrouter_api_key", None) or os.getenv(
+        "OPENROUTER_API_KEY", ""
+    )
     model = models[provider]
     credential_valid: bool | None = True
     if provider == "clef-api":
@@ -5149,6 +5194,8 @@ async def get_decision_model_readiness(
         credential_valid = None if clef_api_key else False
     elif provider == "jev-api":
         credential_valid = None if jev_api_key else False
+    elif provider == "openrouter-api":
+        credential_valid = None if openrouter_api_key else False
     elif provider == "laya-local":
         configured = configured and bool(
             settings.systemone_laya_base_url and settings.systemone_laya_model
@@ -5193,6 +5240,7 @@ async def get_decision_model_readiness(
             clef_api_model=settings.systemone_clef_api_model,
             jev_api_base_url=settings.systemone_jev_api_base_url,
             jev_api_model=settings.systemone_jev_api_model,
+            openrouter_model=settings.systemone_openrouter_model,
             allow_remote_fallback=False,
             confidence_threshold_hitl=settings.systemone_confidence_threshold_hitl,
             risk_assessment_timeout_s=settings.systemone_risk_assessment_timeout_s,
@@ -5201,6 +5249,7 @@ async def get_decision_model_readiness(
             provider_settings,
             clef_api_key=clef_api_key,
             jev_api_key=jev_api_key,
+            openrouter_api_key=openrouter_api_key,
         )
         await adapter.capabilities()
         healthy = await adapter.health()
@@ -5217,7 +5266,7 @@ async def get_decision_model_readiness(
         healthy = False
         diagnostic = f"provider indisponível ({type(exc).__name__})"
     else:
-        if provider in {"clef-api", "jev-api"} and healthy:
+        if provider in {"clef-api", "jev-api", "openrouter-api"} and healthy:
             credential_valid = True
         diagnostic = None if healthy else "provider não saudável"
 
@@ -5269,6 +5318,8 @@ async def update_decision_models_config(
         settings.systemone_jev_api_model = body.jev_api_model
     if body.jev_api_key is not None:
         settings.jev_api_key = body.jev_api_key if body.jev_api_key.strip() else None
+    if body.openrouter_model is not None and body.openrouter_model.strip():
+        settings.systemone_openrouter_model = body.openrouter_model.strip()
     if body.allow_remote_fallback is not None:
         settings.systemone_allow_remote_fallback = body.allow_remote_fallback
     if body.confidence_threshold_hitl is not None:
@@ -5310,6 +5361,9 @@ async def update_decision_models_config(
         else None,
         "SYSTEMONE_JEV_API_MODEL": settings.systemone_jev_api_model
         if body.jev_api_model is not None
+        else None,
+        "SYSTEMONE_OPENROUTER_MODEL": settings.systemone_openrouter_model
+        if body.openrouter_model is not None
         else None,
         "SYSTEMONE_ALLOW_REMOTE_FALLBACK": str(
             settings.systemone_allow_remote_fallback
