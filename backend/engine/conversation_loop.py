@@ -535,6 +535,7 @@ if TYPE_CHECKING:
     from backend.engine.stream_events import EventSink
     from backend.llm.base import ChatClient
     from backend.persistence.native.session_store import SessionStore
+    from backend.services.context_planner import PlannedContext
     from backend.services.policy_compiler import PolicySnapshot
     from backend.tools.context import ToolContext
     from backend.tools.registry import ToolRegistry
@@ -731,6 +732,30 @@ def _merge_consecutive_user_messages(history: list[VMessage]) -> list[VMessage]:
             continue
         merged.append(m)
     return merged
+
+
+async def _with_llm_summary(
+    planned: PlannedContext, raw_history: list[VMessage], thread_id: str
+) -> PlannedContext:
+    """Troca o marcador de compactação por um resumo do que foi descartado."""
+    from backend.services import context_summary
+    from backend.settings import settings
+
+    if not settings.context_summary_enabled:
+        return planned
+    if not any(context_summary.is_compaction_marker(m) for m in planned.messages):
+        return planned
+    try:
+        dropped = context_summary.dropped_messages(raw_history, planned.messages)
+        summary = await context_summary.summarize_dropped(thread_id, dropped)
+        if not summary:
+            return planned
+        return replace(
+            planned, messages=context_summary.with_summary(planned.messages, summary)
+        )
+    except Exception:
+        logger.warning("conversation_loop: resumo de contexto falhou", exc_info=True)
+        return planned
 
 
 def _default_context_tokens() -> int:
@@ -1109,6 +1134,9 @@ async def run_conversation(  # noqa: PLR0911
             policy_snapshot=policy_snapshot,
             persistent_memory_records=await _load_persistent_context_memories(ctx),
             model=str(ctx.model) if ctx.model else None,
+        )
+        planned_context = await _with_llm_summary(
+            planned_context, raw_history, thread_id
         )
         from backend.services.media_hydration import hydrate_media_blocks
 
