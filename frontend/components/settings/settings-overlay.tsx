@@ -32,6 +32,8 @@ import {
   firstAvailableCategory,
 } from "./settings-categories";
 import { m } from "@/lib/paraglide/messages";
+import { useExtensionsStore } from "@/lib/stores/extensions-store";
+import { contributionsOfKind } from "@/lib/extensions/registry";
 
 //: Abaixo desta largura o rail vira dropdown — mesmo espírito do
 //: `47.5rem` do Hermes, ajustado ao conteúdo real deste rail (menos
@@ -57,13 +59,19 @@ export function SettingsOverlay() {
   const [containerRef, containerWidth] = useElementWidth<HTMLDivElement>();
 
   const isAdmin = user?.role === "root" || user?.role === "admin";
+  const contributions = useExtensionsStore((state) => state.contributions);
+  const extensionPages = useMemo(
+    () => contributionsOfKind(contributions, "settings_page"),
+    [contributions],
+  );
   const groups = useMemo(
     () =>
       buildSettingsCategoryGroups({
         connectEnabled: enableFeaturesBeta,
         isAdmin,
+        extensionPages,
       }),
-    [enableFeaturesBeta, isAdmin],
+    [enableFeaturesBeta, isAdmin, extensionPages],
   );
 
   const effectiveCategoryId =

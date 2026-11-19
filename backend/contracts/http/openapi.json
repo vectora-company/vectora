@@ -1793,6 +1793,18 @@
       "Contribution": {
         "description": "Contribuição de interface declarada por uma extensão.\n\nA declaração só descreve o que a extensão quer mostrar; o host decide se\naceita, ordena e ativa. Nenhuma contribuição carrega código para dentro do\nprocesso da aplicação.",
         "properties": {
+          "entry": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entry"
+          },
           "file_extensions": {
             "items": {
               "type": "string"
@@ -17951,6 +17963,56 @@
           }
         },
         "summary": "Rollback Extension",
+        "tags": [
+          "extensions"
+        ]
+      }
+    },
+    "/extensions/{extension_id}/ui/{path}": {
+      "get": {
+        "description": "Serve um arquivo da pasta ``ui/`` de uma extensão ativa.",
+        "operationId": "extension_ui_file_extensions__extension_id__ui__path__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "extension_id",
+            "required": true,
+            "schema": {
+              "title": "Extension Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "title": "Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Extension Ui File",
         "tags": [
           "extensions"
         ]

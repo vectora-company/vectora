@@ -22,6 +22,7 @@ import {
 import { IdeModeLayout } from "@/components/layout/ide-mode-layout";
 import { CenterCanvas } from "@/components/layout/center-canvas";
 import { getModeComposition } from "@/components/layout/mode-composition";
+import { ExtensionModeSurface } from "@/components/extensions/extension-mode-surface";
 import { ThreeColumnShell } from "@/components/layout/three-column-shell";
 import { LicenseBanner } from "@/components/layout/license-banner";
 import { m } from "@/lib/paraglide/messages";
@@ -1129,6 +1130,7 @@ function SessionPage() {
       <LicenseBanner fullWidth onBlockingChange={setInputLocked} />
 
       <div className="relative flex flex-1 min-h-0 overflow-hidden">
+        <ExtensionModeSurface />
         <Sheet open={isMobileSidebarOpen} onOpenChange={setIsMobileSidebarOpen}>
           <SheetContent
             side={sidebarOnRight ? "right" : "left"}

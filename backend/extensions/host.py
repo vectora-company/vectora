@@ -38,6 +38,7 @@ _MAX_BUNDLE_BYTES: Final = 200 * 1024 * 1024
 _MAX_ARGUMENT_BYTES: Final = 256 * 1024
 _STARTUP_TIMEOUT_S: Final = 30.0
 _CALL_TIMEOUT_S: Final = 60.0
+_MAX_UI_FILE_BYTES: Final = 5 * 1024 * 1024
 
 
 class ExtensionError(Exception):
@@ -290,6 +291,19 @@ class ExtensionHost:
     # ------------------------------------------------------------------
     # Supervisão e broker
     # ------------------------------------------------------------------
+
+    def ui_file(self, extension_id: str, relative: str) -> Path:
+        """Arquivo da pasta ``ui/`` de uma extensão ativa, sem sair dela."""
+        record = self.get(extension_id)
+        if record.state is not ExtensionState.ACTIVE:
+            raise ExtensionError("not_active", "A extensão não está ativa.")
+        root = (Path(record.current.install_path) / "ui").resolve()
+        target = (root / relative).resolve()
+        if root not in target.parents or target.is_symlink() or not target.is_file():
+            raise ExtensionError("not_found", "Arquivo não encontrado.")
+        if target.stat().st_size > _MAX_UI_FILE_BYTES:
+            raise ExtensionError("invalid", "Arquivo acima do limite.")
+        return target
 
     async def health(self, extension_id: str) -> dict[str, Any]:
         record = self.get(extension_id)

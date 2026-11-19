@@ -73,7 +73,11 @@ def _install_body(host: ExtensionHost) -> InstallRequest:
             command="node",
             args=["./main.js"],
             declared_tools=["echo"],
-            contributions=[Contribution(kind="mode", id="studio", label="Studio")],
+            contributions=[
+                Contribution(
+                    kind="mode", id="studio", label="Studio", entry="studio.html"
+                )
+            ],
         ),
     )
 
@@ -200,3 +204,62 @@ def test_extension_tool_requires_approval_like_mcp() -> None:
         for name in value
     }
     assert "call_extension_tool" in names
+
+
+async def test_ui_file_is_served_with_a_restrictive_policy(host: ExtensionHost) -> None:
+    body = _install_body(host)
+    ui = host.bundles_root / "demo-1" / "ui"
+    ui.mkdir()
+    (ui / "studio.html").write_text("<h1>oi</h1>", encoding="utf-8")
+    body.release.digest = compute_bundle_digest(host.bundles_root / "demo-1")
+    admin = _request("admin")
+    await api.install_extension(admin, body)
+    await api.activate_extension(admin, "demo")
+
+    response = await api.extension_ui_file(_request("user"), "demo", "studio.html")
+
+    assert response.media_type == "text/html; charset=utf-8"
+    assert "connect-src 'none'" in response.headers["content-security-policy"]
+    assert response.headers["x-content-type-options"] == "nosniff"
+
+
+@pytest.mark.parametrize("path", ["../main.js", "../../x", "nao-existe.html", "."])
+async def test_ui_file_never_leaves_the_ui_directory(
+    host: ExtensionHost, path: str
+) -> None:
+    body = _install_body(host)
+    (host.bundles_root / "demo-1" / "ui").mkdir()
+    body.release.digest = compute_bundle_digest(host.bundles_root / "demo-1")
+    admin = _request("admin")
+    await api.install_extension(admin, body)
+    await api.activate_extension(admin, "demo")
+
+    with pytest.raises(HTTPException) as excinfo:
+        await api.extension_ui_file(_request("user"), "demo", path)
+
+    assert excinfo.value.status_code == 404
+
+
+async def test_ui_file_requires_an_active_extension(host: ExtensionHost) -> None:
+    await api.install_extension(_request("admin"), _install_body(host))
+
+    with pytest.raises(HTTPException) as excinfo:
+        await api.extension_ui_file(_request("user"), "demo", "studio.html")
+
+    assert excinfo.value.status_code == 409
+
+
+async def test_ui_file_refuses_unlisted_media_types(host: ExtensionHost) -> None:
+    body = _install_body(host)
+    ui = host.bundles_root / "demo-1" / "ui"
+    ui.mkdir()
+    (ui / "run.sh").write_text("echo", encoding="utf-8")
+    body.release.digest = compute_bundle_digest(host.bundles_root / "demo-1")
+    admin = _request("admin")
+    await api.install_extension(admin, body)
+    await api.activate_extension(admin, "demo")
+
+    with pytest.raises(HTTPException) as excinfo:
+        await api.extension_ui_file(_request("user"), "demo", "run.sh")
+
+    assert excinfo.value.status_code == 415

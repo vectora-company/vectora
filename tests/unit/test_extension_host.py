@@ -103,8 +103,10 @@ def _request(
         "args": ["./main.js"],
         "declared_tools": ["echo"],
         "contributions": [
-            Contribution(kind="mode", id="studio", label="Studio"),
-            Contribution(kind="settings_page", id="config", label="Config"),
+            Contribution(kind="mode", id="studio", label="Studio", entry="studio.html"),
+            Contribution(
+                kind="settings_page", id="config", label="Config", entry="config.html"
+            ),
         ],
     }
     release.update(overrides)
@@ -187,8 +189,8 @@ async def test_install_rejects_incompatible_host_api(host: ExtensionHost) -> Non
 
 async def test_install_rejects_duplicate_contribution(host: ExtensionHost) -> None:
     duplicated = [
-        Contribution(kind="mode", id="studio", label="A"),
-        Contribution(kind="mode", id="studio", label="B"),
+        Contribution(kind="mode", id="studio", label="A", entry="a.html"),
+        Contribution(kind="mode", id="studio", label="B", entry="b.html"),
     ]
 
     with pytest.raises(ExtensionError) as excinfo:
@@ -209,7 +211,7 @@ def test_bundle_digest_refuses_symlinks(tmp_path: Path) -> None:
 
 def test_models_reject_reserved_ids_and_wildcard_hosts() -> None:
     with pytest.raises(ValidationError):
-        Contribution(kind="mode", id="vectora-assistant", label="x")
+        Contribution(kind="mode", id="vectora-assistant", label="x", entry="x.html")
     with pytest.raises(ValidationError):
         Grants(allow_hosts=["*"])
 
@@ -478,3 +480,21 @@ async def test_shutdown_stops_every_running_extension(host: ExtensionHost) -> No
     await host.shutdown()
 
     assert FakeClient.instances[-1].closed is True
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"kind": "mode", "entry": None},
+        {"kind": "file_icon", "entry": "x.html", "file_extensions": ["md"]},
+        {"kind": "file_icon", "file_extensions": []},
+        {"kind": "settings_page", "entry": "../fora.html"},
+        {"kind": "settings_page", "entry": "/etc/passwd.html"},
+        {"kind": "settings_page", "entry": "pagina.js"},
+    ],
+)
+def test_contribution_entry_rules(overrides: dict[str, Any]) -> None:
+    data: dict[str, Any] = {"id": "ok", "label": "Ok", **overrides}
+
+    with pytest.raises(ValidationError):
+        Contribution.model_validate(data)
