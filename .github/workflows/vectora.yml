@@ -523,8 +523,13 @@ jobs:
       - name: Install Linux package build dependencies
         if: matrix.target == 'linux'
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y flatpak flatpak-builder fuse3 libarchive-tools
+          for attempt in 1 2 3 4 5; do
+            sudo rm -rf /var/lib/apt/lists/*
+            sudo apt-get -o Acquire::Retries=5 update -qq && break
+            [ "$attempt" -lt 5 ] || exit 1
+            sleep $((attempt * 10))
+          done
+          sudo apt-get -o Acquire::Retries=5 install -y flatpak flatpak-builder fuse3 libarchive-tools
           image="ghcr.io/canonical/snapcraft:8_core22"
           compat_dir="${RUNNER_TEMP:?RUNNER_TEMP must be set}/snapcraft-compat"
           docker pull "$image"
@@ -809,8 +814,13 @@ jobs:
             "$DISTRO_IMAGE" sh -euc '
               case "$PACKAGE_FAMILY" in
                 deb)
-                  apt-get update
-                  apt-get install -y xvfb /artifacts/Vectora-*-linux-amd64.deb
+                  for attempt in 1 2 3 4 5; do
+                    rm -rf /var/lib/apt/lists/*
+                    apt-get -o Acquire::Retries=5 update -qq && break
+                    [ "$attempt" -lt 5 ] || exit 1
+                    sleep $((attempt * 10))
+                  done
+                  apt-get -o Acquire::Retries=5 install -y xvfb /artifacts/Vectora-*-linux-amd64.deb
                   dpkg-query -s vectora | grep -F "Status: install ok installed"
                   ;;
                 rpm)
@@ -1025,10 +1035,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sudo apt-get update -qq
+          for attempt in 1 2 3 4 5; do
+            sudo rm -rf /var/lib/apt/lists/*
+            sudo apt-get -o Acquire::Retries=5 update -qq && break
+            [ "$attempt" -lt 5 ] || exit 1
+            sleep $((attempt * 10))
+          done
           deb=$(find "$GITHUB_WORKSPACE/installers" -maxdepth 1 -type f -name '*.deb' -print -quit)
           test -n "$deb" || { echo "Downloaded .deb installer is missing." >&2; exit 1; }
-          sudo apt-get install -y xvfb "$deb"
+          sudo apt-get -o Acquire::Retries=5 install -y xvfb "$deb"
           dpkg-query -s vectora | grep -F "Status: install ok installed"
           executable=$(command -v vectora || true)
           test -n "$executable" || {
