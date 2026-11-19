@@ -772,7 +772,26 @@ export function ChatInterface({
           .map((hist, idx) =>
             historyMessageToMessage(hist, `history-${currentThreadId}-${idx}`),
           )
-          .filter((message) => message.content.trim().length > 0);
+          .filter(
+            (message) =>
+              message.content.trim().length > 0 ||
+              (message.toolCalls?.length ?? 0) > 0 ||
+              Boolean(message.reasoning),
+          );
+
+        // O plano (write_todos) é do turno mais recente: vira bloco na última
+        // resposta do assistente, como no stream.
+        if (historyTodos?.length) {
+          const lastAssistant = convertedMessages.findLastIndex(
+            (message) => message.role === "assistant",
+          );
+          if (lastAssistant >= 0) {
+            convertedMessages[lastAssistant] = {
+              ...convertedMessages[lastAssistant],
+              plan: historyTodos,
+            };
+          }
+        }
 
         console.log(
           `SUCCESS: Loaded ${convertedMessages.length} messages from thread history`,

@@ -790,6 +790,45 @@ export const MessageItem = memo(
                   </details>
                 )}
 
+              {message.role === "assistant" &&
+                message.plan &&
+                message.plan.length > 0 && (
+                  <div className="mb-3 text-xs" data-testid="plan-block">
+                    <p className="mb-1 font-medium text-muted-foreground">
+                      {m.chat_plan_title()} (
+                      {
+                        message.plan.filter((t) => t.status === "completed")
+                          .length
+                      }
+                      /{message.plan.length})
+                    </p>
+                    <ul className="space-y-0.5 border-l border-border/60 pl-3">
+                      {message.plan.map((todo, index) => (
+                        <li
+                          key={`${message.id}-plan-${index}`}
+                          data-status={todo.status}
+                          className={
+                            todo.status === "completed"
+                              ? "text-muted-foreground line-through"
+                              : todo.status === "in_progress"
+                                ? "text-foreground"
+                                : "text-muted-foreground"
+                          }
+                        >
+                          <span aria-hidden="true">
+                            {todo.status === "completed"
+                              ? "✓"
+                              : todo.status === "in_progress"
+                                ? "▸"
+                                : "○"}
+                          </span>{" "}
+                          {todo.content}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
               {message.role === "assistant" && message.reasoning && (
                 <details className="mb-3 text-xs" data-testid="reasoning-block">
                   <summary
@@ -1531,6 +1570,26 @@ export const MessageItem = memo(
                     files={message.editedFiles}
                     onOpenFile={(file) => onOpenEditedFile?.(file)}
                   />
+                )}
+                {message.verification && (
+                  <p
+                    className={`mt-2 text-[11px] ${
+                      message.verification.status === "failed"
+                        ? "text-destructive"
+                        : message.verification.status === "passed"
+                          ? "text-muted-foreground"
+                          : "text-amber-500"
+                    }`}
+                    data-testid="verification-footer"
+                    data-status={message.verification.status}
+                    title={message.verification.detail}
+                  >
+                    {message.verification.status === "passed"
+                      ? m.chat_verification_passed()
+                      : message.verification.status === "failed"
+                        ? m.chat_verification_failed()
+                        : m.chat_verification_not_verified()}
+                  </p>
                 )}
                 {message.structuredQuestionPending && (
                   <StructuredQuestionPanel

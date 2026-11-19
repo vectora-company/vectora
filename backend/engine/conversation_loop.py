@@ -53,6 +53,7 @@ from backend.engine.stream_events import (
     ToolActivity,
     ToolCallStarted,
     ToolResult,
+    VerificationFinished,
     WorkbenchInvalidate,
 )
 from backend.engine.tool_batch import (
@@ -1651,6 +1652,19 @@ async def run_conversation(  # noqa: PLR0911
                             detail="Erro interno durante a verificação pós-execução.",
                             error_code="VERIFICATION_ERROR",
                             metrics=iter_metrics,
+                        )
+
+                    # Só mostra o rodapé quando o turno mexeu em arquivos ou algum
+                    # gate rodou: conversa comum não precisa de "não verificado".
+                    if v_res is not None and (
+                        files_touched or v_res.outcome != "not_run"
+                    ):
+                        await emit(
+                            VerificationFinished(
+                                status=v_res.status,
+                                outcome=v_res.outcome,
+                                detail=v_res.detail,
+                            )
                         )
 
                     # 3. Persiste o resultado da verificação e a evidência com SHA-256 no AgentRun

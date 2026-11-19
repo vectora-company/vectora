@@ -1299,6 +1299,26 @@ async function handleEvent(
       if (threadId) {
         useWorkbenchStore.getState().setTodos(threadId, event.todos);
       }
+      setMessages((prev) =>
+        updateMessageInList(prev, assistantMessageId, (m) => ({
+          ...m,
+          plan: event.todos,
+        })),
+      );
+      break;
+    }
+
+    case "verification": {
+      setMessages((prev) =>
+        updateMessageInList(prev, assistantMessageId, (m) => ({
+          ...m,
+          verification: {
+            status: event.status,
+            outcome: event.outcome,
+            detail: event.detail ?? "",
+          },
+        })),
+      );
       break;
     }
 

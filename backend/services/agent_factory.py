@@ -68,7 +68,11 @@ if TYPE_CHECKING:
     from backend.engine.subagents import SubagentSpec
     from backend.persistence.native.session_store import SessionStore
     from backend.tools.registry import ToolSpec
-    from backend.vtypes.history import HistoryPart, ThreadHistoryEntry
+    from backend.vtypes.history import (
+        HistoryPart,
+        HistoryVerification,
+        ThreadHistoryEntry,
+    )
     from backend.vtypes.message import VMessage
 from backend.tools.registry import ToolRegistry
 from backend.workspace.skills import list_skill_paths
@@ -973,6 +977,40 @@ def _history_pairs_from_messages(
     return out
 
 
+async def _history_verifications(
+    store: SessionStore, thread_id: str
+) -> dict[str, HistoryVerification]:
+    """Desfecho da verificação de cada turno, na última resposta do assistente."""
+    from backend.vtypes.history import HistoryVerification
+
+    try:
+        runs = await store.list_agent_runs(thread_id, limit=200)
+    except Exception:
+        logger.warning("history: falha ao ler as execuções de %s", thread_id)
+        return {}
+    by_message: dict[str, HistoryVerification] = {}
+    for run in runs:
+        entries = [
+            item
+            for item in run.evidence
+            if isinstance(item, dict)
+            and item.get("kind") == "quality_gate_verification"
+            and "step_id" not in item
+        ]
+        if not entries:
+            continue
+        last = entries[-1]
+        message_id = await store.latest_assistant_message_id(thread_id, run.run_id)
+        if message_id is None:
+            continue
+        by_message[str(message_id)] = HistoryVerification(
+            status=str(last.get("status", "")),
+            outcome=str(last.get("outcome", "")),
+            detail=run.detail or "",
+        )
+    return by_message
+
+
 def _history_parts(
     history: list[tuple[int, VMessage]],
 ) -> dict[str, list[HistoryPart]]:
@@ -1065,6 +1103,7 @@ async def aget_thread_messages_with_files(
     }
 
     parts_by_id = _history_parts(history_snapshot)
+    verification_by_id = await _history_verifications(store, thread_id)
 
     pairs = _history_pairs_from_messages(
         thread_id, history_snapshot, keep_tool_only=True
@@ -1077,6 +1116,7 @@ async def aget_thread_messages_with_files(
             message_id=int(item[2]) if item[2].isdigit() else None,
             is_error=error_by_id.get(item[2]),
             parts=parts_by_id.get(item[2], []),
+            verification=verification_by_id.get(item[2]),
             attachments=item[3],
             edited_files=files_for_checkpoint(item[2]),
         )

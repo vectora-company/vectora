@@ -1196,6 +1196,47 @@
       "title": "UIMetricsEvent",
       "type": "object"
     },
+    "VerificationEvent": {
+      "description": "Desfecho da verificação do turno: passed, degraded ou failed.",
+      "properties": {
+        "detail": {
+          "default": "",
+          "title": "Detail",
+          "type": "string"
+        },
+        "event_id": {
+          "description": "Identidade do evento: <run_id>:<seq>.",
+          "title": "Event Id",
+          "type": "string"
+        },
+        "outcome": {
+          "title": "Outcome",
+          "type": "string"
+        },
+        "seq": {
+          "description": "Posição do evento no stream do run, a partir de 1.",
+          "minimum": 1,
+          "title": "Seq",
+          "type": "integer"
+        },
+        "status": {
+          "title": "Status",
+          "type": "string"
+        },
+        "type": {
+          "const": "verification",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "outcome",
+        "status",
+        "type"
+      ],
+      "title": "VerificationEvent",
+      "type": "object"
+    },
     "WorkbenchInvalidateEvent": {
       "description": "Notifica o frontend para recarregar abas específicas do workbench.\n\nEmitido automaticamente ao fim de tool calls que modificam o workspace.\n``tabs`` lista quais abas devem ser revalidadas: ``\"files\"``, ``\"git\"``,\n``\"plan\"``, ``\"background\"``.",
       "properties": {
@@ -1245,6 +1286,9 @@
     },
     {
       "$ref": "#/$defs/ReasoningEvent"
+    },
+    {
+      "$ref": "#/$defs/VerificationEvent"
     },
     {
       "$ref": "#/$defs/ToolCallEvent"

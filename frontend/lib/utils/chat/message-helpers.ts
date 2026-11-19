@@ -144,6 +144,15 @@ export const historyMessageToMessage = (
     checkpointId: hist.checkpoint_id,
     ...(hist.is_error === true ? { isError: true } : {}),
     ...historyPartsToMessageFields(hist.parts),
+    ...(hist.verification
+      ? {
+          verification: {
+            status: hist.verification.status,
+            outcome: hist.verification.outcome,
+            detail: hist.verification.detail ?? "",
+          },
+        }
+      : {}),
     ...(images?.length ? { images } : {}),
     ...(hist.edited_files?.length
       ? {
