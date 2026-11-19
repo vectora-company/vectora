@@ -23,7 +23,7 @@ import {
 import { IdeModeLayout } from "@/components/layout/ide-mode-layout";
 import { CenterCanvas } from "@/components/layout/center-canvas";
 import { getModeComposition } from "@/components/layout/mode-composition";
-import { shouldCloseDrawerOnEscape } from "@/lib/layout/drawer-escape";
+import { CompactDrawer } from "@/components/layout/compact-drawer";
 import { ExtensionModeSurface } from "@/components/extensions/extension-mode-surface";
 import { ThreeColumnShell } from "@/components/layout/three-column-shell";
 import { LicenseBanner } from "@/components/layout/license-banner";
@@ -463,15 +463,6 @@ function SessionPage() {
       setIsMobileSidebarOpen(false);
     }
   }, [isCompactSession]);
-  useEffect(() => {
-    if (!isCompactSession || !workbenchOpen || uiMode !== "assistant") return;
-    // Esc fecha a gaveta do workbench no layout compacto.
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (shouldCloseDrawerOnEscape(event)) setWorkbenchOpen(threadId, false);
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [isCompactSession, workbenchOpen, uiMode, setWorkbenchOpen, threadId]);
 
   useEffect(() => {
     if (isCompactSession && workbenchOpen) {
@@ -990,7 +981,7 @@ function SessionPage() {
         onShowShortcuts={() => setShowShortcutsDialog(true)}
         showModeSwitch={!chatMode}
         compactNavigation={
-          isCompactSession && !compactRails && !kanbanRail
+          isCompactSession && uiMode !== "ide" && !compactRails && !kanbanRail
             ? {
                 onOpenSessions: () => {
                   if (isMobileSidebarOpen) {
@@ -1149,9 +1140,11 @@ function SessionPage() {
     left: physicalRails[sidebarOnRight ? "right" : "left"],
     right: physicalRails[sidebarOnRight ? "left" : "right"],
   };
+  // A gaveta compacta mostra a coluna inteira do workbench (faixa + painel),
+  // igual à do layout largo.
   const assistantWorkbenchPanel = (
     <div className="flex h-full w-full min-w-0">
-      {!compactRails && assistantWorkbenchSide === "left" && (
+      {assistantWorkbenchSide === "left" && (
         <WorkbenchNavBar threadId={threadId} side={assistantWorkbenchSide} />
       )}
       <div className="min-w-0 flex-1">
@@ -1165,7 +1158,7 @@ function SessionPage() {
           onSendPrompt={pushDraft}
         />
       </div>
-      {!compactRails && assistantWorkbenchSide === "right" && (
+      {assistantWorkbenchSide === "right" && (
         <WorkbenchNavBar threadId={threadId} side={assistantWorkbenchSide} />
       )}
     </div>
@@ -1181,22 +1174,35 @@ function SessionPage() {
       <LicenseBanner fullWidth onBlockingChange={setInputLocked} />
 
       <div className="relative flex flex-1 min-h-0 overflow-hidden">
-        <Sheet open={isMobileSidebarOpen} onOpenChange={setIsMobileSidebarOpen}>
-          <SheetContent
-            side={sidebarOnRight ? "right" : "left"}
-            className={`p-0 w-72 max-w-[calc(100vw-3rem)] ${sidebarOnRight ? "border-l" : "border-r"}`}
-          >
-            {cloneElement(sidebar, {
-              inSheet: true,
-              isCollapsed: false,
-              onToggle: () => setIsMobileSidebarOpen(false),
-              onNewChat: () => {
-                setIsMobileSidebarOpen(false);
-                handleNewChat();
-              },
-            })}
-          </SheetContent>
-        </Sheet>
+        <CompactDrawer
+          open={isMobileSidebarOpen}
+          onOpenChange={setIsMobileSidebarOpen}
+          side={sidebarOnRight ? "right" : "left"}
+          title={m.mobile_open_sessions()}
+        >
+          {cloneElement(sidebar, {
+            inSheet: true,
+            isCollapsed: false,
+            onToggle: () => setIsMobileSidebarOpen(false),
+            onNewChat: () => {
+              setIsMobileSidebarOpen(false);
+              handleNewChat();
+            },
+          })}
+        </CompactDrawer>
+        <CompactDrawer
+          open={isCompactSession && assistantWorkbenchVisible}
+          onOpenChange={(open) => {
+            if (!open) setWorkbenchOpen(threadId, false);
+          }}
+          side={assistantWorkbenchSide}
+          size="wide"
+          showCloseButton={false}
+          title={m.layout_workbench_column()}
+          data-testid="compact-workbench-overlay"
+        >
+          {assistantWorkbenchPanel}
+        </CompactDrawer>
 
         <div className="flex flex-col flex-1 min-w-0 min-h-0 overflow-hidden">
           {/* `headerEl` é montado uma única vez e entregue ao slot físico
@@ -1441,25 +1447,6 @@ function SessionPage() {
               <ThreeColumnShell
                 centerHeader={headerEl}
                 centerOverlay={<ExtensionModeSurface />}
-                centerCover={
-                  isCompactSession && assistantWorkbenchVisible ? (
-                    <>
-                      <button
-                        type="button"
-                        data-testid="compact-workbench-backdrop"
-                        aria-label={m.workbench_close()}
-                        onClick={() => setWorkbenchOpen(threadId, false)}
-                        className="absolute inset-0 z-30 cursor-default bg-black/50"
-                      />
-                      <div
-                        data-testid="compact-workbench-overlay"
-                        className={`absolute inset-y-0 z-40 flex min-w-0 min-h-0 w-full overflow-hidden bg-background shadow-xl sm:w-[min(32rem,85%)] ${assistantWorkbenchSide === "left" ? "left-0 border-r" : "right-0 border-l"}`}
-                      >
-                        {assistantWorkbenchPanel}
-                      </div>
-                    </>
-                  ) : null
-                }
                 left={
                   showSidebarPanel
                     ? sidebarPanel
@@ -1468,23 +1455,7 @@ function SessionPage() {
                 center={
                   <div className="flex flex-1 min-w-0 min-h-0 overflow-hidden">
                     <div className="relative flex flex-1 min-w-0 min-h-0 overflow-hidden">
-                      <div
-                        aria-hidden={
-                          isCompactSession && assistantWorkbenchVisible
-                        }
-                        inert={
-                          isCompactSession && assistantWorkbenchVisible
-                            ? true
-                            : undefined
-                        }
-                        className="absolute inset-0 min-w-0 min-h-0 overflow-hidden"
-                        style={{
-                          pointerEvents:
-                            isCompactSession && assistantWorkbenchVisible
-                              ? "none"
-                              : "auto",
-                        }}
-                      >
+                      <div className="absolute inset-0 min-w-0 min-h-0 overflow-hidden">
                         {renderChatPanel(false)}
                       </div>
                     </div>

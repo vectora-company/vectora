@@ -543,12 +543,6 @@ describe("SessionPage — chat compacto no IDE", () => {
 
     fireEvent.click(toggleWorkbench);
     expect(await screen.findByTestId("workbench-content")).toBeInTheDocument();
-    expect(
-      screen.getByTestId("chat").parentElement?.parentElement?.parentElement,
-    ).toHaveStyle({ pointerEvents: "none" });
-    expect(
-      screen.getByTestId("chat").parentElement?.parentElement?.parentElement,
-    ).toHaveAttribute("inert");
     expect(screen.getByTestId("stream-response")).toHaveTextContent(
       "Resposta parcial",
     );
@@ -559,9 +553,7 @@ describe("SessionPage — chat compacto no IDE", () => {
 
     fireEvent.click(toggleWorkbench);
     await waitFor(() =>
-      expect(
-        screen.getByTestId("chat").parentElement?.parentElement?.parentElement,
-      ).toHaveStyle({ pointerEvents: "auto" }),
+      expect(screen.queryByTestId("compact-workbench-overlay")).toBeNull(),
     );
     expect(screen.getByTestId("stream-response")).toHaveTextContent(
       "Resposta parcial atualizada",
@@ -655,9 +647,7 @@ describe("SessionPage — chat compacto no IDE", () => {
     );
     expect(screen.queryByTestId("stream-stop")).not.toBeInTheDocument();
     expect(screen.getByTestId("stream-response")).toBeEmptyDOMElement();
-    expect(
-      screen.getByTestId("chat").parentElement?.parentElement?.parentElement,
-    ).toHaveStyle({ pointerEvents: "none" });
+    expect(screen.getByTestId("chat")).toBeInTheDocument();
   });
 
   it("mantém o chat central ao abrir a Workbench no layout largo", async () => {
@@ -672,9 +662,7 @@ describe("SessionPage — chat compacto no IDE", () => {
 
     expect(await screen.findByTestId("workbench-content")).toBeInTheDocument();
     expect(await screen.findByTestId("chat")).toBeInTheDocument();
-    expect(
-      screen.getByTestId("chat").parentElement?.parentElement?.parentElement,
-    ).toHaveStyle({ pointerEvents: "auto" });
+    expect(screen.queryByTestId("compact-workbench-overlay")).toBeNull();
   });
 });
 
@@ -780,9 +768,11 @@ describe("SessionPage — tablet com faixas nas bordas", () => {
     expect(
       await screen.findByTestId("compact-workbench-overlay"),
     ).toBeInTheDocument();
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    // Clicar na área escurecida fecha a gaveta.
-    fireEvent.click(screen.getByTestId("compact-workbench-backdrop"));
+    await waitFor(() => expect(screen.queryByTestId("sidebar")).toBeNull());
+    // Esc fecha a gaveta, como na de sessões.
+    fireEvent.keyDown(screen.getByTestId("compact-workbench-overlay"), {
+      key: "Escape",
+    });
     await waitFor(() =>
       expect(screen.queryByTestId("compact-workbench-overlay")).toBeNull(),
     );
@@ -801,7 +791,9 @@ describe("SessionPage — tablet com faixas nas bordas", () => {
       await screen.findByTestId("compact-workbench-overlay"),
     ).toBeInTheDocument();
 
-    fireEvent.keyDown(window, { key: "Escape" });
+    fireEvent.keyDown(screen.getByTestId("compact-workbench-overlay"), {
+      key: "Escape",
+    });
 
     await waitFor(() =>
       expect(screen.queryByTestId("compact-workbench-overlay")).toBeNull(),
@@ -809,51 +801,52 @@ describe("SessionPage — tablet com faixas nas bordas", () => {
   });
 });
 
-describe("SessionPage — gaveta do workbench no layout compacto", () => {
-  it("o painel do workbench preenche a gaveta inteira, não só a largura do conteúdo", async () => {
-    setMode("assistant");
-    useWorkbenchStore.setState({ panelOpen: { t1: true } });
-    Object.defineProperty(window, "innerWidth", {
-      configurable: true,
-      value: 818,
-    });
-
-    render(<SessionPage />);
-
-    const overlay = await screen.findByTestId("compact-workbench-overlay");
-    const panel = overlay.firstElementChild;
-    expect(panel).not.toBeNull();
-    // Sem `w-full` o painel encolhe até o conteúdo e a gaveta fica com uma
-    // faixa vazia ao lado (o bug visto no modo compacto).
-    expect(panel).toHaveClass("w-full");
-    expect(panel).toHaveClass("h-full");
+async function openWorkbenchDrawer() {
+  setMode("assistant");
+  useWorkbenchStore.setState({ panelOpen: { t1: true } });
+  Object.defineProperty(window, "innerWidth", {
+    configurable: true,
+    value: 818,
   });
-});
+  render(<SessionPage />);
+  return screen.findByTestId("compact-workbench-overlay");
+}
 
-describe("SessionPage — a gaveta do workbench cobre a coluna central inteira", () => {
-  it("o header é só mais um elemento da coluna: a gaveta e o fundo ficam por cima dele", async () => {
-    setMode("assistant");
-    useWorkbenchStore.setState({ panelOpen: { t1: true } });
-    Object.defineProperty(window, "innerWidth", {
-      configurable: true,
-      value: 818,
-    });
+describe("SessionPage — gavetas compactas padronizadas", () => {
+  it("a gaveta do workbench é um diálogo com nome, igual à de sessões", async () => {
+    const drawer = await openWorkbenchDrawer();
 
-    render(<SessionPage />);
-
-    const overlay = await screen.findByTestId("compact-workbench-overlay");
-    const backdrop = screen.getByTestId("compact-workbench-backdrop");
-    const main = screen.getByTestId("shell-header-slot").closest("main");
-    expect(overlay.parentElement).toBe(main);
-    expect(backdrop.parentElement).toBe(main);
-    // Acima do header (z-20) e abaixo dos diálogos.
-    expect(backdrop).toHaveClass("z-30");
-    expect(overlay).toHaveClass("z-40");
+    expect(drawer).toHaveAttribute("role", "dialog");
+    expect(drawer).toHaveAccessibleName();
+    expect(drawer).toHaveAttribute("data-slot", "sheet-content");
   });
 
-  it("o fundo escurece igual ao Sheet de sessões e o chat continua visível por baixo", async () => {
-    setMode("assistant");
-    useWorkbenchStore.setState({ panelOpen: { t1: true } });
+  it("o fundo escuro é o mesmo para workbench e sessões, e cobre a janela toda", async () => {
+    await openWorkbenchDrawer();
+
+    const overlay = document.querySelector("[data-slot='sheet-overlay']");
+    expect(overlay).toHaveClass("fixed", "inset-0", "bg-black/50");
+  });
+
+  it("a gaveta mostra a coluna inteira do workbench (faixa e painel) e preenche a largura", async () => {
+    const drawer = await openWorkbenchDrawer();
+
+    expect(
+      drawer.querySelector("[data-testid='workbench-navbar']"),
+    ).not.toBeNull();
+    expect(drawer).toContainElement(screen.getByTestId("workbench-content"));
+    const slot = drawer.querySelector(":scope > div:not(.sr-only)");
+    expect(slot).toHaveClass("flex-1", "[&>*]:w-full", "[&>*]:flex-1");
+  });
+
+  it("o chat continua montado e visível por baixo da gaveta", async () => {
+    await openWorkbenchDrawer();
+
+    expect(screen.getByTestId("chat")).toBeInTheDocument();
+  });
+
+  it("no modo IDE o header não oferece sessões", async () => {
+    setMode("ide");
     Object.defineProperty(window, "innerWidth", {
       configurable: true,
       value: 818,
@@ -861,13 +854,8 @@ describe("SessionPage — a gaveta do workbench cobre a coluna central inteira",
 
     render(<SessionPage />);
 
-    expect(await screen.findByTestId("compact-workbench-backdrop")).toHaveClass(
-      "bg-black/50",
-    );
-    const chatWrapper = (await screen.findByTestId("chat")).parentElement
-      ?.parentElement?.parentElement;
-    expect(chatWrapper).toHaveAttribute("inert");
-    expect(chatWrapper?.style.opacity).toBe("");
+    await screen.findByTestId("header");
+    expect(screen.queryByTestId("compact-open-sessions")).toBeNull();
   });
 });
 
@@ -895,10 +883,11 @@ describe("SessionPage — laterais compactas", () => {
     ).toBeInTheDocument();
     expect(screen.getByTestId("compact-workbench-overlay")).toHaveClass(
       "right-0",
-      "sm:w-[min(32rem,85%)]",
-      "z-40",
+      "z-50",
     );
-    fireEvent.click(screen.getByTestId("compact-workbench-backdrop"));
+    fireEvent.keyDown(screen.getByTestId("compact-workbench-overlay"), {
+      key: "Escape",
+    });
     await waitFor(() =>
       expect(screen.queryByTestId("compact-workbench-overlay")).toBeNull(),
     );
@@ -907,14 +896,14 @@ describe("SessionPage — laterais compactas", () => {
     expect(
       await screen.findByTestId("compact-workbench-overlay"),
     ).toBeInTheDocument();
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() => expect(screen.queryByTestId("sidebar")).toBeNull());
 
     fireEvent.click(screen.getByTestId("compact-open-sessions"));
-    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(await screen.findByTestId("sidebar")).toBeInTheDocument();
     expect(screen.queryByTestId("compact-workbench-overlay")).toBeNull();
 
     fireEvent.click(screen.getByTestId("compact-open-sessions"));
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() => expect(screen.queryByTestId("sidebar")).toBeNull());
   });
 
   it("mantém o Kanban dentro da largura de um smartphone estreito", () => {
@@ -959,10 +948,7 @@ describe("SessionPage — workbench do Assistente estreito", () => {
 
     expect(await screen.findByTestId("workbench-navbar")).toBeInTheDocument();
     expect(await screen.findByTestId("workbench-content")).toBeInTheDocument();
-    expect(
-      (await screen.findByTestId("chat")).parentElement?.parentElement
-        ?.parentElement,
-    ).toHaveStyle({ pointerEvents: "none" });
+    expect(await screen.findByTestId("chat")).toBeInTheDocument();
     Object.defineProperty(window, "outerWidth", {
       configurable: true,
       value: 1024,
