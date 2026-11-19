@@ -50,10 +50,6 @@ import {
 } from "@/components/settings/primitives";
 import { useServicesDisabled } from "@/components/layout/services-off-notice";
 import { mDyn } from "@/lib/i18n-dyn";
-import {
-  fetchWeeklyUsageInsight,
-  type WeeklyUsageInsight,
-} from "@/lib/api/settings-prefs";
 
 /** Rótulo do tema selecionado, resolvido explicitamente (não deixado pro
  * registro interno do Radix Select) — sem isso o trigger mostra vazio no
@@ -332,12 +328,6 @@ export function PreferenciasTab() {
     setTrainingInstructions,
     autoUpdateEnabled,
     setAutoUpdateEnabled,
-    weeklyInsightEnabled,
-    weeklyInsightWeeks,
-    weeklyInsightDismissedWindow,
-    setWeeklyInsightEnabled,
-    setWeeklyInsightWeeks,
-    setWeeklyInsightDismissedWindow,
     installedThemes,
     addInstalledTheme,
     uiScalePercent,
@@ -361,25 +351,6 @@ export function PreferenciasTab() {
     typeof window !== "undefined" && Boolean(window.vectora?.themes);
 
   const activeCustomColors = customThemeColors ?? DEFAULT_CUSTOM_COLORS;
-  const [weeklyInsight, setWeeklyInsight] = useState<WeeklyUsageInsight | null>(
-    null,
-  );
-
-  useEffect(() => {
-    if (!weeklyInsightEnabled) {
-      // oxlint-disable-next-line react/set-state-in-effect
-      setWeeklyInsight(null);
-      return;
-    }
-    let active = true;
-    void fetchWeeklyUsageInsight(weeklyInsightWeeks).then((value) => {
-      if (active) setWeeklyInsight(value);
-    });
-    return () => {
-      active = false;
-    };
-  }, [weeklyInsightEnabled, weeklyInsightWeeks]);
-
   const handleCustomColorChange = (
     key: keyof BaseThemeColors,
     value: string,
@@ -455,100 +426,6 @@ export function PreferenciasTab() {
 
   return (
     <SettingsStack>
-      <SettingsSection
-        title={m.prefs_weekly_insight_title()}
-        description={m.prefs_weekly_insight_help()}
-      >
-        <div className="flex items-center justify-between gap-3">
-          <Label htmlFor="weekly-insight-enabled">
-            {m.prefs_weekly_insight_enabled()}
-          </Label>
-          <Switch
-            id="weekly-insight-enabled"
-            checked={weeklyInsightEnabled}
-            onCheckedChange={setWeeklyInsightEnabled}
-          />
-        </div>
-        {weeklyInsightEnabled && (
-          <>
-            <Select
-              value={String(weeklyInsightWeeks)}
-              onValueChange={(value) =>
-                setWeeklyInsightWeeks(Number(value) as 1 | 2 | 4)
-              }
-            >
-              <SelectTrigger aria-label={m.prefs_weekly_insight_window()}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="1">
-                  {m.prefs_weekly_insight_week({ n: 1 })}
-                </SelectItem>
-                <SelectItem value="2">
-                  {m.prefs_weekly_insight_week({ n: 2 })}
-                </SelectItem>
-                <SelectItem value="4">
-                  {m.prefs_weekly_insight_week({ n: 4 })}
-                </SelectItem>
-              </SelectContent>
-            </Select>
-            {weeklyInsight &&
-              weeklyInsightDismissedWindow !==
-                `${weeklyInsight.window_start}/${weeklyInsight.window_end}` && (
-                <div
-                  className="rounded-md border border-border bg-muted/40 p-3 text-xs space-y-1"
-                  role="status"
-                >
-                  <div>
-                    {m.prefs_weekly_insight_tokens({
-                      n: weeklyInsight.total_tokens,
-                    })}
-                  </div>
-                  <div>
-                    {m.prefs_weekly_insight_input_tokens({
-                      n: weeklyInsight.input_tokens,
-                    })}
-                  </div>
-                  <div>
-                    {m.prefs_weekly_insight_output_tokens({
-                      n: weeklyInsight.output_tokens,
-                    })}
-                  </div>
-                  <div>
-                    {m.prefs_weekly_insight_tools({
-                      n: weeklyInsight.tools.length,
-                    })}
-                  </div>
-                  <div>
-                    {m.prefs_weekly_insight_model({
-                      model:
-                        weeklyInsight.most_used_model ??
-                        m.prefs_weekly_insight_unknown(),
-                    })}
-                  </div>
-                  <div>
-                    {weeklyInsight.estimated_cost_cents == null
-                      ? m.prefs_weekly_insight_cost_unknown()
-                      : m.prefs_weekly_insight_cost({
-                          n: weeklyInsight.estimated_cost_cents / 100,
-                        })}
-                  </div>
-                  <button
-                    type="button"
-                    className="text-muted-foreground underline"
-                    onClick={() =>
-                      setWeeklyInsightDismissedWindow(
-                        `${weeklyInsight.window_start}/${weeklyInsight.window_end}`,
-                      )
-                    }
-                  >
-                    {m.prefs_weekly_insight_dismiss()}
-                  </button>
-                </div>
-              )}
-          </>
-        )}
-      </SettingsSection>
       {/* Aparência — tema (com preview) + UI Scale, agrupados numa seção só,
           em vez de espalhados sem relação visual entre si. */}
       <SettingsSection title={m.prefs_appearance_section()}>

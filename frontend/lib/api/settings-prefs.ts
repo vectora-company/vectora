@@ -14,28 +14,12 @@ export interface FrontendPrefs {
   permissionMode?: string;
   reasoningEffort?: string;
   decisionModelsEnabled?: boolean;
-  decisionModelProvider?: "clef-local" | "laya-local" | "clef-api" | "jev-api";
+  decisionModelProvider?:
+    "clef-local" | "laya-local" | "clef-api" | "jev-api" | "openrouter-api";
   decisionModelSurfaces?: Record<string, boolean>;
   transcriptionMode?: "local" | "remote";
   sidebarPosition?: string;
   autoUpdateEnabled?: boolean;
-  weeklyInsightEnabled?: boolean;
-  weeklyInsightWeeks?: 1 | 2 | 4;
-  weeklyInsightDismissedWindow?: string;
-}
-
-export interface WeeklyUsageInsight {
-  window_weeks: number;
-  window_start: string;
-  window_end: string;
-  event_count: number;
-  input_tokens: number;
-  output_tokens: number;
-  total_tokens: number;
-  estimated_cost_cents: number | null;
-  unknown_cost_events: number;
-  most_used_model: string | null;
-  tools: Array<{ name: string; count: number }>;
 }
 
 /** Busca as preferências salvas no backend; `{}` em qualquer falha de rede. */
@@ -82,16 +66,5 @@ export async function pushPrefs(
     return response.ok;
   } catch {
     return false;
-  }
-}
-
-export async function fetchWeeklyUsageInsight(
-  weeks: 1 | 2 | 4,
-): Promise<WeeklyUsageInsight | null> {
-  try {
-    const res = await fetch(`/usage/insights/weekly?weeks=${weeks}`);
-    return res.ok ? ((await res.json()) as WeeklyUsageInsight) : null;
-  } catch {
-    return null;
   }
 }

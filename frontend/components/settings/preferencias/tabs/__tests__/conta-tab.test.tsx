@@ -24,6 +24,14 @@ vi.mock("@/lib/paraglide/messages", () => ({
   ),
 }));
 
+// Assinatura e Sobre têm testes próprios; aqui só interessa que a aba os inclui.
+vi.mock("@/components/settings/billing-panel", () => ({
+  BillingPanel: () => <div data-testid="billing-panel" />,
+}));
+vi.mock("@/components/settings/about-panel", () => ({
+  AboutPanel: () => <div data-testid="about-panel" />,
+}));
+
 async function renderContaTab(user: {
   id: string;
   username?: string;
@@ -58,7 +66,7 @@ describe("ContaTab — identidade da conta", () => {
     });
 
     expect(screen.getByText("bruno")).toBeInTheDocument();
-    expect(screen.getByText("Root")).toBeInTheDocument();
+    expect(screen.getByText("account_role_root")).toBeInTheDocument();
     expect(screen.queryByText("bruno@example.com")).not.toBeInTheDocument();
   });
 
@@ -72,7 +80,7 @@ describe("ContaTab — identidade da conta", () => {
     });
 
     expect(screen.getByText("bruno")).toBeInTheDocument();
-    expect(screen.getByText("Root")).toBeInTheDocument();
+    expect(screen.getByText("account_role_root")).toBeInTheDocument();
   });
 
   it("permite editar o nome local do cliente sem alterar o nome da conta", async () => {
@@ -91,5 +99,29 @@ describe("ContaTab — identidade da conta", () => {
 
     expect(screen.getByText("Bruno")).toBeInTheDocument();
     expect(window.localStorage.getItem("client-profile")).toContain("Notebook");
+  });
+
+  it("reúne perfil, segurança, assinatura e sobre numa aba só", async () => {
+    await renderContaTab({
+      id: "local",
+      username: "bruno",
+      role: "root",
+      name: "Bruno",
+    });
+
+    expect(
+      screen.getByRole("heading", { name: "account_profile_title" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "account_security" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "settings_category_billing" }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("billing-panel")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "settings_category_about" }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("about-panel")).toBeInTheDocument();
   });
 });

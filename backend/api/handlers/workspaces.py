@@ -4555,8 +4555,8 @@ async def workspace_events(workspace_id: str, request: Request) -> StreamingResp
     from pathlib import Path
 
     from watchdog.events import FileSystemEvent, FileSystemEventHandler
-    from watchdog.observers import Observer
 
+    from backend.workspace.fs_watch import create_observer, is_ignored_path
     from backend.workspace.workspace import workspace_registry
 
     ws = workspace_registry.get(workspace_id)
@@ -4600,6 +4600,8 @@ async def workspace_events(workspace_id: str, request: Request) -> StreamingResp
             # Ignora diretórios e arquivos ocultos de controle
             if not src or event.is_directory:  # type: ignore[attr-defined]
                 return
+            if is_ignored_path(src, cwd):
+                return
             try:
                 rel = str(Path(src).relative_to(cwd)).replace("\\", "/")
             except ValueError:
@@ -4612,7 +4614,7 @@ async def workspace_events(workspace_id: str, request: Request) -> StreamingResp
                 _pending.clear()
                 asyncio.run_coroutine_threadsafe(queue.put(paths), loop)
 
-    observer = Observer()
+    observer = create_observer()
     # daemon=True: se o cliente cair e o ``finally`` que faz observer.stop()
     # não rodar (ex.: stream não-drenado em testes), a thread do watchdog não
     # impede o shutdown do processo — caso contrário o interpretador trava no
