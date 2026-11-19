@@ -126,6 +126,20 @@ export function IdeModeLayout({
     }
   }, [resolvedLayoutState, mobilePanel, workbenchOpen]);
 
+  const tabletDrawerOpen =
+    resolvedLayoutState === "tablet" && (workbenchOpen || tabletChatOpen);
+  useEffect(() => {
+    if (!tabletDrawerOpen) return;
+    // Esc fecha a gaveta aberta, como em qualquer painel sobreposto.
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setTabletChatOpen(false);
+      onCloseWorkbench?.();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [tabletDrawerOpen, onCloseWorkbench]);
+
   if (resolvedLayoutState === "tablet") {
     const drawerOpen = workbenchOpen || tabletChatOpen;
     const closeDrawers = () => {
