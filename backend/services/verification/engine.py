@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import fnmatch
+import functools
 import logging
 import os
 import time
@@ -336,9 +337,20 @@ async def run_verification(
         else []
     )
 
-    # 3. Snapshot do conteúdo que os gates vão validar (antes de rodá-los)
+    # 3. Snapshot do conteúdo que os gates vão validar (antes de rodá-los).
+    # Sem arquivo tocado e sem gate aplicável não há o que validar: varrer e
+    # hashear o workspace inteiro só atrasaria o fim do turno (numa conversa
+    # sem edição isso levava minutos num repositório grande).
+    nothing_to_verify = (
+        not files_touched and not applicable_gates and git_unclean_reason is None
+    )
     snapshot_sha256, file_hashes = await asyncio.to_thread(
-        compute_files_snapshot, root_dir, files=files_touched
+        functools.partial(
+            compute_files_snapshot,
+            root_dir,
+            files=files_touched,
+            scan_workspace_when_empty=not nothing_to_verify,
+        )
     )
 
     # 4. Execução dos quality gates aplicáveis

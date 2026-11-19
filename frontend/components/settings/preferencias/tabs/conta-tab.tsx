@@ -3,9 +3,10 @@
 /**
  * ContaTab
  *
- * Exibe nome, email e role do usuário ativo. Permite editar o nome inline
- * (PATCH /auth/me) — aceita UTF-8 livre, espaços, acentos. Botão de mudar
- * senha continua placeholder.
+ * Tudo o que é da pessoa que usa o Vectora: perfil (nome, usuário, role e a
+ * identidade local), segurança, assinatura e informações do app. O nome é
+ * editável inline (PATCH /auth/me) e aceita UTF-8 livre, espaços e acentos.
+ * O botão de mudar senha continua placeholder.
  */
 
 import { Check, Loader2, LogOut, Pencil, X } from "lucide-react";
@@ -15,18 +16,18 @@ import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
+import { AboutPanel } from "@/components/settings/about-panel";
+import { BillingPanel } from "@/components/settings/billing-panel";
+import {
+  SettingsMessage,
+  SettingsSection,
+  SettingsStack,
+  SettingsTabHeader,
+} from "@/components/settings/primitives";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { m } from "@/lib/paraglide/messages";
 import type { AuthUser } from "@/lib/types/auth";
 import { ClientProfileSettings } from "./client-profile-settings";
-
-const ROLE_LABELS: Record<string, string> = {
-  root: "Root",
-  admin: "Admin",
-  member: "Membro",
-  viewer: "Visualizador",
-};
 
 const ROLE_VARIANTS: Record<
   string,
@@ -37,6 +38,21 @@ const ROLE_VARIANTS: Record<
   member: "secondary",
   viewer: "outline",
 };
+
+function roleLabel(role: string): string {
+  switch (role) {
+    case "root":
+      return m.account_role_root();
+    case "admin":
+      return m.account_role_admin();
+    case "member":
+      return m.account_role_member();
+    case "viewer":
+      return m.account_role_viewer();
+    default:
+      return role;
+  }
+}
 
 export function ContaTab() {
   const router = useRouter();
@@ -64,9 +80,7 @@ export function ContaTab() {
   if (!user) {
     return (
       <div className="flex flex-col items-center justify-center py-8 text-center">
-        <p className="text-sm text-muted-foreground">
-          Nenhum usuário autenticado.
-        </p>
+        <p className="text-sm text-muted-foreground">{m.account_no_user()}</p>
       </div>
     );
   }
@@ -82,13 +96,13 @@ export function ContaTab() {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.detail ?? `Erro ${res.status}`);
+        throw new Error(data.detail ?? `${res.status}`);
       }
       const updated = (await res.json()) as AuthUser;
       setUser(updated);
       setEditing(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Erro ao salvar.");
+      setError(e instanceof Error ? e.message : m.account_save_error());
     } finally {
       setSaving(false);
     }
@@ -117,106 +131,102 @@ export function ContaTab() {
   const displayName = user.name?.trim() || "—";
 
   return (
-    <div className="space-y-6">
-      {/* Nome */}
-      <div className="space-y-1.5">
-        <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
-          Nome
-        </p>
-        {editing ? (
-          <div className="flex items-center gap-2">
-            <Input
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              maxLength={100}
-              autoComplete="off"
-              placeholder="Como o Vectora deve te chamar?"
-              className="text-sm"
-              autoFocus
-              onKeyDown={(e) => {
-                if (e.key === "Enter") void handleSave();
-                if (e.key === "Escape") {
+    <SettingsStack>
+      <SettingsTabHeader
+        title={m.settings_category_conta()}
+        description={m.account_description()}
+      />
+
+      <SettingsSection
+        title={m.account_profile_title()}
+        description={m.account_profile_description()}
+      >
+        {/* Nome */}
+        <div className="space-y-1.5">
+          <p className="text-xs font-medium text-muted-foreground">
+            {m.account_name_label()}
+          </p>
+          {editing ? (
+            <div className="flex items-center gap-2">
+              <Input
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                maxLength={100}
+                autoComplete="off"
+                placeholder={m.account_name_placeholder()}
+                className="text-sm"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void handleSave();
+                  if (e.key === "Escape") {
+                    setEditing(false);
+                    setDraft(user.name ?? "");
+                  }
+                }}
+              />
+              <Button size="sm" onClick={handleSave} disabled={saving}>
+                {saving ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Check className="size-4" />
+                )}
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
                   setEditing(false);
                   setDraft(user.name ?? "");
-                }
-              }}
-            />
-            <Button
-              size="sm"
-              onClick={handleSave}
-              disabled={saving}
-              className="h-8 px-2"
-            >
-              {saving ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Check className="w-4 h-4" />
-              )}
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => {
-                setEditing(false);
-                setDraft(user.name ?? "");
-                setError(null);
-              }}
-              disabled={saving}
-              className="h-8 px-2"
-            >
-              <X className="w-4 h-4" />
-            </Button>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2">
-            <p className="text-sm flex-1 truncate">{displayName}</p>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-xs text-muted-foreground"
-              onClick={() => setEditing(true)}
-            >
-              <Pencil className="w-3 h-3 mr-1" />
-              Editar
-            </Button>
-          </div>
-        )}
-        {error && <p className="text-xs text-destructive">{error}</p>}
-      </div>
-
-      {/* Usuário + Role — Vectora identifica a conta por username, não email
-          (email é opcional e fica vazio em modo local, sem conta). */}
-      <div className="flex items-center justify-between">
-        <div className="space-y-1">
-          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
-            Usuário
-          </p>
-          <p className="text-sm font-mono">{user.username}</p>
+                  setError(null);
+                }}
+                disabled={saving}
+              >
+                <X className="size-4" />
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <p className="flex-1 truncate text-sm">{displayName}</p>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground"
+                onClick={() => setEditing(true)}
+              >
+                <Pencil className="size-3" />
+                {m.account_edit()}
+              </Button>
+            </div>
+          )}
+          {error && <SettingsMessage tone="danger">{error}</SettingsMessage>}
         </div>
-        <Badge variant={ROLE_VARIANTS[user.role] ?? "secondary"}>
-          {ROLE_LABELS[user.role] ?? user.role}
-        </Badge>
-      </div>
 
-      <Separator />
+        {/* Usuário + Role — Vectora identifica a conta por username, não email
+            (email é opcional e fica vazio em modo local, sem conta). */}
+        <div className="flex items-center justify-between">
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-muted-foreground">
+              {m.account_username_label()}
+            </p>
+            <p className="font-mono text-sm">{user.username}</p>
+          </div>
+          <Badge variant={ROLE_VARIANTS[user.role] ?? "secondary"}>
+            {roleLabel(user.role)}
+          </Badge>
+        </div>
+      </SettingsSection>
 
       <ClientProfileSettings />
 
-      <Separator />
-
-      {/* Ações */}
-      <div className="space-y-2">
-        <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
-          Segurança
-        </p>
+      <SettingsSection title={m.account_security()}>
         <Button
           variant="outline"
           size="sm"
           className="w-full justify-start"
           disabled
-          title="Em breve"
+          title={m.account_coming_soon()}
         >
-          Alterar senha
+          {m.account_change_password()}
         </Button>
         {isRealAccount && (
           <Button
@@ -225,11 +235,19 @@ export function ContaTab() {
             className="w-full justify-start text-destructive hover:text-destructive"
             onClick={() => void handleLogout()}
           >
-            <LogOut className="w-3.5 h-3.5 mr-1.5" />
+            <LogOut className="size-3.5" />
             {m.user_logout()}
           </Button>
         )}
-      </div>
-    </div>
+      </SettingsSection>
+
+      <SettingsSection title={m.settings_category_billing()}>
+        <BillingPanel />
+      </SettingsSection>
+
+      <SettingsSection title={m.settings_category_about()}>
+        <AboutPanel />
+      </SettingsSection>
+    </SettingsStack>
   );
 }
