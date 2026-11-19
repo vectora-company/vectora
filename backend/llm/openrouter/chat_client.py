@@ -222,6 +222,35 @@ def _parse_tool_call_chunks(bruto: list) -> list[ToolCallChunk]:
     return pedacos
 
 
+_CACHE_CONTROL = {"type": "ephemeral"}
+
+
+def mark_cache_breakpoints(messages: list[dict[str, Any]]) -> None:
+    """Marca system e as duas últimas mensagens com ``cache_control``.
+
+    O conteúdo em string vira uma lista de partes para poder carregar a marca.
+    """
+    targets: list[dict[str, Any]] = []
+    system = next((m for m in messages if m.get("role") == "system"), None)
+    if system is not None:
+        targets.append(system)
+    targets.extend(m for m in messages[-2:] if m is not system)
+    for message in targets:
+        content = message.get("content")
+        if isinstance(content, str):
+            if not content:
+                continue
+            content = [{"type": "text", "text": content}]
+        if not isinstance(content, list) or not content:
+            continue
+        last = content[-1]
+        if isinstance(last, dict) and last.get("type") == "text":
+            message["content"] = [
+                *content[:-1],
+                {**last, "cache_control": _CACHE_CONTROL},
+            ]
+
+
 def _usage_metadata(usage: _UsagePayload | None) -> UsageSnapshot | None:
     """Executa a operação  usage metadata."""
     if not usage:
@@ -309,7 +338,27 @@ class OpenRouterChatClient:
             corpo["max_tokens"] = max_tokens
         if tools:
             corpo["tools"] = [t.openai_schema() for t in tools]
+        self._apply_prompt_cache(corpo)
         return corpo
+
+    def _apply_prompt_cache(self, corpo: dict[str, Any]) -> None:
+        """Cache de prompt conforme o backend por trás deste client.
+
+        - OpenRouter com modelo Anthropic ou Gemini: marca system e as duas
+          últimas mensagens com ``cache_control``.
+        - llama.cpp: pede reaproveitar o KV cache do prefixo (``cache_prompt``).
+        """
+        from backend.settings import settings
+
+        if not settings.prompt_cache_enabled:
+            return
+        origin = (self.media_model_id or "").partition(":")[0]
+        if origin == "llamacpp":
+            corpo["cache_prompt"] = True
+        elif origin == "openrouter" and self.model.startswith(
+            ("anthropic/", "google/gemini")
+        ):
+            mark_cache_breakpoints(corpo["messages"])
 
     @staticmethod
     def _primeira_escolha(corpo: dict) -> dict:
