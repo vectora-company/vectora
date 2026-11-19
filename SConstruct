@@ -509,20 +509,20 @@ def _action_install(target, source, env):
         5,
         "nats-server",
         lambda: _action_fetch_nats(None, None, None),
-        "scons nats",
+        "scons install",
     )
     step(
         6,
         "ffmpeg e ffprobe",
         lambda: _action_fetch_ffmpeg(None, None, None),
-        "scons ffmpeg",
+        "scons install",
     )
     if host.is_macos:
         step(
             7,
             "Helper de fala do macOS (swiftc)",
             lambda: _action_build_macos_speech(None, None, None),
-            "scons macos-speech",
+            "scons install",
         )
     else:
         header(7, "Helper de fala do macOS")
@@ -918,12 +918,6 @@ def _action_help(target, source, env):
     scons update           atualiza deps: uv (backend) + pnpm (frontend)
     scons update --latest  idem, mas ignora ranges/lockfiles (major bumps) —
                            só antes de migração grande, com revisão manual depois
-    scons nats             baixa o binário nats-server pra resources/
-                           (sidecar de fila/KV com JetStream; precisa de rede)
-    scons ffmpeg           baixa ffmpeg+ffprobe pra resources/
-                           (backend/tools/media_native.py; precisa de rede)
-    scons macos-speech     compila o helper de fala nativo do macOS
-                           (native/macos-speech, swiftc; só no macOS; o install já o faz)
 """)
     sys.stdout.flush()
 
@@ -1218,9 +1212,6 @@ _cmd("tests-storage", _action_tests_storage)
 _cmd("tests-live", _action_tests_live)
 _cmd("lint",          _action_lint)
 _cmd("update",        _action_update)
-_cmd("nats",          _action_fetch_nats)
-_cmd("ffmpeg",        _action_fetch_ffmpeg)
-_cmd("macos-speech",  _action_build_macos_speech)
 _cmd("clean",         _action_clean)
 _cmd("help",          _action_help)
 _cmd("docker",        _action_docker)

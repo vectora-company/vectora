@@ -10,7 +10,7 @@ disponível).
 O skip-guard usa a MESMA resolução (`_resolve_binary()`) que o sidecar usa em
 produção — PATH (``choco install nats-server`` / ``brew install
 nats-server``) ou o binário baixado em ``resources/`` por
-``scons nats``. Um guard que só olhasse PATH (como uma versão anterior deste
+``scons install``. Um guard que só olhasse PATH (como uma versão anterior deste
 arquivo fazia) pula sempre mesmo com o binário bundlado presente.
 """
 
@@ -30,7 +30,7 @@ from backend.scheduling.nats_sidecar import (
 
 pytestmark = pytest.mark.skipif(
     _resolve_binary() is None,
-    reason="nats-server não encontrado (PATH nem resources/) — rode `scons nats`",
+    reason="nats-server não encontrado (PATH nem resources/) — rode `scons install`",
 )
 
 

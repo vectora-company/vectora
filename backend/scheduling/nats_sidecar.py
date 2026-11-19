@@ -7,7 +7,7 @@ Python que sobe o ``nats-server`` como SEU PRÓPRIO sidecar, um nível abaixo,
 disponível igualmente em desktop e em modo servidor/VPS.
 
 O binário ``nats-server`` (Go, ~15-20MB, sem dependências) é baixado por
-``scons nats`` pra ``resources/`` e embutido no executável final por
+``scons install`` pra ``resources/`` e embutido no executável final por
 DOIS empacotadores diferentes, então precisa de DOIS caminhos de resolução em
 runtime — mesma resolução de bundle congelado que ``server.py::
 _chat_static_root`` já usa pro ``frontend/dist``:
@@ -21,7 +21,7 @@ _chat_static_root`` já usa pro ``frontend/dist``:
 
 Em dev, ``shutil.which`` resolve uma instalação local (ex.: ``choco install
 nats-server`` / ``brew install nats-server``) ou o resource baixado em
-``resources/`` por ``scons nats``. Sem o binário disponível em
+``resources/`` por ``scons install``. Sem o binário disponível em
 NENHUM desses caminhos, o sidecar não sobe e ``get_mq()``/``get_kv()`` caem
 pro fallback em memória — nunca impede o backend de iniciar.
 """
@@ -99,7 +99,7 @@ def _resolve_binary() -> str | None:
     ``build-hybrid.py`` — vence o PATH pra nunca rodar uma versão desalinhada
     instalada à parte na máquina) → PATH (dev, ex.: ``choco/brew install
     nats-server``) → árvore-fonte (``resources/``, baixado por
-    ``scons nats``).
+    ``scons install``).
     """
     override = os.getenv("VECTORA_NATS_BINARY")
     if override and Path(override).is_file():

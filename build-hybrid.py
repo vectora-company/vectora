@@ -177,7 +177,7 @@ def main() -> None:
     _assert_defaults_env_without_secrets()
 
     # nats-server precisa estar em resources/ ANTES do PyInstaller
-    # rodar (baixado por `scons nats`/_fetch_nats) — sem ele, o binário
+    # rodar (baixado por `scons install`/_fetch_nats) — sem ele, o binário
     # standalone sobe sem sidecar de fila/KV e get_mq()/get_kv() degradam pro
     # fallback em memória (nunca falha o boot, mas silenciosamente perde
     # persistência em produção). backend.scheduling.nats_sidecar resolve o
@@ -187,12 +187,12 @@ def main() -> None:
     nats_binary = VECTORA / "resources" / nats_exe
     if not nats_binary.is_file():
         sys.exit(
-            f"{nats_binary} não encontrado. Rode `scons nats` antes do build "
+            f"{nats_binary} não encontrado. Rode `scons install` antes do build "
             "(baixa o binário nats-server pra resources/)."
         )
 
     # ffmpeg/ffprobe — mesmo motivo/mecanismo do nats-server acima
-    # (baixados por `scons ffmpeg`, resolvidos em runtime via
+    # (baixados por `scons install`, resolvidos em runtime via
     # backend.services.ffmpeg_binary._frozen_bundle_bases, mesmo padrão de
     # sys._MEIPASS). Sem eles, backend/tools/media_native.py degrada pro
     # fallback de PATH do sistema — silencioso, não falha o boot.
@@ -208,14 +208,14 @@ def main() -> None:
         )
 
     # Helper de fala nativo do macOS (framework Speech), compilado por
-    # `scons macos-speech`; resolvido em runtime por
+    # `scons install`; resolvido em runtime por
     # backend.services.speech_to_text (pasta speech/ do bundle).
     speech_args: list[str] = []
     if sys.platform == "darwin":
         speech_binary = VECTORA / "resources" / "vectora-speech"
         if not speech_binary.is_file():
             sys.exit(
-                f"{speech_binary} não encontrado. Rode `scons macos-speech` "
+                f"{speech_binary} não encontrado. Rode `scons install` "
                 "antes do build (compila o helper de fala do macOS)."
             )
         speech_args = ["--add-binary", f"{speech_binary}{SEP}speech"]

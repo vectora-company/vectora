@@ -13,7 +13,7 @@ def _no_nats_sidecar(monkeypatch: pytest.MonkeyPatch):
 
     Sem isso, todo teste que assume ``MemoryKV``/``MemoryMQ`` passa a subir o
     ``nats-server`` real assim que o binário existe em ``resources/`` (após
-    ``scons nats``) — deixando a suíte dependente da presença do binário e
+    ``scons install``) — deixando a suíte dependente da presença do binário e
     compartilhando o store JetStream em ``~/.vectora/nats`` entre os testes.
 
     Testes que querem o ``NatsKV``/``NatsMQ`` de verdade ou re-mockam
