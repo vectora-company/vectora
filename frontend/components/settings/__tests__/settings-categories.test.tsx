@@ -90,4 +90,15 @@ describe("buildSettingsCategoryGroups — Administração achatada (5 categorias
     expect(findCategory(groups, "billing")?.id).toBe("conta");
     expect(findCategory(groups, "about")?.id).toBe("conta");
   });
+
+  it("Memória não é mais uma categoria: vive no workbench e o id antigo abre Geral", () => {
+    const groups = buildSettingsCategoryGroups({
+      connectEnabled: false,
+      isAdmin: true,
+    });
+    const ids = groups.flatMap((g) => g.categories.map((c) => c.id));
+
+    expect(ids).not.toContain("memoria");
+    expect(findCategory(groups, "memoria")?.id).toBe("geral");
+  });
 });
