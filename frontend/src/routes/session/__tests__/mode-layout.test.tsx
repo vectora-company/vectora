@@ -465,7 +465,7 @@ describe("SessionPage — chat compacto no IDE", () => {
     useWorkbenchStore.setState({ panelOpen: { t1: false } });
     Object.defineProperty(window, "innerWidth", {
       configurable: true,
-      value: 818,
+      value: 600,
     });
 
     render(<SessionPage />);
@@ -522,7 +522,7 @@ describe("SessionPage — chat compacto no IDE", () => {
     useWorkbenchStore.setState({ panelOpen: { t1: false } });
     Object.defineProperty(window, "innerWidth", {
       configurable: true,
-      value: 818,
+      value: 600,
     });
     Object.defineProperty(window, "visualViewport", {
       configurable: true,
@@ -556,7 +556,7 @@ describe("SessionPage — chat compacto no IDE", () => {
 
     Object.defineProperty(window, "innerWidth", {
       configurable: true,
-      value: 818,
+      value: 600,
     });
     fireEvent(window, new Event("resize"));
     await waitFor(() =>
@@ -575,7 +575,7 @@ describe("SessionPage — chat compacto no IDE", () => {
     useWorkbenchStore.setState({ panelOpen: { t1: false, t2: true } });
     Object.defineProperty(window, "innerWidth", {
       configurable: true,
-      value: 818,
+      value: 600,
     });
 
     const { rerender } = render(<SessionPage />);
@@ -639,13 +639,66 @@ describe("SessionPage — layout do IDE em tablet", () => {
   });
 });
 
+describe("SessionPage — tablet com faixas nas bordas", () => {
+  it("mostra as faixas de sessões e do workbench e abre uma gaveta por vez", async () => {
+    setMode("assistant");
+    useWorkbenchStore.setState({ panelOpen: { t1: false } });
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 818,
+    });
+
+    render(<SessionPage />);
+
+    expect(await screen.findByTestId("compact-sessions-rail")).toBeVisible();
+    expect(screen.getByTestId("workbench-navbar")).toBeInTheDocument();
+    // Os botões do cabeçalho só existem quando não há faixas (celular).
+    expect(screen.queryByTestId("compact-open-sessions")).toBeNull();
+
+    fireEvent.click(screen.getByTestId("compact-rail-sessions"));
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByTestId("sidebar")).toHaveAttribute(
+      "data-in-sheet",
+      "true",
+    );
+
+    fireEvent.click(screen.getByTestId("compact-rail-sessions"));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
+  it("abrir o workbench fecha a gaveta de sessões", async () => {
+    setMode("assistant");
+    useWorkbenchStore.setState({ panelOpen: { t1: false } });
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 818,
+    });
+
+    render(<SessionPage />);
+    fireEvent.click(await screen.findByTestId("compact-rail-sessions"));
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+
+    act(() => useWorkbenchStore.getState().setPanelOpen("t1", true));
+
+    expect(
+      await screen.findByTestId("compact-workbench-overlay"),
+    ).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    // Clicar na área escurecida fecha a gaveta.
+    fireEvent.click(screen.getByTestId("compact-workbench-backdrop"));
+    await waitFor(() =>
+      expect(screen.queryByTestId("compact-workbench-overlay")).toBeNull(),
+    );
+  });
+});
+
 describe("SessionPage — laterais compactas", () => {
   it("abre uma sidebar por vez e renderiza sessões dentro do Sheet", async () => {
     setMode("assistant");
     useWorkbenchStore.setState({ panelOpen: { t1: false } });
     Object.defineProperty(window, "innerWidth", {
       configurable: true,
-      value: 818,
+      value: 600,
     });
 
     render(<SessionPage />);
