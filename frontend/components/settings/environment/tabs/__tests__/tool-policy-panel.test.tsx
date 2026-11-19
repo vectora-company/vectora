@@ -1,9 +1,16 @@
 // @vitest-environment jsdom
 
-import { act, render, screen } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ToolPolicyPanel } from "../tool-policy-panel";
+import { useAuthStore } from "@/lib/stores/auth-store";
 
 describe("ToolPolicyPanel", () => {
   afterEach(() => {
@@ -84,5 +91,96 @@ describe("ToolPolicyPanel", () => {
     expect(
       screen.getByRole("region", { name: "web_search schema" }),
     ).toBeInTheDocument();
+  });
+});
+
+describe("ToolPolicyPanel — RBAC", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    useAuthStore.setState({ user: null });
+  });
+
+  it("bloqueada pelo admin aparece desligada e travada para o usuário", async () => {
+    useAuthStore.setState({ user: { id: "u", role: "member" } as never });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify(
+              url === "/tools/policy"
+                ? {
+                    available: ["terminal"],
+                    disabled: [],
+                    locked: ["terminal"],
+                  }
+                : { usage: {} },
+            ),
+            { status: 200 },
+          ),
+        ),
+      ),
+    );
+
+    render(<ToolPolicyPanel />);
+
+    const toggle = await screen.findByRole("switch", { name: "terminal" });
+    expect(toggle).toBeDisabled();
+    expect(toggle).not.toBeChecked();
+    expect(
+      screen.getByText("Blocked by the administrator"),
+    ).toBeInTheDocument();
+    // Quem não é admin não vê a matriz de roles.
+    expect(screen.queryByText("Who can use it")).not.toBeInTheDocument();
+  });
+
+  it("admin escolhe os roles de cada tool e grava só o que mudou", async () => {
+    useAuthStore.setState({ user: { id: "a", role: "admin" } as never });
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (init?.method === "PUT") {
+        return Promise.resolve(new Response("{}", { status: 200 }));
+      }
+      if (url === "/admin/tool-access") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              tools: [{ name: "terminal", roles: ["member", "viewer"] }],
+            }),
+            { status: 200 },
+          ),
+        );
+      }
+      return Promise.resolve(
+        new Response(
+          JSON.stringify(
+            url === "/tools/policy"
+              ? { available: ["terminal"], disabled: [], locked: [] }
+              : { usage: {} },
+          ),
+          { status: 200 },
+        ),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ToolPolicyPanel />);
+
+    const viewer = await screen.findByRole("checkbox", { name: "Viewer" });
+    expect(viewer).toBeChecked();
+    // Admin e root aparecem marcados e travados.
+    expect(screen.getByRole("checkbox", { name: "Admin" })).toBeDisabled();
+    fireEvent.click(viewer);
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    const putAccess = () =>
+      fetchMock.mock.calls.find(
+        ([url, init]) =>
+          url === "/admin/tool-access" &&
+          (init as RequestInit | undefined)?.method === "PUT",
+      );
+    await waitFor(() => expect(putAccess()).toBeDefined());
+    const putCall = putAccess() ?? [];
+    const body = JSON.parse(String((putCall[1] as RequestInit).body));
+    expect(body).toEqual({ access: { terminal: ["member"] } });
   });
 });

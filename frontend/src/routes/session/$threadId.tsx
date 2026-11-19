@@ -448,6 +448,16 @@ function SessionPage() {
     }
   }, [isCompactSession]);
   useEffect(() => {
+    if (!isCompactSession || !workbenchOpen || uiMode !== "assistant") return;
+    // Esc fecha a gaveta do workbench no layout compacto.
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setWorkbenchOpen(threadId, false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isCompactSession, workbenchOpen, uiMode, setWorkbenchOpen, threadId]);
+
+  useEffect(() => {
     if (isCompactSession && workbenchOpen) {
       // Só uma gaveta lateral por vez: abrir o workbench fecha as sessões.
       // oxlint-disable-next-line react/set-state-in-effect

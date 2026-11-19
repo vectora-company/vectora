@@ -891,3 +891,88 @@ class TestTracerAdministration:
         assert result == {"deleted": 3}
         clear_session.assert_awaited_once_with(42)
         clear_all.assert_not_awaited()
+
+
+class TestToolAccessByRole:
+    """RBAC de tools: GET/PUT /admin/tool-access."""
+
+    @pytest.fixture(autouse=True)
+    def iso_dir(self, tmp_path, monkeypatch):
+        from backend.rbac import tool_policy
+
+        monkeypatch.setattr(tool_policy, "_policy_dir", lambda: tmp_path / "tools")
+
+    @staticmethod
+    def _request(role: str = "admin") -> Any:
+        from unittest.mock import MagicMock
+
+        request = MagicMock()
+        request.state.user = MagicMock(role=role, id="u-1")
+        return request
+
+    @pytest.mark.asyncio
+    async def test_lista_todas_as_tools_liberadas_para_todos_os_roles(self):
+        from backend.api.handlers.admin import get_tool_access
+
+        result = await get_tool_access(self._request())
+
+        assert result["roles"] == ["member", "viewer"]
+        assert result["always_allowed"] == ["admin", "root"]
+        assert all(t["roles"] == ["member", "viewer"] for t in result["tools"])
+
+    @pytest.mark.asyncio
+    async def test_put_restringe_e_a_leitura_reflete(self):
+        from backend.api.handlers.admin import (
+            ToolAccessBody,
+            get_tool_access,
+            put_tool_access,
+        )
+        from backend.nodes.tools import ALL_TOOLS
+
+        target = ALL_TOOLS[0].name
+        await put_tool_access(
+            self._request(), ToolAccessBody(access={target: ["member"]})
+        )
+
+        entry = next(
+            t
+            for t in (await get_tool_access(self._request()))["tools"]
+            if t["name"] == target
+        )
+        assert entry["roles"] == ["member"]
+
+    @pytest.mark.asyncio
+    async def test_apenas_admin_pode_ler_e_gravar(self):
+        from fastapi import HTTPException
+
+        from backend.api.handlers.admin import (
+            ToolAccessBody,
+            get_tool_access,
+            put_tool_access,
+        )
+
+        with pytest.raises(HTTPException) as read_error:
+            await get_tool_access(self._request("member"))
+        with pytest.raises(HTTPException) as write_error:
+            await put_tool_access(self._request("member"), ToolAccessBody(access={}))
+        assert read_error.value.status_code == 403
+        assert write_error.value.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_rejeita_tool_e_role_desconhecidos(self):
+        from fastapi import HTTPException
+
+        from backend.api.handlers.admin import ToolAccessBody, put_tool_access
+        from backend.nodes.tools import ALL_TOOLS
+
+        with pytest.raises(HTTPException) as unknown_tool:
+            await put_tool_access(
+                self._request(), ToolAccessBody(access={"nao_existe": ["member"]})
+            )
+        with pytest.raises(HTTPException) as unknown_role:
+            await put_tool_access(
+                self._request(),
+                ToolAccessBody(access={ALL_TOOLS[0].name: ["superuser"]}),
+            )
+        assert unknown_tool.value.status_code == 400
+        assert unknown_role.value.status_code == 400
