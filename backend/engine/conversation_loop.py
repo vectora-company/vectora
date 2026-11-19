@@ -1083,6 +1083,8 @@ async def run_conversation(  # noqa: PLR0911
     media_routed_model: str | None = None
     response_revisions = 0
     for _iteracao in range(config.max_iterations):
+        # Toolsets ativados na chamada anterior entram no schema desta.
+        tools = tool_registry.all()
         raw_history = _drop_terminal_notices(await session_store.get_history(thread_id))
         if ctx.permission_mode == "plan":
             await _hydrate_plan_approvals(

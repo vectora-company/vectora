@@ -162,6 +162,7 @@ class ToolRegistry:
 
     def __init__(self) -> None:
         self._tools: dict[str, ToolSpec] = {}
+        self._deferred: dict[str, dict[str, ToolSpec]] = {}
 
     def register(self, spec: ToolSpec) -> None:
         if spec.name in self._tools:
@@ -176,6 +177,23 @@ class ToolRegistry:
 
     def __contains__(self, name: str) -> bool:
         return name in self._tools
+
+    def defer(self, toolset: str, spec: ToolSpec) -> None:
+        """Guarda ``spec`` num toolset que só entra no schema depois de ativado."""
+        if spec.name in self._tools:
+            raise ValueError(f"tool '{spec.name}' já registrada — nome duplicado")
+        self._deferred.setdefault(toolset, {})[spec.name] = spec
+
+    def deferred_toolsets(self) -> dict[str, list[str]]:
+        """Nomes das tools ainda não ativadas, por toolset."""
+        return {k: sorted(v) for k, v in self._deferred.items() if v}
+
+    def activate(self, toolset: str) -> list[str]:
+        """Move as tools do toolset para o registro ativo; devolve os nomes."""
+        specs = self._deferred.pop(toolset, {})
+        for spec in specs.values():
+            self._tools[spec.name] = spec
+        return sorted(specs)
 
 
 TOOL_REGISTRY = ToolRegistry()

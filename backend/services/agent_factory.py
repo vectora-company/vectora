@@ -713,26 +713,36 @@ def _native_tool_registry(chat_mode: bool, user_id: str | None) -> ToolRegistry:
     (``@vtool``) já foi importado e registrado no ``TOOL_REGISTRY`` antes
     da resolução por nome abaixo."""
     from backend.nodes.tools import ALL_TOOL_NAMES, CHAT_TOOL_NAMES
-    from backend.tools.registry import TOOL_REGISTRY, ToolRegistry
+    from backend.tools.registry import TOOL_REGISTRY
 
     names = CHAT_TOOL_NAMES if chat_mode else ALL_TOOL_NAMES
+    from backend.tools.toolsets import build_registry_with_deferred
+
     disabled = tool_policy.effective_disabled(user_id)
-    registry = ToolRegistry()
+    specs: list[ToolSpec] = []
     for name in sorted(names):
         if name in disabled:
             continue
         spec = TOOL_REGISTRY.get(name)
         if spec is not None:
-            registry.register(spec)
+            specs.append(spec)
 
     if not chat_mode:
         import backend.tools.subagent_delegate
 
         delegate_spec = TOOL_REGISTRY.get("delegate_to_subagent")
         if delegate_spec is not None and "delegate_to_subagent" not in disabled:
-            registry.register(delegate_spec)
+            specs.append(delegate_spec)
 
-    return registry
+    # O modo chat já é enxuto; só o modo código adia as tools raras.
+    from backend.nodes.tools import BROWSER_TOOLS, FS_TOOLS, GIT_TOOLS
+
+    workbench = frozenset(
+        spec.name for group in (BROWSER_TOOLS, FS_TOOLS, GIT_TOOLS) for spec in group
+    )
+    return build_registry_with_deferred(
+        specs, defer=not chat_mode, always_active=workbench
+    )
 
 
 def _recusa_amend(spec: ToolSpec) -> ToolSpec:
