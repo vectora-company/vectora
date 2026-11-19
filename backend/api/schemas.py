@@ -280,6 +280,12 @@ class ReasoningEvent(BaseModel):
     content: str
 
 
+class SteerAppliedEvent(BaseModel):
+    """Orientação enviada durante o turno que o agente já está seguindo."""
+
+    content: str
+
+
 class VerificationEvent(BaseModel):
     """Desfecho da verificação do turno: passed, degraded ou failed."""
 
@@ -548,6 +554,7 @@ StreamChatEventPayload = (
     | TokenEvent
     | ReasoningEvent
     | VerificationEvent
+    | SteerAppliedEvent
     | ToolCallEvent
     | ToolResultEvent
     | NodeEvent
@@ -573,6 +580,7 @@ _TYPE_MAP: dict[type, str] = {
     TokenEvent: "token",
     ReasoningEvent: "reasoning",
     VerificationEvent: "verification",
+    SteerAppliedEvent: "steer_applied",
     ToolCallEvent: "tool_call",
     ToolResultEvent: "tool_result",
     NodeEvent: "node",

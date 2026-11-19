@@ -167,6 +167,25 @@ describe("useStreamHandler.processStream", () => {
     });
   });
 
+  it("registra as orientações aplicadas no meio do turno", async () => {
+    streamChatMock.mockReturnValue(
+      gen([
+        { type: "thread", thread_id: "t1" },
+        { type: "token", content: "Parte 1" },
+        { type: "steer_applied", content: "use pnpm" },
+        { type: "token", content: " e parte 2" },
+        { type: "done", thread_id: "t1", run_id: "run-1" },
+      ]),
+    );
+
+    const { result } = run();
+    await result.current.processStream("oi", "a1");
+
+    const assistant = messages.find((m) => m.id === "a1");
+    expect(assistant?.steers).toEqual(["use pnpm"]);
+    expect(assistant?.content).toBe("Parte 1 e parte 2");
+  });
+
   it("encerra o turno no done e anexa os arquivos editados que chegam depois", async () => {
     streamChatMock.mockReturnValue(turnWithLateFiles());
 

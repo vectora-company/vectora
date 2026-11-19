@@ -40,6 +40,13 @@ class ReasoningChunk:
 
 
 @dataclass(frozen=True, slots=True)
+class SteerApplied:
+    """Orientação do usuário que o agente passou a seguir no meio do turno."""
+
+    content: str
+
+
+@dataclass(frozen=True, slots=True)
 class VerificationFinished:
     """Resultado da verificação pós-execução, mostrado no rodapé do turno."""
 
@@ -234,6 +241,7 @@ EngineEvent = (
     | MessageChunk
     | ReasoningChunk
     | VerificationFinished
+    | SteerApplied
     | MessageBreak
     | ToolCallStarted
     | ToolResult

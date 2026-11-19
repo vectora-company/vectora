@@ -16,7 +16,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Play, RotateCcw, Send, X } from "lucide-react";
+import { Compass, Play, RotateCcw, Send, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -135,6 +135,8 @@ interface ChatInputProps {
     status?: "waiting" | "sending" | "failed" | "cancelled";
   }[];
   onRunQueuedNow?: (messageId: string) => void;
+  /** Entrega o item da fila ao run ativo como orientação, sem interrompê-lo. */
+  onSteerQueued?: (messageId: string) => void;
   onRemoveQueued?: (messageId: string) => void;
   onRetryQueued?: (messageId: string) => void;
 
@@ -378,6 +380,7 @@ export function ChatInput({
   voiceError,
   queuedMessages = EMPTY_QUEUED_MESSAGES,
   onRunQueuedNow,
+  onSteerQueued,
   onRemoveQueued,
   onRetryQueued,
   tokensUsed,
@@ -583,6 +586,29 @@ export function ChatInput({
                         >
                           <RotateCcw className="h-3.5 w-3.5" />
                         </Button>
+                      )}
+                    {isLoading &&
+                      msg.status !== "failed" &&
+                      msg.status !== "cancelled" &&
+                      msg.status !== "sending" &&
+                      onSteerQueued && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 shrink-0 p-0 text-muted-foreground hover:text-primary"
+                              aria-label={m.input_steer_queued()}
+                              onClick={() => onSteerQueued(msg.id)}
+                            >
+                              <Compass className="h-3.5 w-3.5" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top">
+                            {m.input_steer_queued()}
+                          </TooltipContent>
+                        </Tooltip>
                       )}
                     {msg.status !== "failed" &&
                       msg.status !== "cancelled" &&

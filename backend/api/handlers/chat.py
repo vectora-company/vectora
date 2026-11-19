@@ -82,6 +82,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+class SteerRunRequest(BaseModel):
+    thread_id: str
+    text: str
+
+
 class CancelRunRequest(BaseModel):
     thread_id: str = Field(min_length=1, max_length=200)
 
@@ -1223,6 +1228,24 @@ async def cancel_run(
 
     cancelled = cancel_active_runs(request.thread_id)
     return {"cancelled": cancelled > 0, "cancelled_runs": cancelled}
+
+
+@router.post("/vectora.chat.v1.ChatService/SteerRun")
+async def steer_run(request: SteerRunRequest, http_request: Request) -> dict[str, bool]:
+    """Entrega uma orientação ao run ativo da conversa sem interrompê-lo.
+
+    ``queued`` é falso quando não há run ativo (o cliente envia como mensagem
+    normal) ou a orientação não pôde ser enfileirada.
+    """
+    from backend.api.handlers.threads import _assert_owns_thread
+
+    await _assert_owns_thread(request.thread_id, http_request, require_existing=True)
+    from backend.api.native_stream import has_active_run
+    from backend.engine.steering import push_steer
+
+    if not has_active_run(request.thread_id):
+        return {"queued": False, "active": False}
+    return {"queued": push_steer(request.thread_id, request.text), "active": True}
 
 
 @router.post("/vectora.chat.v1.ChatService/ResumeStream")

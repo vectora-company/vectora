@@ -104,6 +104,7 @@ export type StreamEvent =
     }
   | { type: "token"; content: string; node?: string }
   | { type: "reasoning"; content: string }
+  | { type: "steer_applied"; content: string }
   | { type: "verification"; status: string; outcome: string; detail?: string }
   | {
       type: "tool_call";
@@ -409,6 +410,29 @@ function redirectToLogin(): void {
 // ============================================================================
 
 /** Explicitly stop the server-side run before closing its SSE connection. */
+/** Entrega uma orientação ao run ativo sem interrompê-lo. `queued` é falso
+ * quando não há run ativo (envie como mensagem normal) ou a fila está cheia. */
+export async function steerRun(
+  threadId: string,
+  text: string,
+): Promise<{ queued: boolean; active: boolean }> {
+  const deviceId = getDeviceId();
+  const res = await fetch(
+    `${VECTORA_API_URL}/vectora.chat.v1.ChatService/SteerRun`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(deviceId ? { "X-Vectora-Device-Id": deviceId } : {}),
+      },
+      credentials: "include",
+      body: JSON.stringify({ thread_id: threadId, text }),
+    },
+  );
+  if (!res.ok) return { queued: false, active: false };
+  return (await res.json()) as { queued: boolean; active: boolean };
+}
+
 export async function cancelRun(threadId: string): Promise<boolean> {
   const url = `${VECTORA_API_URL}/vectora.chat.v1.ChatService/CancelRun`;
   const doFetch = () => {

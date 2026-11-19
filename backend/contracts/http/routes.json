@@ -1786,6 +1786,13 @@
     "methods": [
       "POST"
     ],
+    "name": "steer_run_vectora_chat_v1_ChatService_SteerRun_post",
+    "path": "/vectora.chat.v1.ChatService/SteerRun"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
     "name": "stream_chat_vectora_chat_v1_ChatService_StreamChat_post",
     "path": "/vectora.chat.v1.ChatService/StreamChat"
   },

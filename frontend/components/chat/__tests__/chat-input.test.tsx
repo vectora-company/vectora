@@ -220,6 +220,40 @@ describe("ChatInput", () => {
     expect(onRunQueuedNow).toHaveBeenCalledWith("q1");
   });
 
+  it("oferece orientar o agente com um item da fila enquanto ele executa", () => {
+    const onSteerQueued = vi.fn();
+    render(
+      <ChatInput
+        {...baseProps({
+          isLoading: true,
+          queuedMessages: [{ id: "q1", content: "use pnpm" }],
+          onSteerQueued,
+        })}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: m.input_steer_queued() }),
+    );
+    expect(onSteerQueued).toHaveBeenCalledWith("q1");
+  });
+
+  it("não oferece orientar quando não há run em andamento", () => {
+    render(
+      <ChatInput
+        {...baseProps({
+          isLoading: false,
+          queuedMessages: [{ id: "q1", content: "use pnpm" }],
+          onSteerQueued: vi.fn(),
+        })}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("button", { name: m.input_steer_queued() }),
+    ).toBeNull();
+  });
+
   it("item que falhou mostra o estado, permite tentar de novo e remover", () => {
     const onRetryQueued = vi.fn();
     const onRemoveQueued = vi.fn();

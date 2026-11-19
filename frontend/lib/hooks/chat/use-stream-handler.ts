@@ -1317,6 +1317,16 @@ async function handleEvent(
       break;
     }
 
+    case "steer_applied": {
+      setMessages((prev) =>
+        updateMessageInList(prev, assistantMessageId, (item) => ({
+          ...item,
+          steers: [...(item.steers ?? []), event.content],
+        })),
+      );
+      break;
+    }
+
     case "verification": {
       setMessages((prev) =>
         updateMessageInList(prev, assistantMessageId, (item) => ({
