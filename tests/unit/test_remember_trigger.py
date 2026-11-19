@@ -334,3 +334,33 @@ async def test_destilacao_usa_o_trecho_mais_recente_da_conversa(monkeypatch) -> 
 
     assert capturado["user"].endswith("FIM")
     assert "INICIO" not in capturado["user"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("texto", "esperado"),
+    [
+        ("Lembre que eu uso pnpm", True),
+        ("por favor, não esqueça do prefixo", True),
+        ("Remember my timezone", True),
+        ("qual é o clima hoje?", False),
+    ],
+)
+async def test_pedido_explicito_de_lembrar_antecipa_a_revisao(
+    monkeypatch, texto, esperado
+) -> None:
+    from backend.services import agent_factory
+    from backend.services.remember_trigger import _explicit_cue
+
+    monkeypatch.setattr(
+        agent_factory,
+        "aget_thread_messages",
+        AsyncMock(
+            return_value=[
+                ("assistant", "ok", None, None),
+                ("user", texto, None, None),
+            ]
+        ),
+    )
+
+    assert await _explicit_cue("t1") is esperado
