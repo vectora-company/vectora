@@ -451,9 +451,11 @@ function SessionPage() {
   // sobrevivia a um restart/reload (cada mount reiniciava em
   // getDefaultModel()).
   const setAgentConfig = useCallback(
-    (config: AgentConfig) => {
+    (config: AgentConfig, meta?: { automatic?: boolean }) => {
       setAgentConfigState(config);
-      if (config.model) setSelectedModel(config.model);
+      // Fallback automático (quota, provider fora do ar) não é escolha do
+      // usuário: persisti-lo faria o modelo voltar sozinho para o fallback.
+      if (config.model && !meta?.automatic) setSelectedModel(config.model);
     },
     [setSelectedModel],
   );

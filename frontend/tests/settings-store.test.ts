@@ -190,6 +190,26 @@ describe("useSettingsStore — hidratação remota", () => {
     );
   });
 
+  it("a escolha de modelo ainda não confirmada não é sobrescrita pela hidratação", async () => {
+    const { hydrateFromBackend, useSettingsStore } = await getStore();
+    const { fetchPrefs, pushPrefs } = await import("../lib/api/settings-prefs");
+    vi.mocked(pushPrefs).mockResolvedValueOnce(false);
+
+    useSettingsStore.getState().setSelectedModel("omniroute:auto");
+    await Promise.resolve();
+    vi.mocked(fetchPrefs).mockResolvedValueOnce({
+      selectedModel: "google:gemini-3-flash",
+    });
+    vi.mocked(pushPrefs).mockClear();
+    vi.mocked(pushPrefs).mockResolvedValue(true);
+
+    await hydrateFromBackend();
+
+    expect(useSettingsStore.getState().selectedModel).toBe("omniroute:auto");
+    // O envio que falhou é repetido na hidratação.
+    expect(pushPrefs).toHaveBeenCalledWith({ selectedModel: "omniroute:auto" });
+  });
+
   it("aplica as preferências do backend sem reenviar PATCH", async () => {
     const { hydrateFromBackend, useSettingsStore } = await getStore();
     const { fetchPrefs, pushPrefs } = await import("../lib/api/settings-prefs");
