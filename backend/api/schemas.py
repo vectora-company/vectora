@@ -386,6 +386,8 @@ class RagCitationEvent(BaseModel):
 class ErrorEvent(BaseModel):
     message: str
     code: str = "INTERNAL"
+    #: ``warning``: o turno continua; ``error``: terminal (valor de eventos antigos).
+    severity: Literal["warning", "error"] = "error"
 
 
 class DoneEvent(BaseModel):

@@ -94,6 +94,15 @@
           "title": "Seq",
           "type": "integer"
         },
+        "severity": {
+          "default": "error",
+          "enum": [
+            "warning",
+            "error"
+          ],
+          "title": "Severity",
+          "type": "string"
+        },
         "type": {
           "const": "error",
           "title": "Type",

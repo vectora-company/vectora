@@ -51,4 +51,14 @@ describe("createSequenceGuard", () => {
     expect(guard.accept({ type: "done" })).toBe(true);
     expect(guard.accept({ type: "token" })).toBe(false);
   });
+
+  it("um aviso do runtime não é terminal: os eventos seguintes ainda passam", () => {
+    const guard = createSequenceGuard();
+    expect(guard.accept({ type: "token", seq: 1 })).toBe(true);
+    expect(guard.accept({ type: "error", seq: 2 })).toBe(true);
+    expect(guard.finished()).toBe(false);
+    expect(guard.accept({ type: "token", seq: 3 })).toBe(true);
+    expect(guard.accept({ type: "done", seq: 4 })).toBe(true);
+    expect(guard.finished()).toBe(true);
+  });
 });
