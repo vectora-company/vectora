@@ -150,6 +150,7 @@
   "ai_models_minimum_autonomous_confidence": "Minimum confidence for autonomous decisions:",
   "ai_models_model": "Model",
   "ai_models_no_models_for_capability": "No models with this capability were found in configured providers.",
+  "ai_models_openrouter_decision_hint": "Uses the OpenRouter key already set in Provider Routing; no separate credential is needed.",
   "ai_models_provider_clef_api": "Clef — Cloudflare Workers AI",
   "ai_models_provider_clef_local": "Clef local (llama.cpp)",
   "ai_models_provider_jev_api": "JEV API",

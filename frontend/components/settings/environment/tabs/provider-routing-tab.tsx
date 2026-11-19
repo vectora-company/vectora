@@ -2983,7 +2983,29 @@ function NineRouterSection() {
  * não desliga a capacidade. */
 export function MediaModelsSection() {
   const [models, setModels] = useState<Record<string, string>>({});
+  const [speechModels, setSpeechModels] = useState<
+    Array<{ id: string; name: string; voices: string[] }>
+  >([]);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      try {
+        const res = await fetch("/admin/speech-models");
+        if (!res.ok || !alive) return;
+        const data = (await res.json()) as {
+          models?: Array<{ id: string; name: string; voices: string[] }>;
+        };
+        if (alive) setSpeechModels(data.models ?? []);
+      } catch {
+        if (alive) setSpeechModels([]);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -3058,6 +3080,11 @@ export function MediaModelsSection() {
             className="w-[240px]"
             value={models[key] ?? ""}
             autoComplete="off"
+            list={
+              key === "openrouter_tts_model"
+                ? "openrouter-speech-models"
+                : undefined
+            }
             onChange={(e) =>
               setModels((prev) => ({ ...prev, [key]: e.target.value }))
             }
@@ -3065,6 +3092,13 @@ export function MediaModelsSection() {
           />
         </div>
       ))}
+      <datalist id="openrouter-speech-models">
+        {speechModels.map((model) => (
+          <option key={model.id} value={model.id}>
+            {model.name}
+          </option>
+        ))}
+      </datalist>
       {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
   );

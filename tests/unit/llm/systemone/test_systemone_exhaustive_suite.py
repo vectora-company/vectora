@@ -669,6 +669,7 @@ async def test_get_decision_models_status_exposes_complete_capability_matrix(
         "laya-local",
         "clef-api",
         "jev-api",
+        "openrouter-api",
     }
     selected = next(
         item for item in res.capability_matrix if item.provider == res.provider

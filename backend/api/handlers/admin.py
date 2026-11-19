@@ -877,6 +877,15 @@ async def get_media_models(request: Request) -> dict:
     }
 
 
+@router.get("/speech-models")
+async def get_speech_models(request: Request) -> dict:
+    """Modelos de fala do OpenRouter e as vozes de cada um, para o seletor."""
+    require_admin(_get_user(request))
+    from backend.llm.openrouter.media import list_speech_models
+
+    return {"models": await list_speech_models()}
+
+
 @router.patch("/media-models")
 async def patch_media_models(request: Request, body: MediaModelsBody) -> dict:
     """Grava a escolha de modelo por provider+capacidade."""

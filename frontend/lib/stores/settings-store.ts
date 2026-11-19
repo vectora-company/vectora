@@ -40,7 +40,7 @@ export type PermissionMode =
 export type ReasoningEffort = "low" | "medium" | "high" | "max";
 /** Decision model providers exposed by the frontend selector. */
 export type DecisionModelProvider =
-  "clef-local" | "laya-local" | "clef-api" | "jev-api";
+  "clef-local" | "laya-local" | "clef-api" | "jev-api" | "openrouter-api";
 /** Modo de interface dentro do Dev (chatMode=false): "assistant" é o layout
  *  padrão de chat+workbench; "ide" é o layout VS Code com editor docked;
  *  "kanban" é o board multi-agente. */
@@ -906,7 +906,8 @@ export async function hydrateFromBackend(): Promise<void> {
     prefs.decisionModelProvider === "clef-local" ||
     prefs.decisionModelProvider === "laya-local" ||
     prefs.decisionModelProvider === "clef-api" ||
-    prefs.decisionModelProvider === "jev-api"
+    prefs.decisionModelProvider === "jev-api" ||
+    prefs.decisionModelProvider === "openrouter-api"
   )
     update.decisionModelProvider = prefs.decisionModelProvider;
   if (
@@ -961,7 +962,8 @@ export async function hydrateDecisionModelPreferences(
     decisionModelProvider:
       prefs.decisionModelProvider === "laya-local" ||
       prefs.decisionModelProvider === "clef-api" ||
-      prefs.decisionModelProvider === "jev-api"
+      prefs.decisionModelProvider === "jev-api" ||
+      prefs.decisionModelProvider === "openrouter-api"
         ? prefs.decisionModelProvider
         : "clef-local",
     decisionModelSurfaces:

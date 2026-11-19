@@ -3203,7 +3203,7 @@ def test_decision_model_status_with_empty_local_model(
     entries = {
         entry["provider"]: entry for entry in response.json()["capability_matrix"]
     }
-    assert len(entries) == 4
+    assert len(entries) == 5
     assert entries["clef-local"]["model"] == "unconfigured"
     assert entries["clef-local"]["discovered"] is (not capabilities_fail)
     assert entries["clef-local"]["ready"] is (not capabilities_fail)
@@ -3212,3 +3212,58 @@ def test_decision_model_status_with_empty_local_model(
     assert all(
         entry["discovered"] for name, entry in entries.items() if name != "clef-local"
     )
+
+
+@pytest.mark.asyncio
+async def test_decision_model_readiness_openrouter_sem_chave(monkeypatch):
+    """O OpenRouter usa a chave do próprio OpenRouter; sem ela nada é sondado."""
+    from backend.api.handlers import provider_routing
+
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.setattr(
+        "backend.settings.settings",
+        SimpleNamespace(
+            systemone_enabled=True,
+            openrouter_api_key=None,
+            systemone_openrouter_model="typesafe/jev-1.14",
+        ),
+    )
+    probe = AsyncMock()
+    monkeypatch.setattr(provider_routing, "get_systemone_provider", probe)
+
+    result = await get_decision_model_readiness("openrouter-api")
+
+    assert result.provider == "openrouter-api"
+    assert result.model == "typesafe/jev-1.14"
+    assert result.credential_valid is False
+    assert result.ready is False
+    probe.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_decision_model_readiness_openrouter_com_chave_sonda_o_provider(
+    monkeypatch, decision_model_settings
+):
+    from backend.api.handlers import provider_routing
+
+    config = decision_model_settings.model_copy(
+        update={
+            "openrouter_api_key": "sk-or-teste",
+            "systemone_openrouter_model": "liquid/d1.1",
+        }
+    )
+    monkeypatch.setattr("backend.settings.settings", config)
+    adapter = SimpleNamespace(
+        capabilities=AsyncMock(), health=AsyncMock(return_value=True)
+    )
+    factory = MagicMock(return_value=adapter)
+    monkeypatch.setattr(provider_routing, "get_systemone_provider", factory)
+
+    result = await get_decision_model_readiness("openrouter-api")
+
+    assert (result.configured, result.credential_valid, result.ready) == (
+        True,
+        True,
+        True,
+    )
+    assert factory.call_args.kwargs["openrouter_api_key"] == "sk-or-teste"

@@ -53,7 +53,7 @@ from backend.llm.systemone.types import (
 
 logger = logging.getLogger(__name__)
 
-_REMOTE_PROVIDERS = frozenset({"clef-api", "jev-api"})
+_REMOTE_PROVIDERS = frozenset({"clef-api", "jev-api", "openrouter-api"})
 _MIN_ACCOUNTED_TOKENS = 16
 
 
@@ -317,6 +317,8 @@ class SystemOneHarness:
             return self._settings.clef_api_model
         if provider_id == "jev-api":
             return self._settings.jev_api_model
+        if provider_id == "openrouter-api":
+            return self._settings.openrouter_model
         return self._settings.local_model
 
     def _is_circuit_open(self, provider_id: str) -> bool:

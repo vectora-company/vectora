@@ -14,7 +14,8 @@ export interface FrontendPrefs {
   permissionMode?: string;
   reasoningEffort?: string;
   decisionModelsEnabled?: boolean;
-  decisionModelProvider?: "clef-local" | "laya-local" | "clef-api" | "jev-api";
+  decisionModelProvider?:
+    "clef-local" | "laya-local" | "clef-api" | "jev-api" | "openrouter-api";
   decisionModelSurfaces?: Record<string, boolean>;
   transcriptionMode?: "local" | "remote";
   sidebarPosition?: string;

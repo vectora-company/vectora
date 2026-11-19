@@ -219,6 +219,7 @@ interface SystemOneConfig {
   jev_api_base_url: string;
   jev_api_model: string;
   jev_api_key_configured: boolean;
+  openrouter_model: string;
   allow_remote_fallback: boolean;
   confidence_threshold_hitl: number;
   risk_assessment_timeout_s: number;
@@ -316,7 +317,9 @@ export function SystemOneConfiguration() {
           : null;
   // Nas APIs o modelo vem do catálogo; só os servidores locais pedem o nome
   // do modelo carregado.
-  const isApiProvider = selected === "clef-api" || selected === "jev-api";
+  const isRouter = selected === "openrouter-api";
+  const isApiProvider =
+    selected === "clef-api" || selected === "jev-api" || isRouter;
   const accountKey = selected === "clef-api" ? "clef_account_id" : null;
   const accountValue = selected === "clef-api" ? config.clef_account_id : "";
   const baseUrl = config[baseUrlKey as keyof SystemOneConfig] as string;
@@ -328,16 +331,22 @@ export function SystemOneConfiguration() {
       title={mDyn("ai_models_systemone_runtime_credentials")}
       description={mDyn("ai_models_systemone_config_description")}
     >
-      <label className={settingsLabelClass}>
-        {mDyn("ai_models_base_url")}
-        <input
-          className={cn(settingsInputClass)}
-          value={baseUrl}
-          onChange={(event) =>
-            setConfig({ ...config, [baseUrlKey]: event.target.value })
-          }
-        />
-      </label>
+      {isRouter ? (
+        <p className="text-xs text-muted-foreground">
+          {m.ai_models_openrouter_decision_hint()}
+        </p>
+      ) : (
+        <label className={settingsLabelClass}>
+          {mDyn("ai_models_base_url")}
+          <input
+            className={cn(settingsInputClass)}
+            value={baseUrl}
+            onChange={(event) =>
+              setConfig({ ...config, [baseUrlKey]: event.target.value })
+            }
+          />
+        </label>
+      )}
       {!isApiProvider && (
         <label className={settingsLabelClass}>
           {mDyn("ai_models_model")}
@@ -434,7 +443,7 @@ export function SystemOneConfiguration() {
         }
         onClick={() =>
           void save({
-            [baseUrlKey]: baseUrl,
+            ...(isRouter ? {} : { [baseUrlKey]: baseUrl }),
             ...(isApiProvider ? {} : { [modelKey]: model }),
             ...(accountKey ? { [accountKey]: accountValue } : {}),
             ...(credentialKey && secret ? { [credentialKey]: secret } : {}),
@@ -482,6 +491,7 @@ const FAMILY_ICON: Record<string, string> = {
 const API_MODEL_KEY: Partial<Record<DecisionModelProvider, string>> = {
   "clef-api": "clef_api_model",
   "jev-api": "jev_api_model",
+  "openrouter-api": "openrouter_model",
 };
 
 function isTransportActive(
@@ -546,6 +556,7 @@ function DecisionModelsSection() {
         setApiModels({
           clef_api_model: value.clef_api_model,
           jev_api_model: value.jev_api_model,
+          openrouter_model: value.openrouter_model,
         }),
       )
       .catch(() => {});

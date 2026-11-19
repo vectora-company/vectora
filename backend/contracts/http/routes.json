@@ -108,6 +108,13 @@
   },
   {
     "methods": [
+      "GET"
+    ],
+    "name": "get_speech_models_admin_speech_models_get",
+    "path": "/admin/speech-models"
+  },
+  {
+    "methods": [
       "GET",
       "PATCH"
     ],

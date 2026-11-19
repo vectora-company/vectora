@@ -24,6 +24,12 @@ CLEF_CLOUDFLARE_MODELS: tuple[str, ...] = (
     "@cf/cloudflare/clef-omni",
 )
 
+#: API de Decisions do OpenRouter (``POST /api/alpha/decisions``). Serve JEV,
+#: Clef, Gemini Decision, GPT-6 Luna Decisions e outros modelos de decisão com
+#: a mesma chave do OpenRouter.
+OPENROUTER_API_BASE_URL = "https://openrouter.ai/api"
+OPENROUTER_DEFAULT_DECISION_MODEL = "typesafe/jev-1.14"
+
 _LEGACY_JEV_BASE_URLS = frozenset({"https://api.jev.ai", "http://api.jev.ai"})
 _LEGACY_JEV_MODELS = frozenset({"jev-fast", "jev-1"})
 
