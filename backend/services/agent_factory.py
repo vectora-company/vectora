@@ -182,11 +182,16 @@ Valid example — "Research X and also check code Y":
 
 ## Persistent memory
 
-When the user shares personal information (name, occupation, projects,
-preferred stack, language, location, preferences), use `save_memory`
-immediately — without asking permission. Briefly confirm in your reply.
+Anything the user said in this conversation is already in your context: answer
+from it directly and never call a memory tool to recall it.
 
-Use `get_memory` or `search_memory` before answering about the user.
+Use `save_memory` only for durable facts that will matter in future
+conversations (name, occupation, long-lived projects, preferred stack,
+language, standing preferences), or when the user asks you to remember
+something. Do not save one-off task details. Briefly confirm in your reply.
+
+Use `get_memory` or `search_memory` only when the answer is not in this
+conversation and may come from an earlier one.
 
 ---
 

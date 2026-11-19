@@ -2953,3 +2953,27 @@ async def test_plan_proposal_approval_and_stages_complete_through_harness(
         "passed",
     ]
     await db.close()
+
+
+def test_drop_terminal_notices_remove_avisos_sinteticos() -> None:
+    from backend.engine.conversation_loop import _drop_terminal_notices
+    from backend.vtypes.message import MessageRole, VMessage, text_message
+
+    pergunta = text_message(MessageRole.USER, "qual o meu github?")
+    cancelado = VMessage(
+        role=MessageRole.ASSISTANT,
+        content=text_message(
+            MessageRole.ASSISTANT, "[cancelado] A execução foi cancelada."
+        ).content,
+        is_error=True,
+    )
+    falha = VMessage(
+        role=MessageRole.ASSISTANT,
+        content=text_message(MessageRole.ASSISTANT, "[falha] erro").content,
+        is_error=True,
+    )
+    resposta = text_message(MessageRole.ASSISTANT, "[cancelado] é só texto do modelo")
+
+    resultado = _drop_terminal_notices([pergunta, cancelado, pergunta, falha, resposta])
+
+    assert resultado == [pergunta, pergunta, resposta]

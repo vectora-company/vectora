@@ -578,14 +578,14 @@ def stream_engine_events(
                                     exc_info=True,
                                 )
                         from backend.services.remember_trigger import (
-                            maybe_trigger_remember,
+                            schedule_remember,
                         )
 
                         try:
-                            await maybe_trigger_remember(thread_id, user_id or "local")
+                            schedule_remember(thread_id, user_id or "local")
                         except Exception:
                             logger.warning(
-                                "native_stream: falha ao disparar remember",
+                                "native_stream: falha ao agendar remember",
                                 exc_info=True,
                             )
                 await queue.put(_SENTINEL)
@@ -696,13 +696,11 @@ def stream_engine_events(
                                                 {"run_id": str(uuid.uuid4())},
                                             )
                                     from backend.services.remember_trigger import (
-                                        maybe_trigger_remember,
+                                        schedule_remember,
                                     )
 
                                     with contextlib.suppress(Exception):
-                                        await maybe_trigger_remember(
-                                            thread_id, user_id or "local"
-                                        )
+                                        schedule_remember(thread_id, user_id or "local")
                             finally:
                                 _release_workspace_lock()
                                 with contextlib.suppress(Exception):
