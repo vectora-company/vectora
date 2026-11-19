@@ -224,6 +224,8 @@ def _usage_metadata(usage: dict | None) -> UsageSnapshot | None:
     cached = lido
     if cached:
         snapshot["cached_input_tokens"] = cached
+    if escrito:
+        snapshot["cache_write_tokens"] = escrito
     return snapshot
 
 

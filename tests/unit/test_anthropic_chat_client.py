@@ -446,4 +446,5 @@ def test_usage_da_anthropic_soma_cache_e_expoe_o_lido() -> None:
         "output_tokens": 20,
         "total_tokens": 1020,
         "cached_input_tokens": 900,
+        "cache_write_tokens": 50,
     }

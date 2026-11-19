@@ -83,7 +83,8 @@ async def test_uso_de_tokens_da_conversa_soma_as_execucoes(store) -> None:
                 "r1",
                 (
                     '{"input_tokens": 100, "output_tokens": 20, '
-                    '"total_tokens": 120, "cached_input_tokens": 80}'
+                    '"total_tokens": 120, "cached_input_tokens": 80, '
+                    '"cache_write_tokens": 30}'
                 ),
             ),
             ("r2", '{"input_tokens": 50, "output_tokens": 5, "total_tokens": 55}'),
@@ -103,5 +104,6 @@ async def test_uso_de_tokens_da_conversa_soma_as_execucoes(store) -> None:
     assert uso["total_tokens"] == 175
     assert uso["runs"] == 2
     assert uso["cached_input_tokens"] == 80
+    assert uso["cache_write_tokens"] == 30
     assert uso["model"] == "gemini-2.5-pro"
     assert (await store.thread_token_usage("vazia"))["runs"] == 0

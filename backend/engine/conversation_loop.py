@@ -1511,6 +1511,9 @@ async def run_conversation(  # noqa: PLR0911
             cached_input_tokens=int(
                 last_usage.get("cached_input_tokens", 0) if last_usage else 0
             ),
+            cache_write_tokens=int(
+                last_usage.get("cache_write_tokens", 0) if last_usage else 0
+            ),
         )
 
         if not tool_calls:
@@ -2433,6 +2436,9 @@ async def run_conversation(  # noqa: PLR0911
                 ),
                 cached_input_tokens=int(
                     last_usage.get("cached_input_tokens", 0) if last_usage else 0
+                ),
+                cache_write_tokens=int(
+                    last_usage.get("cache_write_tokens", 0) if last_usage else 0
                 ),
             )
             await session_store.update_agent_run_status(

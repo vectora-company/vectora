@@ -92,6 +92,7 @@ interface ThreadUsage {
   output_tokens: number;
   total_tokens: number;
   cached_input_tokens?: number;
+  cache_write_tokens?: number;
   runs: number;
 }
 
@@ -265,6 +266,16 @@ export function UsagePopover({
                   </span>
                   <span className="font-mono text-foreground/90">
                     {formatTokens(threadUsage.cached_input_tokens ?? 0)}
+                  </span>
+                </div>
+              )}
+              {(threadUsage.cache_write_tokens ?? 0) > 0 && (
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">
+                    {m.meter_thread_cache_write()}
+                  </span>
+                  <span className="font-mono text-foreground/90">
+                    {formatTokens(threadUsage.cache_write_tokens ?? 0)}
                   </span>
                 </div>
               )}
