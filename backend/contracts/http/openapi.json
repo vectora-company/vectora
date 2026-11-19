@@ -17787,6 +17787,30 @@
         ]
       }
     },
+    "/provider-routing/decision-models/catalog": {
+      "get": {
+        "description": "Modelos de decisão conhecidos e os providers que cada um aceita.",
+        "operationId": "get_decision_models_catalog_provider_routing_decision_models_catalog_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Decision Models Catalog Provider Routing Decision Models Catalog Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Decision Models Catalog",
+        "tags": [
+          "provider-routing"
+        ]
+      }
+    },
     "/provider-routing/decision-models/config": {
       "post": {
         "description": "Atualiza as configurações e credenciais de Decision Models.",

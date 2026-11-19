@@ -133,6 +133,7 @@
   "ai_models_credential_keep_hint": "(já configurada; deixe vazio para manter)",
   "ai_models_decision_models": "Decision Models",
   "ai_models_decision_models_description": "A seleção é persistida por usuário. O backend confirma credenciais e saúde antes de usar o modelo.",
+  "ai_models_decision_transport_unavailable": "Ainda sem suporte no Vectora",
   "ai_models_description": "Configure aqui todos os tipos de modelos de IA: chat, decisões, visão, embeddings, reranking, transcrição e fala.",
   "ai_models_disable_decision_models": "Desabilitar Decision Models",
   "ai_models_disable_rerankers": "Desabilitar Rerankers",

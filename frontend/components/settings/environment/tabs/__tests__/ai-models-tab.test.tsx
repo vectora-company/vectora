@@ -4,6 +4,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  AiModelsTab,
   ChatModelSettings,
   LocalSpeechSettings,
   SystemOneConfiguration,
@@ -465,5 +466,54 @@ describe("MediaLimitsSettings", () => {
     expect(
       await screen.findByText(/administrator|media_limits_unavailable/),
     ).toBeInTheDocument();
+  });
+});
+
+describe("Decision Models — catálogo", () => {
+  it("mostra cada modelo com seus providers e só habilita os que têm adaptador", async () => {
+    const catalog = {
+      models: [
+        {
+          id: "jev-latest",
+          family: "jev",
+          label: "JEV (latest)",
+          transports: [
+            {
+              id: "typesafe-api",
+              label: "TypeSafe API",
+              kind: "api",
+              provider: "jev-api",
+              model_id: "jev-latest",
+              supported: true,
+            },
+            {
+              id: "openrouter",
+              label: "OpenRouter",
+              kind: "router",
+              provider: null,
+              model_id: null,
+              supported: false,
+            },
+          ],
+        },
+      ],
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string) => ({
+        ok: true,
+        json: async () => {
+          const url = String(input);
+          if (url.includes("/decision-models/catalog")) return catalog;
+          if (url.includes("/decision-models/status")) return status;
+          return {};
+        },
+      })),
+    );
+    render(<AiModelsTab />);
+
+    expect(await screen.findByText("JEV (latest)")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "TypeSafe API" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "OpenRouter" })).toBeDisabled();
   });
 });
