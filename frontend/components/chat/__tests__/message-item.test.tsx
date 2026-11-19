@@ -15,6 +15,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { MessageItem } from "../message-item";
 import type { Message } from "@/lib/types";
+import { m } from "@/lib/paraglide/messages";
 
 afterEach(cleanup);
 
@@ -762,5 +763,50 @@ describe("MessageItem — streaming incremental (token a token, como astream)", 
     expect(screen.getByTestId("message-content-assistant").textContent).toBe(
       "XYZ",
     );
+  });
+
+  it("mostra o grupo de ações com rótulo traduzido e o abre em erro", () => {
+    const tools = [
+      { id: "t1", name: "read_file", args: { path: "a.py" }, output: "ok" },
+      {
+        id: "t2",
+        name: "run_command",
+        args: { command: "pytest" },
+        output: "falhou",
+        isError: true,
+      },
+    ];
+    const { container } = render(
+      <MessageItem
+        {...baseProps(msg({ content: "feito", toolCalls: tools }), {
+          showToolCalls: true,
+        })}
+      />,
+    );
+    const details = container.querySelector("details");
+    expect(details).not.toBeNull();
+    expect(details?.open).toBe(true);
+    expect(screen.getByText(m.chat_tool_calls_many({ count: 2 }))).toBeTruthy();
+  });
+
+  it("recolhe o grupo concluído sem erro e esconde quando desligado", () => {
+    const tools = [{ id: "t1", name: "read_file", args: {}, output: "ok" }];
+    const { container, rerender } = render(
+      <MessageItem
+        {...baseProps(msg({ content: "feito", toolCalls: tools }), {
+          showToolCalls: true,
+        })}
+      />,
+    );
+    expect(container.querySelector("details")?.open).toBe(false);
+    expect(screen.getByText(m.chat_tool_calls_one())).toBeTruthy();
+    rerender(
+      <MessageItem
+        {...baseProps(msg({ content: "feito", toolCalls: tools }), {
+          showToolCalls: false,
+        })}
+      />,
+    );
+    expect(container.querySelector("details")).toBeNull();
   });
 });

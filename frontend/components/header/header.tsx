@@ -17,8 +17,6 @@ interface CompactNavigation {
 }
 
 interface HeaderProps {
-  showToolCalls?: boolean;
-  onToggleToolCalls?: () => void;
   onShowShortcuts?: () => void;
   // O seletor de modo ocupa o centro do Header quando a tela oferece os três
   // modos. O Header permanece uma única faixa de largura total, independente
