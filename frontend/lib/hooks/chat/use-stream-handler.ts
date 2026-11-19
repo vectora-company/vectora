@@ -24,6 +24,7 @@ import {
   resumeChat,
   resumeStream,
   StreamResumeUnavailableError,
+  withTrailingEvents,
   getHistory,
   getLatestTurnFiles,
   getLatestTurnFilesSnapshot,
@@ -485,7 +486,9 @@ export function useStreamHandler({
         );
 
         const sequence = createSequenceGuard();
-        for await (const event of events) {
+        for await (const event of withTrailingEvents(events, (trailing) =>
+          handleEvent(trailing, activeId, setMessages, threadId),
+        )) {
           // Primeiro evento do stream = conexão SSE de fato estabelecida
           if (!sseConnected) {
             sseConnected = true;
@@ -802,7 +805,9 @@ export function useStreamHandler({
         );
 
         const sequence = createSequenceGuard();
-        for await (const event of events) {
+        for await (const event of withTrailingEvents(events, (trailing) =>
+          handleEvent(trailing, assistantMessageId, setMessages, threadId),
+        )) {
           // Primeiro evento do stream = conexão SSE de fato estabelecida
           if (!sseConnected) {
             sseConnected = true;
