@@ -58,15 +58,17 @@ def _build_default_harness(
             clef_api_model=settings.systemone_clef_api_model,
             jev_api_base_url=settings.systemone_jev_api_base_url,
             jev_api_model=settings.systemone_jev_api_model,
+            openrouter_model=settings.systemone_openrouter_model,
             allow_remote_fallback=settings.systemone_allow_remote_fallback,
             confidence_threshold_hitl=settings.systemone_confidence_threshold_hitl,
             risk_assessment_timeout_s=settings.systemone_risk_assessment_timeout_s,
         )
         clef_key = settings.clef_api_key
         jev_key = settings.jev_api_key
+        openrouter_key = settings.openrouter_api_key
     except Exception:
         s1_settings = SystemOneSettings(enabled=False)
-        clef_key = jev_key = None
+        clef_key = jev_key = openrouter_key = None
 
     cache_key = (
         s1_settings.enabled,
@@ -81,11 +83,13 @@ def _build_default_harness(
         s1_settings.clef_account_id,
         s1_settings.jev_api_base_url,
         s1_settings.jev_api_model,
+        s1_settings.openrouter_model,
         s1_settings.allow_remote_fallback,
         s1_settings.confidence_threshold_hitl,
         s1_settings.risk_assessment_timeout_s,
         clef_key,
         jev_key,
+        openrouter_key,
     )
     if _DEFAULT_HARNESS_CACHE is not None and _DEFAULT_HARNESS_CACHE[0] == cache_key:
         return _DEFAULT_HARNESS_CACHE[1]
@@ -94,6 +98,7 @@ def _build_default_harness(
         s1_settings,
         clef_api_key=clef_key,
         jev_api_key=jev_key,
+        openrouter_api_key=openrouter_key,
     )
     harness = SystemOneHarness(
         s1_settings,
