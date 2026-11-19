@@ -750,7 +750,7 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: getStorageKey(), // Chave default; re-hidratada ao chamar loadUserSettings()
-      version: 8, // v8: ações do agente visíveis por padrão; v7: rota de transcrição
+      version: 9, // v9: Solarized removido dos temas; v8: ações do agente visíveis; v7: rota de transcrição
       // v4: clampa sidebarWidth/chatSidebarWidth pros limites atuais mesmo fora do default legado exato (teto do chat caiu de 800→480)
       migrate: (persistedState, version) => {
         const s = persistedState as Record<string, unknown>;
@@ -786,6 +786,12 @@ export const useSettingsStore = create<SettingsState>()(
           else if (s.themePreset === "godot-dark")
             s.themePreset = "default-dark";
           else if (s.themePreset === "godot-light")
+            s.themePreset = "default-light";
+          // Solarized saiu do catálogo: quem o tinha escolhido volta ao tema
+          // padrão do mesmo modo (claro ou escuro).
+          if (s.themePreset === "solarized-dark")
+            s.themePreset = "default-dark";
+          else if (s.themePreset === "solarized-light")
             s.themePreset = "default-light";
           s.installedThemes = migrateInstalledThemes(s.installedThemes);
         }
