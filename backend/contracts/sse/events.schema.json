@@ -517,6 +517,37 @@
       "title": "ReasoningEvent",
       "type": "object"
     },
+    "SteerAppliedEvent": {
+      "description": "Orientação enviada durante o turno que o agente já está seguindo.",
+      "properties": {
+        "content": {
+          "title": "Content",
+          "type": "string"
+        },
+        "event_id": {
+          "description": "Identidade do evento: <run_id>:<seq>.",
+          "title": "Event Id",
+          "type": "string"
+        },
+        "seq": {
+          "description": "Posição do evento no stream do run, a partir de 1.",
+          "minimum": 1,
+          "title": "Seq",
+          "type": "integer"
+        },
+        "type": {
+          "const": "steer_applied",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "content",
+        "type"
+      ],
+      "title": "SteerAppliedEvent",
+      "type": "object"
+    },
     "StructuredQuestionEvent": {
       "description": "Pergunta aguardando uma resposta explícita do usuário no stream.",
       "properties": {
@@ -1289,6 +1320,9 @@
     },
     {
       "$ref": "#/$defs/VerificationEvent"
+    },
+    {
+      "$ref": "#/$defs/SteerAppliedEvent"
     },
     {
       "$ref": "#/$defs/ToolCallEvent"

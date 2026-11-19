@@ -40,6 +40,7 @@ from uuid import uuid4
 
 from backend.engine.guardrails import LoopCapConfig, TurnBudget
 from backend.engine.hooks import MAX_RESPONSE_REVISIONS, response_denial_feedback
+from backend.engine.steering import drain_steers, has_pending_steers
 from backend.engine.stream_events import (
     ErrorSignal,
     HitlRequested,
@@ -48,6 +49,7 @@ from backend.engine.stream_events import (
     MessageBreak,
     MessageChunk,
     ReasoningChunk,
+    SteerApplied,
     TodoItem,
     TodosUpdated,
     ToolActivity,
@@ -82,7 +84,13 @@ from backend.persistence.native.ledger import (
 from backend.services.context_planner import compute_transcript_hash
 from backend.services.memory_store import MemoryRecord
 from backend.vtypes.contracts import ToolOption
-from backend.vtypes.message import ContentBlock, MessageRole, ToolCall, VMessage
+from backend.vtypes.message import (
+    ContentBlock,
+    MessageRole,
+    ToolCall,
+    VMessage,
+    text_message,
+)
 
 _REPEATED_CALL_THRESHOLD = 3
 """Quantas chamadas idênticas seguidas (mesma tool, mesmos args) disparam o
@@ -1159,6 +1167,17 @@ async def run_conversation(  # noqa: PLR0911
     response_revisions = 0
     prompt_calibration = 1.0
     for _iteracao in range(config.max_iterations):
+        # Orientações enviadas durante o turno viram mensagens do usuário antes
+        # desta chamada ao modelo.
+        for steer_text in drain_steers(thread_id):
+            steer_head = await session_store.get_branch_head_id(thread_id)
+            await session_store.append_message(
+                thread_id,
+                text_message(MessageRole.USER, steer_text),
+                parent_message_id=steer_head,
+                run_id=config.run_id,
+            )
+            await emit(SteerApplied(content=steer_text))
         # Toolsets ativados na chamada anterior entram no schema desta.
         tools = tool_registry.all()
         raw_history = _drop_terminal_notices(await session_store.get_history(thread_id))
@@ -1550,6 +1569,11 @@ async def run_conversation(  # noqa: PLR0911
                 last_usage.get("cache_write_tokens", 0) if last_usage else 0
             ),
         )
+
+        if not tool_calls and has_pending_steers(thread_id):
+            # Chegou uma orientação enquanto o modelo respondia: em vez de
+            # encerrar o turno, o modelo responde a ela na próxima volta.
+            continue
 
         if not tool_calls:
             response_denial = await _pre_response_hooks(ctx, texto_final)

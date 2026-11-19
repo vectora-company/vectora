@@ -908,3 +908,21 @@ describe("MessageItem — plano e verificação", () => {
     expect(screen.queryByTestId("verification-footer")).toBeNull();
   });
 });
+
+describe("MessageItem — orientações do usuário", () => {
+  it("lista as orientações que o agente passou a seguir", () => {
+    render(
+      <MessageItem
+        {...baseProps(
+          msg({ content: "ok", steers: ["use pnpm", "responda em português"] }),
+        )}
+      />,
+    );
+
+    const notes = screen.getAllByTestId("steer-note");
+    expect(notes.map((note) => note.textContent)).toEqual([
+      m.chat_steer_applied({ text: "use pnpm" }),
+      m.chat_steer_applied({ text: "responda em português" }),
+    ]);
+  });
+});

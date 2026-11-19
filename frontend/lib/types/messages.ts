@@ -47,6 +47,8 @@ export interface Message {
   thinkingSteps?: string[];
   /** Texto do raciocínio que o provider devolveu; mostrado recolhido. */
   reasoning?: string;
+  /** Orientações que o usuário enviou durante o turno e o agente passou a seguir. */
+  steers?: string[];
   /** Checklist do plano do agente (`write_todos`) no fim do turno. */
   plan?: Array<{
     content: string;

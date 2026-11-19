@@ -9676,6 +9676,24 @@
         "title": "StashResponse",
         "type": "object"
       },
+      "SteerRunRequest": {
+        "properties": {
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "thread_id": {
+            "title": "Thread Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "thread_id",
+          "text"
+        ],
+        "title": "SteerRunRequest",
+        "type": "object"
+      },
       "StreamChatRequest": {
         "properties": {
           "attachments": {
@@ -25050,6 +25068,49 @@
           }
         },
         "summary": "Resume Stream"
+      }
+    },
+    "/vectora.chat.v1.ChatService/SteerRun": {
+      "post": {
+        "description": "Entrega uma orientação ao run ativo da conversa sem interrompê-lo.\n\n``queued`` é falso quando não há run ativo (o cliente envia como mensagem\nnormal) ou a orientação não pôde ser enfileirada.",
+        "operationId": "steer_run_vectora_chat_v1_ChatService_SteerRun_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SteerRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response Steer Run Vectora Chat V1 Chatservice Steerrun Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Steer Run"
       }
     },
     "/vectora.chat.v1.ChatService/StreamChat": {

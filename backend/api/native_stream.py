@@ -39,6 +39,7 @@ from backend.api.schemas import (
 )
 from backend.api.sse_sequence import RunEventLog, sequence_stream
 from backend.engine.sse_adapter import to_sse_line
+from backend.engine.steering import discard_steers
 from backend.engine.stream_events import (
     ErrorSignal,
     HitlRequested,
@@ -69,6 +70,14 @@ def cancel_active_runs(thread_id: str) -> int:
     for task in tasks:
         task.cancel()
     return len(tasks)
+
+
+def has_active_run(thread_id: str) -> bool:
+    """Há um run nativo em andamento nesta conversa?"""
+    return any(
+        active_thread_id == thread_id and not task.done()
+        for (active_thread_id, _), task in tuple(_active_run_tasks.items())
+    )
 
 
 def _workspace_run_lock(workspace_id: str) -> asyncio.Lock:
@@ -590,6 +599,7 @@ def stream_engine_events(
                 run_error = exc
                 stopped_reason = "error"
             finally:
+                discard_steers(thread_id)
                 # A lista de arquivos sai depois do `done`: a varredura roda em
                 # paralelo ao resto do encerramento e o stream não espera por ela.
                 finalize_task = asyncio.create_task(

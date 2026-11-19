@@ -31,6 +31,7 @@ import {
   getThread,
   markThreadRead,
   cancelRun,
+  steerRun,
   type HistoryMessage,
   type PagedHistoryResponse,
 } from "@/lib/api/vectora-client";
@@ -1414,6 +1415,28 @@ export function ChatInterface({
     [handleStop, syncQueueDisplay, uiState.isLoading, uiState.isRegenerating],
   );
 
+  const handleSteerQueued = useCallback(
+    (messageId: string) => {
+      const item = queuedMessagesDisplay.find(
+        (entry) => entry.id === messageId,
+      );
+      if (!item) return;
+      void steerRun(threadId, item.content)
+        .then((result) => {
+          // O servidor aceitou: o item sai da fila e a nota aparece quando o
+          // agente a aplicar. Sem run ativo ou com a fila cheia, o item
+          // continua na fila e segue o fluxo normal.
+          if (result.queued && queueRef.current.remove(messageId)) {
+            syncQueueDisplay();
+          }
+        })
+        .catch((error: unknown) => {
+          console.error("Failed to steer the active run:", error);
+        });
+    },
+    [queuedMessagesDisplay, syncQueueDisplay, threadId],
+  );
+
   const handleRemoveQueued = useCallback(
     (messageId: string) => {
       if (queueRef.current.remove(messageId)) syncQueueDisplay();
@@ -1755,6 +1778,7 @@ export function ChatInterface({
           voiceError={voiceError}
           queuedMessages={queuedMessagesDisplay}
           onRunQueuedNow={handleRunQueuedNow}
+          onSteerQueued={handleSteerQueued}
           onRemoveQueued={handleRemoveQueued}
           onRetryQueued={handleRetryQueued}
           modelId={agentConfig?.model}

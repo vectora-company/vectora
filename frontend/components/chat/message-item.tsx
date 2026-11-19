@@ -765,6 +765,21 @@ export const MessageItem = memo(
                 )}
 
               {message.role === "assistant" &&
+                message.steers &&
+                message.steers.length > 0 && (
+                  <ul className="mb-3 space-y-0.5 text-[11px] text-muted-foreground">
+                    {message.steers.map((steer, index) => (
+                      <li
+                        key={`${message.id}-steer-${index}`}
+                        data-testid="steer-note"
+                      >
+                        {m.chat_steer_applied({ text: steer })}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+              {message.role === "assistant" &&
                 message.plan &&
                 message.plan.length > 0 && (
                   <div className="mb-3 text-xs" data-testid="plan-block">
