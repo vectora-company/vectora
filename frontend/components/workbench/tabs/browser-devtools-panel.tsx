@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Play, RefreshCw, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { m as msg } from "@/lib/paraglide/messages";
+import { m } from "@/lib/paraglide/messages";
 
 interface DevtoolsTab {
   tab_id: string;
@@ -206,15 +206,15 @@ export function BrowserDevtoolsPanel({
               }`}
             >
               {t === "console"
-                ? msg.workbench_browser_devtools_tab_console()
+                ? m.workbench_browser_devtools_tab_console()
                 : t === "network"
-                  ? msg.workbench_browser_devtools_tab_network()
-                  : msg.workbench_browser_devtools_tab_elements()}
+                  ? m.workbench_browser_devtools_tab_network()
+                  : m.workbench_browser_devtools_tab_elements()}
             </button>
           ))}
           {tabs.length > 1 && (
             <select
-              aria-label={msg.workbench_browser_devtools_tab_selector()}
+              aria-label={m.workbench_browser_devtools_tab_selector()}
               value={selectedTabId ?? ""}
               onChange={(e) => setSelectedTabId(e.target.value)}
               className="ml-1 h-6 rounded border border-border/40 bg-background/80 text-[10px]"
@@ -232,7 +232,7 @@ export function BrowserDevtoolsPanel({
             <button
               onClick={clearConsole}
               className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-              title={msg.workbench_browser_devtools_console_clear()}
+              title={m.workbench_browser_devtools_console_clear()}
             >
               <Trash2 className="h-3.5 w-3.5" />
             </button>
@@ -240,7 +240,7 @@ export function BrowserDevtoolsPanel({
           <button
             onClick={refresh}
             className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-            title={msg.workbench_browser_devtools_refresh()}
+            title={m.workbench_browser_devtools_refresh()}
           >
             <RefreshCw
               className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`}
@@ -249,7 +249,7 @@ export function BrowserDevtoolsPanel({
           <button
             onClick={onClose}
             className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-            title={msg.workbench_browser_devtools_close()}
+            title={m.workbench_browser_devtools_close()}
           >
             <X className="h-3.5 w-3.5" />
           </button>
@@ -258,7 +258,7 @@ export function BrowserDevtoolsPanel({
 
       {tabs.length === 0 ? (
         <div className="flex flex-1 items-center justify-center px-4 text-center text-xs text-muted-foreground">
-          {msg.workbench_browser_devtools_no_session()}
+          {m.workbench_browser_devtools_no_session()}
         </div>
       ) : subTab === "console" ? (
         <div
@@ -268,21 +268,21 @@ export function BrowserDevtoolsPanel({
         >
           {consoleMessages.length === 0 ? (
             <p className="text-muted-foreground">
-              {msg.workbench_browser_devtools_console_empty()}
+              {m.workbench_browser_devtools_console_empty()}
             </p>
           ) : (
-            consoleMessages.map((m, i) => (
+            consoleMessages.map((item, i) => (
               <div
                 key={i}
                 className={`whitespace-pre-wrap break-all ${
-                  m.type === "error"
+                  item.type === "error"
                     ? "text-destructive"
-                    : m.type === "warning"
+                    : item.type === "warning"
                       ? "text-amber-500"
                       : "text-foreground/90"
                 }`}
               >
-                [{m.type}] {m.text}
+                [{item.type}] {item.text}
               </div>
             ))
           )}
@@ -294,7 +294,7 @@ export function BrowserDevtoolsPanel({
         >
           {networkRequests.length === 0 ? (
             <p className="px-2 py-1 text-muted-foreground">
-              {msg.workbench_browser_devtools_network_empty()}
+              {m.workbench_browser_devtools_network_empty()}
             </p>
           ) : (
             <table className="w-full border-collapse">
@@ -335,7 +335,7 @@ export function BrowserDevtoolsPanel({
             <Input
               value={script}
               onChange={(e) => setScript(e.target.value)}
-              placeholder={msg.workbench_browser_devtools_elements_placeholder()}
+              placeholder={m.workbench_browser_devtools_elements_placeholder()}
               className="h-7 flex-1 font-mono text-xs"
               onKeyDown={(e) => {
                 if (e.key === "Enter") runScript();
@@ -348,7 +348,7 @@ export function BrowserDevtoolsPanel({
               className="h-7 gap-1 text-xs"
             >
               <Play className="h-3 w-3" />
-              {msg.workbench_browser_devtools_elements_run()}
+              {m.workbench_browser_devtools_elements_run()}
             </Button>
           </div>
           {evalError ? (
@@ -364,7 +364,7 @@ export function BrowserDevtoolsPanel({
             </pre>
           ) : (
             <p className="text-xs text-muted-foreground">
-              {msg.workbench_browser_devtools_elements_empty()}
+              {m.workbench_browser_devtools_elements_empty()}
             </p>
           )}
         </div>

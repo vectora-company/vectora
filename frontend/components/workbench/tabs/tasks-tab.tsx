@@ -31,6 +31,11 @@ import { useWorkspacesStore } from "@/lib/stores/workspaces-store";
 import { Switch } from "@/components/ui/switch";
 import { WorkbenchDialog } from "@/components/workbench/workbench-dialog";
 import { m } from "@/lib/paraglide/messages";
+import {
+  WorkbenchEmpty,
+  WorkbenchLoading,
+  WorkbenchToolbar,
+} from "../primitives";
 import { notificationKey, notifyOnce } from "@/lib/notifications/notify-once";
 import { useSettingsStore } from "@/lib/stores/settings-store";
 import { useToastStore } from "@/lib/stores/toast-store";
@@ -275,18 +280,14 @@ export function TasksTab({ threadId }: { threadId: string }) {
   }, [runs]);
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full text-muted-foreground">
-        <Loader2 className="w-4 h-4 animate-spin" />
-      </div>
-    );
+    return <WorkbenchLoading />;
   }
 
   const allEmpty = tasks.length === 0 && runs.length === 0;
 
   return (
     <div className="relative flex h-full flex-col text-xs">
-      <div className="flex justify-start px-3 pt-3 pb-2 shrink-0 border-b border-border/40">
+      <WorkbenchToolbar>
         <button
           onClick={() => setShowForm((v) => !v)}
           className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
@@ -295,7 +296,7 @@ export function TasksTab({ threadId }: { threadId: string }) {
           <Plus className="w-3 h-3" />
           {m.background_new_task()}
         </button>
-      </div>
+      </WorkbenchToolbar>
 
       <WorkbenchDialog
         open={showForm}
@@ -404,12 +405,11 @@ export function TasksTab({ threadId }: { threadId: string }) {
       </WorkbenchDialog>
 
       {allEmpty ? (
-        <div className="flex-1 flex flex-col items-center justify-center gap-3 p-4 text-center">
-          <ListTodo className="w-6 h-6 text-muted-foreground/40" />
-          <p className="text-xs text-muted-foreground">
-            {m.background_empty()}
-          </p>
-        </div>
+        <WorkbenchEmpty
+          icon={<ListTodo className="w-6 h-6 text-muted-foreground/40" />}
+        >
+          {m.background_empty()}
+        </WorkbenchEmpty>
       ) : (
         <div className="flex-1 overflow-y-auto min-h-0 px-3 pt-3 pb-3 space-y-4">
           {tasks.length === 0 ? null : (

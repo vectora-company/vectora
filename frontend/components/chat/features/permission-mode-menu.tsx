@@ -25,7 +25,7 @@ import {
   useSettingsStore,
   PERMISSION_MODES,
 } from "@/lib/stores/settings-store";
-import { m as msg } from "@/lib/paraglide/messages";
+import { m } from "@/lib/paraglide/messages";
 import { mDyn } from "@/lib/i18n-dyn";
 
 export function PermissionModeMenu({ compact = false }: { compact?: boolean }) {
@@ -38,8 +38,8 @@ export function PermissionModeMenu({ compact = false }: { compact?: boolean }) {
       <PopoverTrigger asChild>
         <button
           className={`flex min-w-0 max-w-full shrink items-center overflow-hidden rounded-md text-xs leading-4 font-medium text-muted-foreground transition-colors select-none hover:bg-muted/50 hover:text-foreground ${compact ? "h-7 w-full gap-0.5 px-1" : "gap-1.5 px-2 py-1.5"}`}
-          title={msg.permission_title()}
-          aria-label={`${msg.permission_title()}: ${mDyn(`permission.mode.${mode}`)}`}
+          title={m.permission_title()}
+          aria-label={`${m.permission_title()}: ${mDyn(`permission.mode.${mode}`)}`}
           aria-expanded={open}
         >
           <span
@@ -59,24 +59,24 @@ export function PermissionModeMenu({ compact = false }: { compact?: boolean }) {
         className="z-50 w-[min(14rem,calc(100vw-1rem))] max-w-[calc(100vw-1rem)] rounded-lg border border-border bg-background shadow-xl p-0 py-1"
       >
         <div className="px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          {msg.permission_title()}
+          {m.permission_title()}
         </div>
-        {PERMISSION_MODES.map((m) => (
+        {PERMISSION_MODES.map((item) => (
           <button
-            key={m}
+            key={item}
             className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-accent text-left transition-colors"
             onClick={() => {
-              setMode(m);
+              setMode(item);
               setOpen(false);
             }}
           >
-            {m === mode ? (
+            {item === mode ? (
               <Check className="w-4 h-4 shrink-0 text-primary" />
             ) : (
               <span className="w-4 h-4 shrink-0" />
             )}
             <span className="truncate font-medium text-foreground">
-              {mDyn(`permission.mode.${m}`)}
+              {mDyn(`permission.mode.${item}`)}
             </span>
           </button>
         ))}
