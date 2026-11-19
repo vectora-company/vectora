@@ -789,6 +789,69 @@ def _merge_consecutive_user_messages(history: list[VMessage]) -> list[VMessage]:
     return merged
 
 
+_TERMINAL_RUN_STATUSES = frozenset({"passed", "degraded", "failed", "cancelled"})
+
+
+async def _previous_verification_note(
+    session_store: SessionStore, thread_id: str, current_run_id: str | None
+) -> str | None:
+    """Nota para o modelo quando a verificação do turno anterior falhou.
+
+    Só vale o turno terminal mais recente: se ele passou, ou se o usuário já
+    teve um turno novo que verificou, não há nada a reinjetar.
+    """
+    if not hasattr(session_store, "list_agent_runs"):
+        return None
+    try:
+        runs = await session_store.list_agent_runs(thread_id, limit=5)
+    except Exception:
+        logger.warning("conversation_loop: falha ao ler a execução anterior")
+        return None
+    previous = next(
+        (
+            run
+            for run in runs
+            if run.run_id != current_run_id and run.status in _TERMINAL_RUN_STATUSES
+        ),
+        None,
+    )
+    if previous is None or previous.status != "failed":
+        return None
+    feedback = next(
+        (
+            str(item.get("failure_feedback") or "").strip()
+            for item in reversed(previous.evidence)
+            if isinstance(item, dict)
+            and item.get("kind") == "quality_gate_verification"
+            and "step_id" not in item
+            and item.get("failure_feedback")
+        ),
+        "",
+    )
+    if not feedback:
+        return None
+    return (
+        "A verificação do turno anterior falhou. Corrija o que falhou antes de "
+        "seguir para outra coisa:\n\n" + feedback
+    )
+
+
+def _with_verification_note(
+    history: list[VMessage], note: str | None
+) -> list[VMessage]:
+    """Insere a nota depois das instruções de sistema que abrem o histórico."""
+    if not note:
+        return history
+    lead = 0
+    while lead < len(history) and history[lead].role is MessageRole.SYSTEM:
+        lead += 1
+    return [
+        *history[:lead],
+        text_message(MessageRole.SYSTEM, note),
+        *history[lead:],
+    ]
+
+
 async def _with_llm_summary(
     planned: PlannedContext, raw_history: list[VMessage], thread_id: str
 ) -> PlannedContext:
@@ -1165,6 +1228,9 @@ async def run_conversation(  # noqa: PLR0911
 
     media_routed_model: str | None = None
     response_revisions = 0
+    verification_note = await _previous_verification_note(
+        session_store, thread_id, config.run_id
+    )
     prompt_calibration = 1.0
     for _iteracao in range(config.max_iterations):
         # Orientações enviadas durante o turno viram mensagens do usuário antes
@@ -1219,6 +1285,13 @@ async def run_conversation(  # noqa: PLR0911
         planned_context = await _with_llm_summary(
             planned_context, raw_history, thread_id
         )
+        if verification_note:
+            planned_context = replace(
+                planned_context,
+                messages=_with_verification_note(
+                    planned_context.messages, verification_note
+                ),
+            )
         from backend.services.media_hydration import hydrate_media_blocks
 
         historico = hydrate_media_blocks(
