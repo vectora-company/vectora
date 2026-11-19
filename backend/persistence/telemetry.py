@@ -239,6 +239,13 @@ class VectoraTelemetry:
             fields["error_message"] = _truncate(str(exc))
         self._emit(logging.ERROR, "unhandled_error", **fields)
 
+    def record_cancellation(self, source: str, **extra: Any) -> None:
+        """Grava um cancelamento pedido pelo usuário ou pelo shutdown.
+
+        Cancelar não é falha: sai como INFO, fora do ``unhandled_error``.
+        """
+        self._emit(logging.INFO, "turn_cancelled", source=source, **extra)
+
     def record_media_quota(self, event: str, **fields: Any) -> None:
         """Emite um evento de quota sem aceitar conteúdo de mídia.
 

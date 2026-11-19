@@ -108,6 +108,13 @@
   },
   {
     "methods": [
+      "GET"
+    ],
+    "name": "get_speech_models_admin_speech_models_get",
+    "path": "/admin/speech-models"
+  },
+  {
+    "methods": [
       "GET",
       "PATCH"
     ],
@@ -828,6 +835,13 @@
     ],
     "name": "verify_plugin_plugins__name__verify_post",
     "path": "/plugins/{name}/verify"
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "name": "get_decision_models_catalog_provider_routing_decision_models_catalog_get",
+    "path": "/provider-routing/decision-models/catalog"
   },
   {
     "methods": [
