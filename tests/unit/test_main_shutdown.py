@@ -17,6 +17,32 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def force_exit_calls(monkeypatch: pytest.MonkeyPatch) -> list[bool]:
+    """Nenhum teste pode derrubar o pytest: a saída forçada vira um registro."""
+    import backend.main as main_module
+
+    calls: list[bool] = []
+    monkeypatch.setattr(main_module, "_force_exit", lambda: calls.append(True))
+    return calls
+
+
+class _FakeTimer:
+    """Substitui ``threading.Timer``: guarda o prazo sem agendar nada."""
+
+    instances: list[_FakeTimer] = []
+
+    def __init__(self, interval: float, function: Any) -> None:
+        self.interval = interval
+        self.function = function
+        self.daemon = False
+        self.started = False
+        _FakeTimer.instances.append(self)
+
+    def start(self) -> None:
+        self.started = True
+
+
 class _FakeServer:
     def __init__(self) -> None:
         self.should_exit = False
@@ -276,3 +302,35 @@ class TestShouldInstallTerminalSignals:
 
         monkeypatch.setattr("sys.stdin.isatty", lambda: False)
         assert _should_install_terminal_signals({}, force_web=True) is True
+
+
+def test_primeiro_sinal_agenda_o_prazo_e_o_segundo_forca_a_saida(
+    monkeypatch: pytest.MonkeyPatch, force_exit_calls: list[bool]
+) -> None:
+    """Ctrl+C: shutdown gracioso com prazo; repetir o Ctrl+C encerra à força."""
+    import backend.main as main_module
+    from backend.main import _install_terminal_signals
+
+    _FakeTimer.instances = []
+    monkeypatch.setattr(main_module.threading, "Timer", _FakeTimer)
+    server = _FakeServer()
+    orig = {sig: signal.getsignal(sig) for sig in (signal.SIGINT, signal.SIGTERM)}
+
+    try:
+        _install_terminal_signals(server, [None])
+        handler = _get_handler(signal.SIGINT)
+
+        handler(signal.SIGINT, None)
+        assert server.should_exit is True
+        assert len(_FakeTimer.instances) == 1
+        timer = _FakeTimer.instances[0]
+        assert timer.started and timer.daemon
+        assert timer.interval == main_module._SHUTDOWN_DEADLINE_S
+        assert timer.function is main_module._force_exit
+        assert force_exit_calls == []
+
+        handler(signal.SIGINT, None)
+        assert force_exit_calls == [True]
+    finally:
+        for sig, h in orig.items():
+            signal.signal(sig, h)

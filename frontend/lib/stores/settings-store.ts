@@ -40,7 +40,7 @@ export type PermissionMode =
 export type ReasoningEffort = "low" | "medium" | "high" | "max";
 /** Decision model providers exposed by the frontend selector. */
 export type DecisionModelProvider =
-  "clef-local" | "laya-local" | "clef-api" | "jev-api";
+  "clef-local" | "laya-local" | "clef-api" | "jev-api" | "openrouter-api";
 /** Modo de interface dentro do Dev (chatMode=false): "assistant" é o layout
  *  padrão de chat+workbench; "ide" é o layout VS Code com editor docked;
  *  "kanban" é o board multi-agente. */
@@ -48,6 +48,20 @@ export type UiMode = "assistant" | "ide" | "kanban";
 
 function activeDecisionWorkspaceId(): string | null {
   return useWorkspacesStore.getState().active_id ?? null;
+}
+
+/**
+ * Modelo escolhido pelo usuário cujo PATCH ainda não foi confirmado pelo
+ * backend. Enquanto existir, a hidratação não o sobrescreve com o valor antigo
+ * do servidor, e o envio é repetido.
+ */
+let pendingSelectedModel: string | null = null;
+
+export function persistSelectedModel(model: string): void {
+  pendingSelectedModel = model;
+  void pushPrefs({ selectedModel: model }).then((ok) => {
+    if (ok && pendingSelectedModel === model) pendingSelectedModel = null;
+  });
 }
 
 let settingsUserEpoch = 0;
@@ -203,9 +217,6 @@ export interface SettingsState {
    *  próximo boot (só toma efeito na próxima abertura do app, não em
    *  runtime). Sem efeito no navegador/modo servidor. */
   autoUpdateEnabled: boolean;
-  weeklyInsightEnabled: boolean;
-  weeklyInsightWeeks: 1 | 2 | 4;
-  weeklyInsightDismissedWindow: string;
   /** Tamanho de fonte da interface geral (px), aplicado via CSS var
    *  --font-scale-ui (convertida pra razão contra FONT_SCALE_BASE_PX). */
   fontScaleUi: number;
@@ -276,9 +287,6 @@ export interface SettingsState {
   setChatSidebarWidth: (v: number) => void;
   setSelectedModel: (v: string) => void;
   setAutoUpdateEnabled: (v: boolean) => void;
-  setWeeklyInsightEnabled: (v: boolean) => void;
-  setWeeklyInsightWeeks: (v: 1 | 2 | 4) => void;
-  setWeeklyInsightDismissedWindow: (v: string) => void;
   setFontScaleUi: (v: number) => void;
   setFontScaleChat: (v: number) => void;
   setFontScaleMarkdown: (v: number) => void;
@@ -472,9 +480,6 @@ const DEFAULTS = {
   chatSidebarWidth: 300,
   selectedModel: getDefaultModel(),
   autoUpdateEnabled: true,
-  weeklyInsightEnabled: false,
-  weeklyInsightWeeks: 1 as 1 | 2 | 4,
-  weeklyInsightDismissedWindow: "",
   fontScaleUi: FONT_SCALE_BASE_PX,
   fontScaleChat: FONT_SCALE_BASE_PX,
   fontScaleMarkdown: FONT_SCALE_BASE_PX,
@@ -697,23 +702,11 @@ export const useSettingsStore = create<SettingsState>()(
         }),
       setSelectedModel: (v) => {
         set({ selectedModel: v });
-        void pushPrefs({ selectedModel: v });
+        persistSelectedModel(v);
       },
       setAutoUpdateEnabled: (v) => {
         set({ autoUpdateEnabled: v });
         void pushPrefs({ autoUpdateEnabled: v });
-      },
-      setWeeklyInsightEnabled: (v) => {
-        set({ weeklyInsightEnabled: v });
-        void pushPrefs({ weeklyInsightEnabled: v });
-      },
-      setWeeklyInsightWeeks: (v) => {
-        set({ weeklyInsightWeeks: v });
-        void pushPrefs({ weeklyInsightWeeks: v });
-      },
-      setWeeklyInsightDismissedWindow: (v) => {
-        set({ weeklyInsightDismissedWindow: v });
-        void pushPrefs({ weeklyInsightDismissedWindow: v });
       },
       setFontScaleUi: (v) => set({ fontScaleUi: clampFontScale(v) }),
       setFontScaleChat: (v) => set({ fontScaleChat: clampFontScale(v) }),
@@ -750,7 +743,7 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: getStorageKey(), // Chave default; re-hidratada ao chamar loadUserSettings()
-      version: 8, // v8: ações do agente visíveis por padrão; v7: rota de transcrição
+      version: 9, // v9: Solarized removido dos temas; v8: ações do agente visíveis; v7: rota de transcrição
       // v4: clampa sidebarWidth/chatSidebarWidth pros limites atuais mesmo fora do default legado exato (teto do chat caiu de 800→480)
       migrate: (persistedState, version) => {
         const s = persistedState as Record<string, unknown>;
@@ -786,6 +779,12 @@ export const useSettingsStore = create<SettingsState>()(
           else if (s.themePreset === "godot-dark")
             s.themePreset = "default-dark";
           else if (s.themePreset === "godot-light")
+            s.themePreset = "default-light";
+          // Solarized saiu do catálogo: quem o tinha escolhido volta ao tema
+          // padrão do mesmo modo (claro ou escuro).
+          if (s.themePreset === "solarized-dark")
+            s.themePreset = "default-dark";
+          else if (s.themePreset === "solarized-light")
             s.themePreset = "default-light";
           s.installedThemes = migrateInstalledThemes(s.installedThemes);
         }
@@ -894,14 +893,21 @@ export async function hydrateFromBackend(): Promise<void> {
     return;
   confirmedDecisionValues.clear();
   const update: Partial<SettingsState> = {};
-  if (prefs.selectedModel) update.selectedModel = prefs.selectedModel;
+  if (pendingSelectedModel !== null) {
+    // A escolha local ainda não chegou ao backend: ela vale mais que o valor
+    // antigo do servidor, e o envio é tentado de novo.
+    persistSelectedModel(pendingSelectedModel);
+  } else if (prefs.selectedModel) {
+    update.selectedModel = prefs.selectedModel;
+  }
   if (typeof prefs.decisionModelsEnabled === "boolean")
     update.decisionModelsEnabled = prefs.decisionModelsEnabled;
   if (
     prefs.decisionModelProvider === "clef-local" ||
     prefs.decisionModelProvider === "laya-local" ||
     prefs.decisionModelProvider === "clef-api" ||
-    prefs.decisionModelProvider === "jev-api"
+    prefs.decisionModelProvider === "jev-api" ||
+    prefs.decisionModelProvider === "openrouter-api"
   )
     update.decisionModelProvider = prefs.decisionModelProvider;
   if (
@@ -934,16 +940,6 @@ export async function hydrateFromBackend(): Promise<void> {
     update.sidebarPosition = prefs.sidebarPosition as SidebarPosition;
   if (typeof prefs.autoUpdateEnabled === "boolean")
     update.autoUpdateEnabled = prefs.autoUpdateEnabled;
-  if (typeof prefs.weeklyInsightEnabled === "boolean")
-    update.weeklyInsightEnabled = prefs.weeklyInsightEnabled;
-  if (
-    prefs.weeklyInsightWeeks === 1 ||
-    prefs.weeklyInsightWeeks === 2 ||
-    prefs.weeklyInsightWeeks === 4
-  )
-    update.weeklyInsightWeeks = prefs.weeklyInsightWeeks;
-  if (typeof prefs.weeklyInsightDismissedWindow === "string")
-    update.weeklyInsightDismissedWindow = prefs.weeklyInsightDismissedWindow;
   useSettingsStore.setState(update);
   if (update.language) {
     const { setLocale, getLocale } = await import("@/lib/paraglide/runtime");
@@ -966,7 +962,8 @@ export async function hydrateDecisionModelPreferences(
     decisionModelProvider:
       prefs.decisionModelProvider === "laya-local" ||
       prefs.decisionModelProvider === "clef-api" ||
-      prefs.decisionModelProvider === "jev-api"
+      prefs.decisionModelProvider === "jev-api" ||
+      prefs.decisionModelProvider === "openrouter-api"
         ? prefs.decisionModelProvider
         : "clef-local",
     decisionModelSurfaces:

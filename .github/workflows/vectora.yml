@@ -486,25 +486,12 @@ jobs:
       VECTORA_UPDATE_CHANNEL: ${{ needs.release-channel.outputs.channel }}
     strategy:
       fail-fast: false
+      # Em PR só o Linux x64 (a plataforma mais barata): empacotamento e smoke
+      # do binário são validados; a matriz completa roda no disparo manual e
+      # no master. Snapcraft's project base is core22: building on the matching
+      # host lets us use destructive mode and avoids a remote LXD image pull.
       matrix:
-        include:
-          # Snapcraft's project base is core22. Building on the matching host
-          # lets us use destructive mode and avoids a remote LXD image pull.
-          - os: ubuntu-22.04
-            arch: x64
-            target: linux
-          - os: ubuntu-22.04-arm
-            arch: arm64
-            target: linux
-          - os: macos-26
-            arch: arm64
-            target: mac
-          - os: windows-latest
-            arch: x64
-            target: win
-          - os: windows-11-arm
-            arch: arm64
-            target: win
+        include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"os":"ubuntu-22.04","arch":"x64","target":"linux"}]' || '[{"os":"ubuntu-22.04","arch":"x64","target":"linux"},{"os":"ubuntu-22.04-arm","arch":"arm64","target":"linux"},{"os":"macos-26","arch":"arm64","target":"mac"},{"os":"windows-latest","arch":"x64","target":"win"},{"os":"windows-11-arm","arch":"arm64","target":"win"}]') }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -536,8 +523,13 @@ jobs:
       - name: Install Linux package build dependencies
         if: matrix.target == 'linux'
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y flatpak flatpak-builder fuse3 libarchive-tools
+          for attempt in 1 2 3 4 5; do
+            sudo rm -rf /var/lib/apt/lists/*
+            sudo apt-get -o Acquire::Retries=5 update -qq && break
+            [ "$attempt" -lt 5 ] || exit 1
+            sleep $((attempt * 10))
+          done
+          sudo apt-get -o Acquire::Retries=5 install -y flatpak flatpak-builder fuse3 libarchive-tools
           image="ghcr.io/canonical/snapcraft:8_core22"
           compat_dir="${RUNNER_TEMP:?RUNNER_TEMP must be set}/snapcraft-compat"
           docker pull "$image"
@@ -799,28 +791,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - distro: Ubuntu 22.04
-            image: ubuntu:22.04
-            family: deb
-          - distro: Ubuntu 24.04
-            image: ubuntu:24.04
-            family: deb
-          - distro: Ubuntu 26.04
-            image: ubuntu:26.04
-            family: deb
-          - distro: Debian 12
-            image: debian:12
-            family: deb
-          - distro: Debian 13
-            image: debian:13
-            family: deb
-          - distro: Fedora
-            image: fedora:latest
-            family: rpm
-          - distro: Arch Linux
-            image: archlinux:latest
-            family: pacman
+        # Em PR só o Ubuntu 24.04; todas as distribuições no disparo manual e
+        # no master.
+        include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"distro":"Ubuntu 24.04","image":"ubuntu:24.04","family":"deb"}]' || '[{"distro":"Ubuntu 22.04","image":"ubuntu:22.04","family":"deb"},{"distro":"Ubuntu 24.04","image":"ubuntu:24.04","family":"deb"},{"distro":"Ubuntu 26.04","image":"ubuntu:26.04","family":"deb"},{"distro":"Debian 12","image":"debian:12","family":"deb"},{"distro":"Debian 13","image":"debian:13","family":"deb"},{"distro":"Fedora","image":"fedora:latest","family":"rpm"},{"distro":"Arch Linux","image":"archlinux:latest","family":"pacman"}]') }}
     steps:
       - name: Download Linux x64 installers
         uses: actions/download-artifact@v8
@@ -841,8 +814,13 @@ jobs:
             "$DISTRO_IMAGE" sh -euc '
               case "$PACKAGE_FAMILY" in
                 deb)
-                  apt-get update
-                  apt-get install -y xvfb /artifacts/Vectora-*-linux-amd64.deb
+                  for attempt in 1 2 3 4 5; do
+                    rm -rf /var/lib/apt/lists/*
+                    apt-get -o Acquire::Retries=5 update -qq && break
+                    [ "$attempt" -lt 5 ] || exit 1
+                    sleep $((attempt * 10))
+                  done
+                  apt-get -o Acquire::Retries=5 install -y xvfb /artifacts/Vectora-*-linux-amd64.deb
                   dpkg-query -s vectora | grep -F "Status: install ok installed"
                   ;;
                 rpm)
@@ -915,39 +893,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - platform: Windows
-            os: windows-latest
-            arch: x64
-            format: exe
-          - platform: Windows
-            os: windows-latest
-            arch: x64
-            format: msi
-          - platform: Windows
-            os: windows-11-arm
-            arch: arm64
-            format: exe
-          - platform: Windows
-            os: windows-11-arm
-            arch: arm64
-            format: msi
-          - platform: macOS
-            os: macos-26
-            arch: arm64
-            format: dmg
-          - platform: macOS
-            os: macos-26
-            arch: arm64
-            format: zip
-          - platform: Linux
-            os: ubuntu-24.04
-            arch: x64
-            format: deb
-          - platform: Linux
-            os: ubuntu-24.04-arm
-            arch: arm64
-            format: deb
+        # Em PR só o .deb de Linux x64, o único pacote que a PR constrói.
+        include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"platform":"Linux","os":"ubuntu-24.04","arch":"x64","format":"deb"}]' || '[{"platform":"Windows","os":"windows-latest","arch":"x64","format":"exe"},{"platform":"Windows","os":"windows-latest","arch":"x64","format":"msi"},{"platform":"Windows","os":"windows-11-arm","arch":"arm64","format":"exe"},{"platform":"Windows","os":"windows-11-arm","arch":"arm64","format":"msi"},{"platform":"macOS","os":"macos-26","arch":"arm64","format":"dmg"},{"platform":"macOS","os":"macos-26","arch":"arm64","format":"zip"},{"platform":"Linux","os":"ubuntu-24.04","arch":"x64","format":"deb"},{"platform":"Linux","os":"ubuntu-24.04-arm","arch":"arm64","format":"deb"}]') }}
     runs-on: ${{ matrix.os }}
     steps:
       - name: Download native installer
@@ -1088,10 +1035,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sudo apt-get update -qq
+          for attempt in 1 2 3 4 5; do
+            sudo rm -rf /var/lib/apt/lists/*
+            sudo apt-get -o Acquire::Retries=5 update -qq && break
+            [ "$attempt" -lt 5 ] || exit 1
+            sleep $((attempt * 10))
+          done
           deb=$(find "$GITHUB_WORKSPACE/installers" -maxdepth 1 -type f -name '*.deb' -print -quit)
           test -n "$deb" || { echo "Downloaded .deb installer is missing." >&2; exit 1; }
-          sudo apt-get install -y xvfb "$deb"
+          sudo apt-get -o Acquire::Retries=5 install -y xvfb "$deb"
           dpkg-query -s vectora | grep -F "Status: install ok installed"
           executable=$(command -v vectora || true)
           test -n "$executable" || {

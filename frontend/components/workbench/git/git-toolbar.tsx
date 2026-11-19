@@ -1,15 +1,12 @@
 "use client";
 
 /**
- * GitToolbar — barra de ações do painel Git (estilo GitHub Desktop).
+ * GitToolbar: barra de ações do painel Git, em ícones e dropdowns.
  *
- * - Branch (dropdown): branch atual + trocar / criar / comparar-merge /
+ * - Branch: mostra a atual e permite trocar, criar, comparar/mesclar e abrir
  *   worktrees.
- * - Sync (botão adaptativo): Pull N · Push N · Fetch conforme ahead/behind.
- * - Pull requests (dropdown): lista abertos + criar PR.
- *
- * Tudo o que antes eram 6 sub-abas de texto cabe aqui em ícones/dropdowns,
- * eliminando o overflow horizontal da barra antiga.
+ * - Sync: botão adaptativo (Pull, Push ou Fetch) conforme ahead/behind.
+ * - Merge request: abre o fluxo de criação a partir da branch atual.
  */
 
 import {
@@ -20,7 +17,6 @@ import {
   GitPullRequest,
   Loader2,
   RefreshCw,
-  Settings2,
 } from "lucide-react";
 import { useCallback, useState } from "react";
 
@@ -51,7 +47,6 @@ export function GitToolbar({
   onOpenWorktrees,
   onOpenPR,
   onChanged,
-  onOpenSettings,
   operation,
 }: {
   workspaceId: string;
@@ -62,7 +57,6 @@ export function GitToolbar({
   onOpenWorktrees: () => void;
   onOpenPR: (head: string) => void;
   onChanged: () => void;
-  onOpenSettings?: () => void;
   operation?: GitOpsSnapshot | null;
 }) {
   const [creating, setCreating] = useState(false);
@@ -274,24 +268,13 @@ export function GitToolbar({
           )}
         </div>
 
-        <button
-          type="button"
-          onClick={onOpenSettings}
-          aria-label={m.settings_category_git()}
-          title={m.settings_category_git()}
-          className="ml-auto rounded-md p-1.5 text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-          data-testid="git-settings-btn"
-        >
-          <Settings2 className="h-3.5 w-3.5" />
-        </button>
-
         {/* PR */}
         <Tooltip>
           <TooltipTrigger asChild>
             <button
               onClick={() => onOpenPR(current)}
               aria-label={m.tooltip_git_pr()}
-              className="flex items-center justify-center w-7 h-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors shrink-0"
+              className="ml-auto flex items-center justify-center w-7 h-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors shrink-0"
             >
               <GitPullRequest className="w-3.5 h-3.5" />
             </button>
