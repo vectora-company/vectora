@@ -77,7 +77,7 @@ class FakeDecisionProvider(SystemOneProvider):
         self._supported_models = supported_models or [
             "clef-flash",
             "@cf/cloudflare/clef-flash",
-            "jev-fast",
+            "jev-1.14.0",
         ]
         self._evidence: CapabilityEvidenceLevel = evidence
         self._delay_s = delay_s

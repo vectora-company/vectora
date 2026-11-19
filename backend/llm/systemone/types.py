@@ -18,7 +18,9 @@ from pydantic import BaseModel, Field, TypeAdapter, ValidationError, model_valid
 from backend.llm.systemone.errors import SystemOneValidationError
 
 QuestionType = Literal["noul", "choice", "score"]
-DecisionProviderType = Literal["clef-local", "laya-local", "clef-api", "jev-api"]
+DecisionProviderType = Literal[
+    "clef-local", "laya-local", "clef-api", "jev-api", "openrouter-api"
+]
 CapabilityEvidenceLevel = Literal["documented", "observed", "unverified"]
 
 
@@ -213,7 +215,7 @@ class SystemOneRequest(BaseModel):
     """Requisição canônica enviada para um provedor de Decision Models."""
 
     model: str = Field(
-        ..., description="Identificador do modelo (ex: clef-flash, jev-1)."
+        ..., description="Identificador do modelo (ex: clef-flash, jev-1.14.0)."
     )
     state: str = Field(
         ...,
