@@ -26,6 +26,7 @@ import { useChatInputStore } from "@/lib/stores/chat-input-store";
 import { useWorkspacesStore } from "@/lib/stores/workspaces-store";
 import { useSettingsOverlayStore } from "@/lib/stores/settings-overlay-store";
 import { useSettingsStore } from "@/lib/stores/settings-store";
+import { cn } from "@/lib/utils";
 import { m } from "@/lib/paraglide/messages";
 import { BrowserDevtoolsPanel } from "./browser-devtools-panel";
 import { WorkbenchSettingsSurface } from "@/components/workbench/settings/workbench-settings-surface";
@@ -1575,7 +1576,12 @@ export function BrowserTab({ threadId, visible = true }: BrowserTabProps) {
           <div
             ref={browserViewContainerRef}
             data-testid="browser-webcontentsview-container"
-            className="relative flex-1 w-full bg-white"
+            className={cn(
+              "relative flex-1 w-full",
+              // Sem página aberta o fundo segue o tema; o branco só serve de
+              // base para o conteúdo de um site que não define a própria cor.
+              currentUrl ? "bg-white" : "bg-background",
+            )}
           >
             {!currentUrl && emptyBrowserState}
           </div>
