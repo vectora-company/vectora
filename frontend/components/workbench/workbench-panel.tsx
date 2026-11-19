@@ -169,7 +169,7 @@ function NavTabButton({
         <button
           onClick={onSelect}
           data-testid={`workbench-nav-${tab}`}
-          className={`relative flex items-center justify-center w-8 h-8 rounded-md transition-colors ${
+          className={`relative flex items-center justify-center w-8 h-8 pointer-coarse:w-10 pointer-coarse:h-10 rounded-md transition-colors ${
             active
               ? "bg-muted text-foreground"
               : "text-muted-foreground hover:text-foreground hover:bg-muted/50"

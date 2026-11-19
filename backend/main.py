@@ -37,6 +37,7 @@ import logging
 import signal
 import socket
 import sys
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -126,6 +127,70 @@ def _should_install_terminal_signals(
     return sys.stdin.isatty()
 
 
+#: Prazo máximo do shutdown gracioso antes de forçar a saída.
+_SHUTDOWN_DEADLINE_S = 15.0
+#: Prazo para o uvicorn fechar conexões abertas (SSE) ao receber o sinal.
+_GRACEFUL_SHUTDOWN_TIMEOUT_S = 5
+
+
+def _descendant_pids(root_pid: int) -> list[int]:
+    """PIDs descendentes de ``root_pid`` lidos de ``/proc`` (Linux)."""
+    parents: dict[int, int] = {}
+    for entry in Path("/proc").iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            stat = (entry / "stat").read_text()
+            # O nome do processo fica entre parênteses e pode conter espaços.
+            ppid = int(stat.rsplit(")", 1)[1].split()[1])
+        except (OSError, ValueError, IndexError):
+            continue
+        parents[int(entry.name)] = ppid
+    found: list[int] = []
+    frontier = [root_pid]
+    while frontier:
+        current = frontier.pop()
+        for pid, ppid in parents.items():
+            if ppid == current and pid not in found:
+                found.append(pid)
+                frontier.append(pid)
+    return found
+
+
+def _force_exit() -> None:
+    """Encerra os filhos (Electron, NATS, llama.cpp) e sai do processo.
+
+    Usado quando o shutdown gracioso não termina no prazo ou o usuário repete
+    o Ctrl+C. Sem isso, o processo e os sidecars ficam vivos até alguém fechar
+    pelo gerenciador de tarefas.
+    """
+    try:
+        if sys.platform == "win32":
+            import shutil
+            import subprocess  # nosec B404
+
+            taskkill = shutil.which("taskkill")
+            if taskkill:
+                subprocess.run(  # nosec B603  # noqa: S603
+                    [taskkill, "/PID", str(os.getpid()), "/T", "/F"],
+                    check=False,
+                    timeout=5,
+                )
+        elif Path("/proc").is_dir():
+            import time
+
+            pids = _descendant_pids(os.getpid())
+            for sig in (signal.SIGTERM, signal.SIGKILL):
+                for pid in pids:
+                    with contextlib.suppress(OSError):
+                        os.kill(pid, sig)
+                if sig == signal.SIGTERM:
+                    time.sleep(1.5)
+    except Exception:
+        logger.debug("Vectora: falha ao encerrar processos filhos", exc_info=True)
+    os._exit(130)
+
+
 def _install_terminal_signals(server: Any, icon_ref: list[Any]) -> None:
     """Instala handlers de SIGINT/SIGTERM/SIGHUP para shutdown limpo — ver
     `_should_install_terminal_signals` para quando isso é chamado."""
@@ -135,8 +200,16 @@ def _install_terminal_signals(server: Any, icon_ref: list[Any]) -> None:
         """Executa a operação shutdown."""
         nonlocal shutdown_started
         if shutdown_started:
+            # Segundo Ctrl+C: o usuário não quer esperar o shutdown gracioso.
+            logger.warning("Vectora: segundo sinal — encerrando à força")
+            _force_exit()
             return
         shutdown_started = True
+        # Rede de segurança: conexões SSE abertas ou uma thread presa não
+        # podem manter o processo vivo para sempre depois do primeiro Ctrl+C.
+        deadline = threading.Timer(_SHUTDOWN_DEADLINE_S, _force_exit)
+        deadline.daemon = True
+        deadline.start()
         from backend.services.log_setup import mark_shutdown_requested
 
         mark_shutdown_requested()
@@ -738,6 +811,7 @@ def _run_start(args: argparse.Namespace, *, force_web: bool = False) -> None:
             uds=uds_path,
             log_level=uvicorn_log_level,
             access_log=False,
+            timeout_graceful_shutdown=_GRACEFUL_SHUTDOWN_TIMEOUT_S,
             ssl_certfile=ssl_certfile,
             ssl_keyfile=ssl_keyfile,
         )
@@ -760,6 +834,7 @@ def _run_start(args: argparse.Namespace, *, force_web: bool = False) -> None:
             port=port,
             log_level=uvicorn_log_level,
             access_log=False,
+            timeout_graceful_shutdown=_GRACEFUL_SHUTDOWN_TIMEOUT_S,
             ssl_certfile=ssl_certfile,
             ssl_keyfile=ssl_keyfile,
         )
