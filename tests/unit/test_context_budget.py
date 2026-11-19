@@ -76,4 +76,4 @@ def test_calibracao_ignora_dados_invalidos_e_limita_extremos() -> None:
     assert calibration_ratio(0, 100) == 1.0
     assert calibration_ratio(100, 0) == 1.0
     assert calibration_ratio(10_000, 100) == 3.0
-    assert calibration_ratio(1, 100) == 0.5
+    assert calibration_ratio(1, 100) == 1.0

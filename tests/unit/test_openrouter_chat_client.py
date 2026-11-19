@@ -638,3 +638,27 @@ class TestCacheDePrompt:
             self._mensagens(), tools=None, temperature=None, max_tokens=None
         )
         assert corpo["cache_prompt"] is True
+
+
+class TestChaveDeCacheNosRoteadores:
+    def _payload(self, origem: str):
+        from backend.llm.prompt_cache import prompt_cache_key
+
+        client = TestCacheDePrompt()._client("cc/claude-sonnet", origem)
+        token = prompt_cache_key.set("thread-9")
+        try:
+            return client._payload(
+                TestCacheDePrompt()._mensagens(),
+                tools=None,
+                temperature=None,
+                max_tokens=None,
+            )
+        finally:
+            prompt_cache_key.reset(token)
+
+    def test_9router_recebe_a_chave_da_conversa(self) -> None:
+        assert self._payload("nine_router")["prompt_cache_key"] == "thread-9"
+
+    def test_openrouter_e_llamacpp_nao_recebem_a_chave(self) -> None:
+        assert "prompt_cache_key" not in self._payload("openrouter")
+        assert "prompt_cache_key" not in self._payload("llamacpp")

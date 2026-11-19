@@ -31,6 +31,7 @@ from backend.llm.media_parts import (
     resolve_native_media,
 )
 from backend.llm.openrouter.client import OpenRouterClient, OpenRouterResponseError
+from backend.llm.prompt_cache import prompt_cache_key
 from backend.vtypes.contracts import UsageSnapshot
 from backend.vtypes.message import (
     ContentBlock,
@@ -355,6 +356,12 @@ class OpenRouterChatClient:
         origin = (self.media_model_id or "").partition(":")[0]
         if origin == "llamacpp":
             corpo["cache_prompt"] = True
+        elif origin == "nine_router":
+            # 9Router e OmniRoute leem `prompt_cache_key` como identidade da
+            # conversa: mantém a sessão estável e manda o prefixo à mesma conta.
+            cache_key = prompt_cache_key.get()
+            if cache_key:
+                corpo["prompt_cache_key"] = cache_key
         elif origin == "openrouter" and self.model.startswith(
             ("anthropic/", "google/gemini")
         ):
