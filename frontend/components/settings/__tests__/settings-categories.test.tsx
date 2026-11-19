@@ -60,4 +60,18 @@ describe("buildSettingsCategoryGroups — Administração achatada (5 categorias
     });
     expect(groups.find((g) => g.id === "administracao")).toBeUndefined();
   });
+
+  it("Mídia vem depois do Provider Routing, dentro do grupo Ambiente", () => {
+    const groups = buildSettingsCategoryGroups({
+      connectEnabled: true,
+      isAdmin: false,
+    });
+    const ids = groups
+      .find((g) => g.id === "ambiente")
+      ?.categories.map((c) => c.id);
+
+    expect(ids).toBeDefined();
+    const order = ["ai_models", "provider_routing", "media", "connect"];
+    expect(ids?.filter((id) => order.includes(id))).toEqual(order);
+  });
 });

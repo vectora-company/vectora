@@ -250,16 +250,16 @@ export function buildSettingsCategoryGroups({
       Component: AiModelsTab,
     },
     {
-      id: "media",
-      group: "ambiente",
-      label: m.settings_category_media(),
-      Component: MediaSettingsTab,
-    },
-    {
       id: "provider_routing",
       group: "ambiente",
       label: m.settings_category_provider_routing(),
       Component: ProviderRoutingTab,
+    },
+    {
+      id: "media",
+      group: "ambiente",
+      label: m.settings_category_media(),
+      Component: MediaSettingsTab,
     },
     ...(connectEnabled
       ? ([
