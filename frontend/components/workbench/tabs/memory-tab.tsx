@@ -8,6 +8,7 @@
  * (trechos da base de conhecimento + resultados web) em pílulas expansíveis.
  */
 
+import { MemoriesPanel } from "@/components/workbench/tabs/memories-panel";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
@@ -267,6 +268,25 @@ function useJourney() {
 /** "O que aprendi sobre você" — só leitura: editar/apagar memória já tem o
  *  fluxo próprio no painel de configurações, duplicar aqui daria dois lugares
  *  divergentes pra mesma ação. */
+/** Memórias que o agente salvou sobre a pessoa: listar, editar, apagar e
+ * adicionar. Ficam aqui, junto do que foi recuperado por RAG e das
+ * configurações de embedding, e não mais nas configurações do app. */
+function SavedMemoriesSection() {
+  return (
+    <section
+      aria-label={m.settings_category_memoria()}
+      data-testid="saved-memories"
+      className="space-y-1.5"
+    >
+      <h3 className="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <Brain className="h-3 w-3" />
+        {m.settings_category_memoria()}
+      </h3>
+      <MemoriesPanel />
+    </section>
+  );
+}
+
 function JourneyPanel() {
   const { facts, skills } = useJourney();
 
@@ -731,6 +751,7 @@ export function MemoryTab({ threadId }: MemoryTabProps) {
         <div className="flex-1 space-y-4 overflow-auto px-3 py-3">
           <BucketsPanel />
           <JourneyPanel />
+          <SavedMemoriesSection />
           {unifiedSection}
           {searchSection}
           {!searchSection && !unifiedSection && (
@@ -776,6 +797,7 @@ export function MemoryTab({ threadId }: MemoryTabProps) {
       <div className="flex-1 space-y-4 overflow-auto px-3 pb-3 pt-3">
         <BucketsPanel />
         <JourneyPanel />
+        <SavedMemoriesSection />
         {unifiedSection}
         {searchSection}
         {hasActivity && (
