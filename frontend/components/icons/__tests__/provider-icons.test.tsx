@@ -3,6 +3,9 @@ import { describe, expect, it } from "vitest";
 import { render } from "@testing-library/react";
 import { ProviderIcon } from "@/components/icons/provider-icons";
 import { useSettingsStore } from "@/lib/stores/settings-store";
+import clef from "@/assets/provider-logos/clef.png";
+import jevOnDark from "@/assets/provider-logos/jev-on-dark.png";
+import jevOnLight from "@/assets/provider-logos/jev-on-light.png";
 import laya from "@/assets/provider-logos/laya.svg";
 import huggingface from "@/assets/provider-logos/huggingface.svg";
 import llamacppOnDark from "@/assets/provider-logos/llamacpp-on-dark.svg";
@@ -59,13 +62,15 @@ describe("ProviderIcon", () => {
         <ProviderIcon provider="nine_router" />
         <ProviderIcon provider="omniroute" />
         <ProviderIcon provider="laya-local" />
+        <ProviderIcon provider="clef-local" />
+        <ProviderIcon provider="jev-api" />
       </>,
     );
 
     const sources = [
       ...container.querySelectorAll("[data-provider-icon] img"),
     ].map((img) => img.getAttribute("src") ?? "");
-    expect(sources).toHaveLength(6);
+    expect(sources).toHaveLength(8);
     expect(sources).toEqual([
       ollamaOnDark,
       llamacppOnDark,
@@ -73,6 +78,8 @@ describe("ProviderIcon", () => {
       ninerouter,
       omniroute,
       laya,
+      clef,
+      jevOnDark,
     ]);
   });
 
@@ -82,13 +89,14 @@ describe("ProviderIcon", () => {
       <>
         <ProviderIcon provider="ollama" />
         <ProviderIcon provider="llamacpp" />
+        <ProviderIcon provider="jev-api" />
       </>,
     );
 
     const sources = [...container.querySelectorAll("img")].map(
       (img) => img.getAttribute("src") ?? "",
     );
-    expect(sources).toEqual([ollamaOnLight, llamacppOnLight]);
+    expect(sources).toEqual([ollamaOnLight, llamacppOnLight, jevOnLight]);
     // As duas variantes são arquivos diferentes (glifo claro x escuro).
     expect(ollamaOnLight).not.toBe(ollamaOnDark);
     expect(llamacppOnLight).not.toBe(llamacppOnDark);
