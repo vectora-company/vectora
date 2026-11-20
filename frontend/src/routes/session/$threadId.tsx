@@ -47,6 +47,7 @@ import {
   GithubIssueDetail,
   GithubPullDetail,
 } from "@/components/workbench/git/github-detail";
+import { GithubRunDetail } from "@/components/workbench/git/run-detail";
 import { CanvasDocumentWindows } from "@/components/workbench/canvas-document-windows";
 import {
   CommitDetails,
@@ -971,6 +972,19 @@ function SessionPage() {
             key={document.id}
             workspaceId={document.workspaceId}
             number={document.githubNumber}
+          />
+        );
+      }
+      if (
+        document.kind === "workflow-run" &&
+        document.workspaceId &&
+        document.githubNumber
+      ) {
+        return (
+          <GithubRunDetail
+            key={document.id}
+            workspaceId={document.workspaceId}
+            runId={document.githubNumber}
           />
         );
       }

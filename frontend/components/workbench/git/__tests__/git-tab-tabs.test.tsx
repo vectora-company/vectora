@@ -4,7 +4,13 @@
  * como abas diretas (sem a aba "GitHub" que escondia PRs e Issues).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { useWorkbenchStore } from "@/lib/stores/workbench-store";
 
 const api = vi.hoisted(() => ({
@@ -34,6 +40,11 @@ vi.mock("../changes-view", async () => {
 vi.mock("../github-view", () => ({
   GithubView: ({ kind }: { kind: string }) => (
     <div data-testid={`github-${kind}`} />
+  ),
+}));
+vi.mock("../actions-view", () => ({
+  ActionsView: ({ currentBranch }: { currentBranch: string | null }) => (
+    <div data-testid="actions" data-branch={currentBranch ?? ""} />
   ),
 }));
 vi.mock("../history-view", () => ({
@@ -117,14 +128,55 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("GitTab — abas", () => {
-  it("tem Mudanças, Histórico, PRs, Issues e Comparação, sem a aba GitHub", async () => {
+  it("tem Mudanças, Histórico, PRs, Issues, Actions e Comparação, sem a aba GitHub", async () => {
     api.fetchDiff.mockResolvedValue({ is_git_repo: true, files: [] });
     render(<GitTab threadId="t1" />);
 
     await screen.findByTestId("toolbar");
-    for (const id of ["changes", "history", "prs", "issues", "compare"])
+    for (const id of [
+      "changes",
+      "history",
+      "prs",
+      "issues",
+      "actions",
+      "compare",
+    ])
       expect(screen.getByTestId(`tab-${id}`)).toBeTruthy();
     expect(screen.queryByText("workbench_github_tab")).toBeNull();
+  });
+
+  it("Actions fica logo depois de Issues e antes de Comparação", async () => {
+    api.fetchDiff.mockResolvedValue({ is_git_repo: true, files: [] });
+    render(<GitTab threadId="t1" />);
+    await screen.findByTestId("toolbar");
+
+    const order = screen
+      .getAllByRole("tab", { hidden: true })
+      .map((tab) => tab.getAttribute("data-testid"));
+
+    expect(order.indexOf("tab-actions")).toBe(order.indexOf("tab-issues") + 1);
+    expect(order.indexOf("tab-compare")).toBe(order.indexOf("tab-actions") + 1);
+  });
+
+  it("a aba Actions abre a lista de runs com a branch atual", async () => {
+    api.fetchDiff.mockResolvedValue({ is_git_repo: true, files: [] });
+    api.fetchGitStatus.mockResolvedValue({
+      is_git_repo: true,
+      branch: "feat/x",
+      clean: true,
+      ahead: 0,
+      behind: 0,
+    });
+    render(<GitTab threadId="t1" />);
+    await screen.findByTestId("toolbar");
+
+    fireEvent.click(screen.getByTestId("tab-actions"));
+
+    expect(screen.getByTestId("actions")).toBeTruthy();
+    await waitFor(() =>
+      expect(screen.getByTestId("actions").dataset.branch).toBe("feat/x"),
+    );
+    expect(screen.queryByTestId("changes")).toBeNull();
   });
 
   it("a aba Mudanças mostra quantos arquivos mudaram", async () => {

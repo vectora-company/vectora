@@ -7,7 +7,7 @@
  * comentários. Só leitura; o conteúdo vem do `gh` pelo backend ao abrir.
  */
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ExternalLink, GitPullRequest, CircleDot } from "lucide-react";
 
 import { MarkdownView } from "@/components/workbench/markdown-view";
@@ -65,61 +65,84 @@ export interface IssueDetailData {
   comments: GithubComment[];
 }
 
-type Loaded<T> =
+export type Loaded<T> =
   | { status: "loading" }
   | { status: "unavailable" | "error"; message: string }
   | { status: "ok"; data: T };
 
-/** Carrega um PR (`pulls`) ou uma issue (`issues`) pelo número. */
+/** Em qual campo da resposta vem o item de cada tipo. */
+const PAYLOAD_KEY = { pulls: "pull", issues: "issue", runs: "run" } as const;
+
+/**
+ * Carrega um PR (`pulls`), uma issue (`issues`) ou um run (`runs`) pelo
+ * identificador. Com `pollMs`, relê sozinho enquanto a função devolver um
+ * intervalo (ex.: run em andamento), mantendo o conteúdo anterior na tela: uma
+ * releitura que falha não troca o que já está exibido por um erro.
+ */
 export function useGithubDetail<T>(
-  kind: "pulls" | "issues",
-  number: number,
+  kind: "pulls" | "issues" | "runs",
+  id: number,
   workspaceId: string,
+  pollMs?: (data: T) => number | null,
 ): Loaded<T> {
   const [loaded, setLoaded] = useState<Loaded<T>>({ status: "loading" });
+  // Lido dentro do efeito sem reiniciar a busca quando só a função muda.
+  const pollRef = useRef(pollMs);
+  useEffect(() => {
+    pollRef.current = pollMs;
+  });
 
   useEffect(() => {
     const controller = new AbortController();
-    // Troca de PR ou issue volta ao carregamento.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    // Troca de item volta ao carregamento.
     // oxlint-disable-next-line react/set-state-in-effect
     setLoaded({ status: "loading" });
-    void (async () => {
+
+    const load = async (silent: boolean) => {
       try {
         const res = await fetch(
-          `/github/${kind}/${number}?workspace_id=${encodeURIComponent(workspaceId)}`,
+          `/github/${kind}/${id}?workspace_id=${encodeURIComponent(workspaceId)}`,
           { credentials: "include", signal: controller.signal },
         );
         if (!res.ok) {
-          setLoaded({ status: "error", message: `HTTP ${res.status}` });
+          if (!silent)
+            setLoaded({ status: "error", message: `HTTP ${res.status}` });
           return;
         }
         const payload = (await res.json()) as {
           status: "ok" | "unavailable" | "error";
           message?: string;
-          pull?: T;
-          issue?: T;
-        };
-        const data = kind === "pulls" ? payload.pull : payload.issue;
+        } & Record<string, unknown>;
+        const data = payload[PAYLOAD_KEY[kind]] as T | undefined;
         if (payload.status !== "ok" || !data) {
-          setLoaded({
-            status: payload.status === "ok" ? "error" : payload.status,
-            message: payload.message ?? "",
-          });
+          if (!silent)
+            setLoaded({
+              status: payload.status === "ok" ? "error" : payload.status,
+              message: payload.message ?? "",
+            });
           return;
         }
         setLoaded({ status: "ok", data });
+        const next = pollRef.current?.(data);
+        if (next && next > 0) timer = setTimeout(() => void load(true), next);
       } catch (error) {
         if ((error as { name?: string }).name === "AbortError") return;
-        setLoaded({ status: "error", message: String(error) });
+        if (!silent) setLoaded({ status: "error", message: String(error) });
       }
-    })();
-    return () => controller.abort();
-  }, [kind, number, workspaceId]);
+    };
+
+    void load(false);
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [kind, id, workspaceId]);
 
   return loaded;
 }
 
-function formatDate(raw: string): string {
+export function formatDate(raw: string): string {
   const date = new Date(raw);
   return Number.isNaN(date.getTime())
     ? raw.slice(0, 10)
@@ -161,7 +184,13 @@ export function StateBadge({
   );
 }
 
-function MetaRow({ label, children }: { label: string; children: ReactNode }) {
+export function MetaRow({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-xs">
       <span className="w-20 shrink-0 text-muted-foreground">{label}</span>
@@ -170,7 +199,7 @@ function MetaRow({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function Chips({ items }: { items: string[] }) {
+export function Chips({ items }: { items: string[] }) {
   if (items.length === 0)
     return (
       <span className="text-muted-foreground">
@@ -259,7 +288,7 @@ function Conversation({
   );
 }
 
-function Header({
+export function Header({
   icon,
   title,
   number,
@@ -296,7 +325,7 @@ function Header({
   );
 }
 
-function Status({
+export function Status({
   loaded,
   children,
 }: {

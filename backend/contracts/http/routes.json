@@ -773,6 +773,34 @@
     "methods": [
       "GET"
     ],
+    "name": "list_runs_github_runs_get",
+    "path": "/github/runs"
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "name": "get_run_github_runs__run_id__get",
+    "path": "/github/runs/{run_id}"
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "name": "get_job_log_github_runs__run_id__jobs__job_id__log_get",
+    "path": "/github/runs/{run_id}/jobs/{job_id}/log"
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "name": "list_workflows_github_workflows_get",
+    "path": "/github/workflows"
+  },
+  {
+    "methods": [
+      "GET"
+    ],
     "name": "health_health_get",
     "path": "/health"
   },
