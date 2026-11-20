@@ -86,6 +86,23 @@ if [[ "$PACKAGE_MANAGER" == apt || "$PACKAGE_MANAGER" == dnf ]]; then
   else printf '  [pendente] snap (pacote snapd)\n'; ((PENDING+=1)); fi
   if command_exists snapcraft; then printf '  [ok]      snapcraft: %s\n' "$(command -v snapcraft)"
   else printf '  [pendente] snapcraft (snap install snapcraft --classic)\n'; ((PENDING+=1)); fi
+elif command_exists snap; then
+  if command_exists snapcraft; then printf '  [ok]      snapcraft: %s\n' "$(command -v snapcraft)"
+  else printf '  [pendente] snapcraft (snap install snapcraft --classic)\n'; ((PENDING+=1)); fi
+fi
+if command_exists flatpak; then
+  if flatpak remotes --user --columns=name 2>/dev/null | grep -Fxq flathub; then
+    printf '  [ok]      remoto Flatpak do Flathub (usuário)\n'
+  else
+    printf '  [pendente] remoto Flatpak do Flathub (usuário)\n'
+    ((PENDING+=1))
+  fi
+  if flatpak info --user org.flatpak.Builder >/dev/null 2>&1; then
+    printf '  [ok]      org.flatpak.Builder (Flathub)\n'
+  else
+    printf '  [pendente] org.flatpak.Builder (Flathub)\n'
+    ((PENDING+=1))
+  fi
 fi
 if [[ -s "$NVM_DIR/nvm.sh" ]]; then printf '  [ok]      nvm: %s\n' "$NVM_DIR/nvm.sh"
 else printf '  [pendente] nvm (gerenciador de Node.js)\n'; ((PENDING+=1)); fi
@@ -155,7 +172,8 @@ install_packages() {
     apk)
       local -a wanted=(bash build-base curl ca-certificates git python3 pkgconf cmake linux-headers \
         openssl-dev zlib-dev bzip2-dev readline-dev sqlite-dev ncurses-dev xz-dev tk-dev \
-        libxml2-dev libffi-dev gdbm-dev postgresql-dev cargo)
+        libxml2-dev libffi-dev gdbm-dev postgresql-dev cargo flatpak flatpak-builder fuse3 \
+        libarchive-tools)
       for package in "${wanted[@]}"; do apk info -e "$package" >/dev/null 2>&1 || packages+=("$package"); done
       if ((${#packages[@]})); then run_privileged apk add "${packages[@]}"; fi
       ;;
@@ -180,10 +198,14 @@ if [[ "$MODE" != check ]]; then
       run_privileged ln -s /var/lib/snapd/snap /snap
     fi
   fi
-  if [[ "$PACKAGE_MANAGER" == apt || "$PACKAGE_MANAGER" == dnf ]]; then
-    if ! command_exists snapcraft; then
-      run_privileged snap install snapcraft --classic
-    fi
+  if command_exists snap && ! command_exists snapcraft; then
+    run_privileged snap install snapcraft --classic
+  fi
+  if command_exists flatpak; then
+    flatpak remote-add --if-not-exists --user flathub \
+      https://dl.flathub.org/repo/flathub.flatpakrepo
+    flatpak install --user --noninteractive --assumeyes --or-update \
+      flathub org.flatpak.Builder
   fi
 
   if [[ ! -s "$NVM_DIR/nvm.sh" ]]; then

@@ -606,7 +606,7 @@ def test_linux_release_installs_native_package_build_tools() -> None:
     assert "sudo snap install snapcraft" not in content
 
 
-def test_dotfiles_installs_snapd_on_supported_distributions() -> None:
+def test_dotfiles_installs_flatpak_and_snap_tools_on_supported_distributions() -> None:
     dotfiles = (WORKFLOW.parent.parent.parent / "dotfiles.sh").read_text(
         encoding="utf-8"
     )
@@ -619,8 +619,13 @@ def test_dotfiles_installs_snapd_on_supported_distributions() -> None:
     )
     assert "systemctl enable --now snapd.socket" in dotfiles
     assert "snap install snapcraft --classic" in dotfiles
+    assert "if command_exists snap && ! command_exists snapcraft; then" in dotfiles
     assert "snap (pacote snapd)" in dotfiles
     assert "snapcraft (snap install snapcraft --classic)" in dotfiles
+    assert "cargo flatpak flatpak-builder fuse3" in dotfiles
+    assert "https://dl.flathub.org/repo/flathub.flatpakrepo" in dotfiles
+    assert "flathub org.flatpak.Builder" in dotfiles
+    assert "flatpak info --user org.flatpak.Builder" in dotfiles
 
 
 def test_linux_release_validates_and_uploads_electron_builder_artifact_names() -> None:
