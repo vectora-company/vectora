@@ -301,6 +301,8 @@ def main() -> None:
             f"--distpath={ROOT / 'dist'}",
             f"--workpath={ROOT / 'build' / 'pyinstaller'}",
             f"--specpath={ROOT / 'build'}",
+            "--additional-hooks-dir",
+            str(ROOT / "utils" / "pyinstaller_hooks"),
             # nats-server é um executável Go estático, não uma biblioteca
             # dinâmica; tratá-lo como binary faz o PyInstaller executar ldd.
             "--add-data",

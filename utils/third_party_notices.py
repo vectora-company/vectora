@@ -122,7 +122,7 @@ _PERMISSIVE = (
     "Public Domain",
 )
 _WEAK_COPYLEFT = ("LGPL-", "MPL-", "EPL-")
-_STRONG_COPYLEFT = ("GPL-3.0", "AGPL-3.0")
+_STRONG_COPYLEFT = ("GPL-2.0-or-later", "GPL-3.0", "AGPL-3.0")
 
 
 def normalize_license(raw: str) -> str:
@@ -272,7 +272,10 @@ def render(python: list[dict], npm: dict[str, list[dict]]) -> str:
     for kind, label in (
         ("permissive", "Permissiva"),
         ("weak-copyleft", "Copyleft fraco (LGPL, MPL, EPL)"),
-        ("strong-copyleft", "Copyleft forte (GPL-3.0, AGPL-3.0)"),
+        (
+            "strong-copyleft",
+            "Copyleft forte (GPL-2.0-or-later, GPL-3.0, AGPL-3.0)",
+        ),
         ("review", "Requer revisão"),
     ):
         lines.append(f"| {label} | {len(by_kind.get(kind, []))} |")
