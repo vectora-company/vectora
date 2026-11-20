@@ -106,23 +106,41 @@ class JourneyResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-def _user_id(request: Request) -> str:
-    """Extrai o user_id bruto do request autenticado.
+def _workspace_id(request: Request) -> str:
+    """Workspace do pedido: o do middleware ou o informado pelo painel.
 
-    Em modo CLI (root local sem auth), usa ``"local"`` — mesmo default de
-    ``backend/tools/memory.py::_user_id_from_config``.
+    O painel envia ``workspace_id`` na query; sem isso o REST leria um
+    namespace diferente do que as memory tools do agente gravam.
     """
+    from_state = str(getattr(request.state, "workspace_id", "") or "")
+    return from_state or str(request.query_params.get("workspace_id") or "")
+
+
+def _raw_user_id(request: Request) -> str:
+    """Id do usuário autenticado, ou ``local`` sem autenticação."""
     user = getattr(request.state, "user", None)
-    if user is not None and hasattr(user, "id"):
-        return str(user.id)
-    return "local"
+    return str(user.id) if user is not None and hasattr(user, "id") else "local"
+
+
+def _user_id(request: Request) -> str:
+    """Extrai o user_id do request autenticado, igual ao das memory tools.
+
+    Sem usuário explícito (modo local), as tools usam ``workspace_<id>`` e
+    este handler precisa espelhar essa regra para enxergar o que o agente
+    salvou (``backend/tools/memory.py::_user_id_from_ctx``).
+    """
+    raw = _raw_user_id(request)
+    if raw and raw != "local":
+        return raw
+    workspace_id = _workspace_id(request)
+    return f"workspace_{workspace_id}" if workspace_id else "local"
 
 
 def _namespace(request: Request) -> tuple[str, ...]:
     """Namespace do store — idêntico ao usado pelas memory tools do agente."""
     namespace: list[str] = ["user", _user_id(request)]
     org_id = str(getattr(request.state, "org_id", "") or "")
-    workspace_id = str(getattr(request.state, "workspace_id", "") or "")
+    workspace_id = _workspace_id(request)
     if org_id:
         namespace.extend(("org", org_id))
     if workspace_id:
@@ -132,9 +150,9 @@ def _namespace(request: Request) -> tuple[str, ...]:
 
 
 def _namespace_candidates(request: Request) -> list[tuple[str, ...]]:
-    """Read scoped records first and retain legacy user-memory compatibility."""
+    """Lê o namespace do escopo primeiro e mantém o legado do usuário local."""
     scoped = _namespace(request)
-    legacy = ("user", _user_id(request), "memories")
+    legacy = ("user", _raw_user_id(request), "memories")
     return [scoped] if scoped == legacy else [scoped, legacy]
 
 

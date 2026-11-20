@@ -95,11 +95,12 @@ vi.mock("@/lib/hooks/chat/use-thread-messages", () => ({
   useThreadMessages: (threadId: string) => [mockMessages(threadId), vi.fn()],
 }));
 
-vi.mock("@/lib/stores/workspaces-store", () => ({
-  useWorkspacesStore: (
-    sel: (s: { getActive: () => { id: string } | undefined }) => unknown,
-  ) => sel({ getActive: () => ({ id: "ws-1" }) }),
-}));
+vi.mock("@/lib/stores/workspaces-store", () => {
+  const state = { getActive: () => ({ id: "ws-1" }) };
+  const useWorkspacesStore = (sel: (s: typeof state) => unknown) => sel(state);
+  useWorkspacesStore.getState = () => state;
+  return { useWorkspacesStore };
+});
 
 vi.mock("@/lib/stores/rag-jobs-store", () => ({
   useRagJobsStore: (
