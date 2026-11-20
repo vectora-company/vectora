@@ -1,0 +1,64 @@
+{
+  "status": "ok",
+  "message": "",
+  "pull": {
+    "number": 803,
+    "title": "feat: aba Actions na workbench Git, somente leitura",
+    "state": "OPEN",
+    "is_draft": false,
+    "author": "brunosrz",
+    "head_ref": "feat/git-actions-tab",
+    "base_ref": "feat/git-pr-issue-documents",
+    "created_at": "2026-11-20T02:20:00Z",
+    "updated_at": "2026-11-20T02:20:34Z",
+    "url": "https://github.com/vectora-company/vectora/pull/803",
+    "body": "Closes #802\n\n## O que muda\nA aba Actions lista os runs do repositório, com busca por título, estado, workflow e o filtro Esta branch ligado por padrão, e se relê sozinha enquanto há run em andamento, sem piscar; clicar num run abre um document com cabeçalho no padrão de PR e issue, metadados, jobs (falha e ativo abertos) com os passos e o log de cada job sob demanda; nenhuma ação escreve no GitHub: sem re-run, cancelar, disparar workflow nem comentar; o backend ganha rotas de leitura de runs, detalhe, log e workflows.\n\n## Testes\nTestes unitários direcionados, ruff, ty e hooks.\n\nBREAKING CHANGE: nenhum contrato muda; linha incluída só por precaução do gate de contratos.",
+    "labels": ["enhancement", "backend", "frontend", "breaking-change"],
+    "assignees": [],
+    "reviewers": [],
+    "milestone": "0.1.x",
+    "additions": 3746,
+    "deletions": 62,
+    "changed_files": 26,
+    "mergeable": "MERGEABLE",
+    "review_decision": "",
+    "checks": {
+      "passed": 6,
+      "failed": 0,
+      "pending": 0
+    },
+    "comments": [
+      {
+        "author": "brunosrz",
+        "body": "@coderabbitai full review",
+        "created_at": "2026-11-20T02:20:03Z",
+        "url": "https://github.com/vectora-company/vectora/pull/803#issuecomment-7028317165"
+      }
+    ],
+    "commits": [
+      {
+        "sha": "36545bdf2ddd5fc0b71e003a8b2922f2e09c330f",
+        "message": "feat: aba Actions na workbench Git, somente leitura",
+        "author": "brunosrz",
+        "date": "2026-11-20T02:19:14Z"
+      }
+    ],
+    "files": [
+      {
+        "path": "backend/api/handlers/github.py",
+        "additions": 285,
+        "deletions": 0
+      },
+      {
+        "path": "backend/contracts/http/openapi.json",
+        "additions": 680,
+        "deletions": 2
+      },
+      {
+        "path": "backend/contracts/http/routes.json",
+        "additions": 28,
+        "deletions": 0
+      }
+    ]
+  }
+}

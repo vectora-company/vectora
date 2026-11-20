@@ -21,6 +21,12 @@ sentido com a stack inteira de pé:
   Routing): render das abas + interação básica, sem persistir credenciais.
 - **`plan-mode.spec.ts`** — prompt que pede um plano gera tarefas reais
   (`write_todos`) visíveis na aba Plano.
+- **`git-github-tabs.spec.ts`** — abas PRs, Issues e Actions da workbench Git,
+  somente leitura. As respostas de `/github/*` são simuladas na rede da página
+  (`page.route`), sem depender de `gh` nem de repositório remoto. Cobre a ordem
+  das abas, os filtros (branch atual, estado, workflow), lista → document de
+  run, PR e issue, log sob demanda, `gh` indisponível e a garantia de que nada
+  escreve (só `GET`, nenhum botão de re-run, cancelar ou comentar).
 
 ## Pré-requisitos
 

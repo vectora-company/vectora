@@ -44,10 +44,9 @@ import { LibraryMcpPreview } from "@/components/workbench/library-mcp-preview";
 import { MarkdownView } from "@/components/workbench/markdown-view";
 import type { GithubItemRef } from "@/components/workbench/git/github-view";
 import {
-  GithubIssueDetail,
-  GithubPullDetail,
-} from "@/components/workbench/git/github-detail";
-import { GithubRunDetail } from "@/components/workbench/git/run-detail";
+  githubDocumentDescriptor,
+  renderGithubDocument,
+} from "@/components/workbench/git/github-documents";
 import { CanvasDocumentWindows } from "@/components/workbench/canvas-document-windows";
 import {
   CommitDetails,
@@ -877,15 +876,9 @@ function SessionPage() {
   const openGithubItem = useCallback(
     (item: GithubItemRef) => {
       if (!activeWorkspaceId) return;
-      // O conteúdo é lido ao abrir; o descritor guarda só o número.
-      openCanvasDocument({
-        id: `${item.kind}:${activeWorkspaceId}:${item.number}`,
-        kind: item.kind,
-        workspaceId: activeWorkspaceId,
-        threadId,
-        title: `#${item.number} ${item.title}`,
-        githubNumber: item.number,
-      });
+      openCanvasDocument(
+        githubDocumentDescriptor(item, activeWorkspaceId, threadId),
+      );
     },
     [activeWorkspaceId, openCanvasDocument, threadId],
   );
@@ -957,36 +950,11 @@ function SessionPage() {
         );
       }
       if (
-        (document.kind === "pull-request" || document.kind === "issue") &&
-        document.workspaceId &&
-        document.githubNumber
+        document.kind === "pull-request" ||
+        document.kind === "issue" ||
+        document.kind === "workflow-run"
       ) {
-        return document.kind === "pull-request" ? (
-          <GithubPullDetail
-            key={document.id}
-            workspaceId={document.workspaceId}
-            number={document.githubNumber}
-          />
-        ) : (
-          <GithubIssueDetail
-            key={document.id}
-            workspaceId={document.workspaceId}
-            number={document.githubNumber}
-          />
-        );
-      }
-      if (
-        document.kind === "workflow-run" &&
-        document.workspaceId &&
-        document.githubNumber
-      ) {
-        return (
-          <GithubRunDetail
-            key={document.id}
-            workspaceId={document.workspaceId}
-            runId={document.githubNumber}
-          />
-        );
+        return renderGithubDocument(document);
       }
       if (document.kind === "plan") {
         const plan = document.plan ?? planDocumentsById[document.id];

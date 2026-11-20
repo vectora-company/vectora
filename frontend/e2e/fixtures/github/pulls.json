@@ -1,0 +1,23 @@
+{
+  "status": "ok",
+  "message": "",
+  "pulls": [
+    {
+      "number": 803,
+      "title": "feat: aba Actions na workbench Git, somente leitura",
+      "state": "OPEN",
+      "is_draft": false,
+      "author": "brunosrz",
+      "head_ref": "feat/git-actions-tab",
+      "base_ref": "feat/git-pr-issue-documents",
+      "updated_at": "2026-11-20T02:20:34Z",
+      "url": "https://github.com/vectora-company/vectora/pull/803",
+      "review_decision": "",
+      "checks": {
+        "passed": 19,
+        "failed": 0,
+        "pending": 1
+      }
+    }
+  ]
+}
