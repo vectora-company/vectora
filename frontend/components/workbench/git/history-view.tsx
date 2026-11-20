@@ -31,11 +31,11 @@ import { useContextMenu, type ContextMenuItem } from "./git-context-menu";
 import { m } from "@/lib/paraglide/messages";
 import {
   Dialog,
-  DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ResizableDialogContent } from "@/components/ui/resizable-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -654,7 +654,14 @@ export function HistoryView({
         open={squashPrompt !== null}
         onOpenChange={(open) => !open && setSquashPrompt(null)}
       >
-        <DialogContent className="max-w-sm">
+        <ResizableDialogContent
+          storageKey="git-squash"
+          defaultWidth={440}
+          defaultHeight={300}
+          minWidth={340}
+          minHeight={220}
+          className="gap-4 p-6 overflow-y-auto"
+        >
           <DialogHeader>
             <DialogTitle>{m.workbench_git_squash_title()}</DialogTitle>
           </DialogHeader>
@@ -692,7 +699,7 @@ export function HistoryView({
               </Button>
             </DialogFooter>
           </form>
-        </DialogContent>
+        </ResizableDialogContent>
       </Dialog>
       <div className="flex min-h-0 flex-1">
         <section

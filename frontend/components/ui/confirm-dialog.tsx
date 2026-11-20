@@ -21,12 +21,12 @@
 
 import {
   Dialog,
-  DialogContent,
   DialogHeader,
   DialogTitle,
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { ResizableDialogContent } from "@/components/ui/resizable-dialog";
 import { Button } from "@/components/ui/button";
 import { m } from "@/lib/paraglide/messages";
 
@@ -54,7 +54,13 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onCancel()}>
-      <DialogContent role="alertdialog" aria-modal="true" className="max-w-sm">
+      <ResizableDialogContent
+        resizable={false}
+        defaultWidth={384}
+        className="gap-4 p-6"
+        role="alertdialog"
+        aria-modal="true"
+      >
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           {description && <DialogDescription>{description}</DialogDescription>}
@@ -76,7 +82,7 @@ export function ConfirmDialog({
             {confirmLabel}
           </Button>
         </DialogFooter>
-      </DialogContent>
+      </ResizableDialogContent>
     </Dialog>
   );
 }

@@ -16,12 +16,12 @@ import { Download, Loader2, Puzzle, Star, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ResizableDialogContent } from "@/components/ui/resizable-dialog";
 import { Input } from "@/components/ui/input";
 import { m } from "@/lib/paraglide/messages";
 import { useLibraryStore, type MCPConnector } from "@/lib/stores/library-store";
@@ -130,7 +130,14 @@ function ConfigureDialog({
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent>
+      <ResizableDialogContent
+        storageKey="library-mcp"
+        defaultWidth={560}
+        defaultHeight={520}
+        minWidth={400}
+        minHeight={300}
+        className="gap-4 p-6 overflow-y-auto"
+      >
         <DialogHeader>
           <DialogTitle>
             {m.library_mcp_configure_title({ name: connector.name })}
@@ -167,7 +174,7 @@ function ConfigureDialog({
             {m.library_mcp_install()}
           </Button>
         </DialogFooter>
-      </DialogContent>
+      </ResizableDialogContent>
       {dialog}
     </Dialog>
   );

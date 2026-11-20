@@ -39,12 +39,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ResizableDialogContent } from "@/components/ui/resizable-dialog";
 import { Input } from "@/components/ui/input";
 import { m } from "@/lib/paraglide/messages";
 import { useSettingsOverlayStore } from "@/lib/stores/settings-overlay-store";
@@ -864,7 +864,14 @@ export function IntegracoesTab({ onOpenFullPage }: IntegracoesTabProps = {}) {
           }
         }}
       >
-        <DialogContent>
+        <ResizableDialogContent
+          storageKey="integrations"
+          defaultWidth={560}
+          defaultHeight={520}
+          minWidth={400}
+          minHeight={300}
+          className="gap-4 p-6 overflow-y-auto"
+        >
           <DialogHeader>
             <DialogTitle>{m.integrations_custom_title()}</DialogTitle>
             <DialogDescription>
@@ -946,7 +953,7 @@ export function IntegracoesTab({ onOpenFullPage }: IntegracoesTabProps = {}) {
               {m.envs_save()}
             </Button>
           </DialogFooter>
-        </DialogContent>
+        </ResizableDialogContent>
       </Dialog>
     </div>
   );

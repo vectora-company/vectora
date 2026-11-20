@@ -5,12 +5,8 @@
 import { Archive, Loader2, Plus, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ResizableDialogContent } from "@/components/ui/resizable-dialog";
 import { apiStash, type StashEntry } from "./api";
 import { m } from "@/lib/paraglide/messages";
 
@@ -56,7 +52,14 @@ export function StashModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <ResizableDialogContent
+        storageKey="git-stash"
+        defaultWidth={560}
+        defaultHeight={460}
+        minWidth={400}
+        minHeight={300}
+        className="gap-4 p-6 overflow-y-auto"
+      >
         <DialogHeader>
           <DialogTitle>{m.workbench_git_stash_title()}</DialogTitle>
         </DialogHeader>
@@ -118,7 +121,7 @@ export function StashModal({
             ))
           )}
         </div>
-      </DialogContent>
+      </ResizableDialogContent>
     </Dialog>
   );
 }

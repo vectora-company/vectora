@@ -5,12 +5,8 @@
 import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ResizableDialogContent } from "@/components/ui/resizable-dialog";
 import { apiCreateWorktree, fetchWorktrees, type WorktreeEntry } from "./api";
 import { m } from "@/lib/paraglide/messages";
 
@@ -55,7 +51,14 @@ export function WorktreesModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <ResizableDialogContent
+        storageKey="git-worktrees"
+        defaultWidth={560}
+        defaultHeight={460}
+        minWidth={400}
+        minHeight={300}
+        className="gap-4 p-6 overflow-y-auto"
+      >
         <DialogHeader>
           <DialogTitle>{m.workbench_git_worktrees_title()}</DialogTitle>
         </DialogHeader>
@@ -109,7 +112,7 @@ export function WorktreesModal({
             ))
           )}
         </div>
-      </DialogContent>
+      </ResizableDialogContent>
     </Dialog>
   );
 }

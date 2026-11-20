@@ -29,6 +29,11 @@ interface ResizableDialogContentProps extends React.ComponentProps<
   showCloseButton?: boolean;
   /** Chave para persistir o tamanho no Zustand. Se omitido, não persiste. */
   storageKey?: string;
+  /**
+   * `false` para confirmações curtas: mesma moldura, centralizado, largura
+   * `defaultWidth` e altura pelo conteúdo, sem alças de redimensionar.
+   */
+  resizable?: boolean;
 }
 
 const viewport = () => ({ w: window.innerWidth, h: window.innerHeight });
@@ -73,6 +78,7 @@ export function ResizableDialogContent({
   maxHeight = Number.POSITIVE_INFINITY,
   showCloseButton = true,
   storageKey,
+  resizable = true,
   style,
   ...props
 }: ResizableDialogContentProps) {
@@ -171,6 +177,36 @@ export function ResizableDialogContent({
     target.addEventListener("pointerup", finish);
     target.addEventListener("pointercancel", finish);
   };
+
+  if (!resizable) {
+    return (
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay className="data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/50" />
+        <DialogPrimitive.Content
+          data-slot="dialog-content"
+          className={cn(
+            "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
+            "fixed top-1/2 left-1/2 z-50 -translate-x-1/2 -translate-y-1/2",
+            "flex max-h-[calc(100vh-2rem)] flex-col rounded-lg border shadow-lg duration-150",
+            className,
+          )}
+          style={{
+            width: `min(${defaultWidth}px, calc(100vw - 2rem))`,
+            ...style,
+          }}
+          {...props}
+        >
+          {children}
+          {showCloseButton && (
+            <DialogPrimitive.Close className="ring-offset-background focus:ring-ring data-[state=open]:bg-accent data-[state=open]:text-muted-foreground absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4">
+              <XIcon />
+              <span className="sr-only">{m.dialog_close()}</span>
+            </DialogPrimitive.Close>
+          )}
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    );
+  }
 
   return (
     <DialogPrimitive.Portal>
