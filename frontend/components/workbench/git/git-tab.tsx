@@ -38,6 +38,7 @@ import { GitToolbar } from "./git-toolbar";
 import { ChangesView } from "./changes-view";
 import { HistoryView, type GitCommitDetailsState } from "./history-view";
 import { CompareView } from "./compare-view";
+import { OverflowTabs } from "@/components/workbench/overflow-tabs";
 import { GithubView } from "./github-view";
 import { StashModal } from "./stash-modal";
 import { WorktreesModal } from "./worktrees-modal";
@@ -45,7 +46,7 @@ import { m } from "@/lib/paraglide/messages";
 import { WorkbenchSettingsSurface } from "@/components/workbench/settings/workbench-settings-surface";
 import { gitSettings } from "@/components/workbench/settings/workbench-settings-registry";
 
-type GitView = "changes" | "history" | "github";
+type GitView = "changes" | "history" | "prs" | "issues" | "compare";
 
 function PrDialog({
   workspaceId,
@@ -196,7 +197,6 @@ export function GitTab({
   );
 
   const [view, setView] = useState<GitView>("changes");
-  const [compareOpen, setCompareOpen] = useState(false);
   const [stashOpen, setStashOpen] = useState(false);
   const [worktreesOpen, setWorktreesOpen] = useState(false);
   const [prOpen, setPrOpen] = useState(false);
@@ -343,7 +343,7 @@ export function GitTab({
         workspaceId={wsId}
         status={status}
         branches={branches}
-        onCompare={() => setCompareOpen(true)}
+        onCompare={() => setView("compare")}
         onOpenStash={() => setStashOpen(true)}
         onOpenWorktrees={() => setWorktreesOpen(true)}
         onOpenPR={handleOpenPR}
@@ -387,81 +387,30 @@ export function GitTab({
         </a>
       )}
 
-      <div
-        className="flex shrink-0 min-w-0 items-center overflow-hidden border-b border-border/60 px-1"
-        role="tablist"
-        aria-label={m.workbench_git_documents()}
-      >
-        <button
-          onClick={() => {
-            setCompareOpen(false);
-            setView("changes");
-          }}
-          aria-pressed={!compareOpen && view === "changes"}
-          role="tab"
-          aria-selected={!compareOpen && view === "changes"}
-          className={`flex-1 whitespace-nowrap px-2 py-1.5 text-center text-xs font-medium transition-colors ${
-            !compareOpen && view === "changes"
-              ? "border-b-2 border-primary text-foreground -mb-px"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          {m.workbench_diff_tab_changes()}
-        </button>
-        <button
-          onClick={() => {
-            setCompareOpen(false);
-            setView("history");
-          }}
-          aria-pressed={!compareOpen && view === "history"}
-          role="tab"
-          aria-selected={!compareOpen && view === "history"}
-          className={`flex-1 whitespace-nowrap px-2 py-1.5 text-center text-xs font-medium transition-colors ${
-            !compareOpen && view === "history"
-              ? "border-b-2 border-primary text-foreground -mb-px"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          {m.workbench_git_tab_history()}
-        </button>
-        <button
-          onClick={() => {
-            setCompareOpen(false);
-            setView("github");
-          }}
-          aria-pressed={!compareOpen && view === "github"}
-          role="tab"
-          aria-selected={!compareOpen && view === "github"}
-          className={`flex-1 whitespace-nowrap px-2 py-1.5 text-center text-xs font-medium transition-colors ${
-            !compareOpen && view === "github"
-              ? "border-b-2 border-primary text-foreground -mb-px"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          {m.workbench_github_tab()}
-        </button>
-        <button
-          role="tab"
-          aria-selected={compareOpen}
-          aria-pressed={compareOpen}
-          onClick={() => setCompareOpen(true)}
-          className={`flex-1 whitespace-nowrap px-2 py-1.5 text-center text-xs font-medium transition-colors ${
-            compareOpen
-              ? "border-b-2 border-primary text-foreground -mb-px"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          {m.workbench_git_document_compare()}
-        </button>
-      </div>
+      <OverflowTabs
+        ariaLabel={m.workbench_git_documents()}
+        activeId={view}
+        onSelect={(id) => setView(id as GitView)}
+        tabs={[
+          {
+            id: "changes",
+            label: m.workbench_diff_tab_changes(),
+            badge: summary?.files?.length ?? 0,
+          },
+          { id: "history", label: m.workbench_git_tab_history() },
+          { id: "prs", label: m.workbench_github_pulls() },
+          { id: "issues", label: m.workbench_github_issues() },
+          { id: "compare", label: m.workbench_git_document_compare() },
+        ]}
+      />
       <div className="flex-1 min-h-0">
-        {compareOpen ? (
+        {view === "compare" ? (
           <CompareView
             key={`${wsId}:${repoKey}`}
             workspaceId={wsId}
             branches={branches?.branches ?? []}
             current={status?.branch || branches?.current || ""}
-            onBack={() => setCompareOpen(false)}
+            onBack={() => setView("changes")}
             onChanged={handleChanged}
             onOpenPR={handleOpenPR}
           />
@@ -472,8 +421,12 @@ export function GitTab({
             summary={summary}
             onOpenSettings={() => setSettingsOpen(true)}
           />
-        ) : view === "github" ? (
-          <GithubView key={wsId} workspaceId={wsId} />
+        ) : view === "prs" || view === "issues" ? (
+          <GithubView
+            key={`${wsId}:${view}`}
+            workspaceId={wsId}
+            kind={view === "prs" ? "pulls" : "issues"}
+          />
         ) : (
           <HistoryView
             key={`${wsId}:${repoKey}`}

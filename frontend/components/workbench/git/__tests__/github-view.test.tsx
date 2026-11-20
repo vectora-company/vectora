@@ -9,7 +9,7 @@ import {
 } from "@testing-library/react";
 
 import { m } from "@/lib/paraglide/messages";
-import { GithubView } from "../github-view";
+import { filterByTitle, GithubView } from "../github-view";
 
 const pull = {
   number: 7,
@@ -58,7 +58,7 @@ afterEach(cleanup);
 describe("GithubView", () => {
   it("lista os PRs com autor, branches, revisão e checks", async () => {
     mockGithub({ "/github/pulls": { status: "ok", pulls: [pull] } });
-    render(<GithubView workspaceId="ws1" />);
+    render(<GithubView workspaceId="ws1" kind="pulls" />);
 
     const link = await screen.findByRole("link", { name: /feat: algo/ });
     expect(link.getAttribute("href")).toBe("https://github.com/o/r/pull/7");
@@ -72,17 +72,9 @@ describe("GithubView", () => {
     );
   });
 
-  it("troca para as issues e mostra rótulos e comentários", async () => {
-    mockGithub({
-      "/github/pulls": { status: "ok", pulls: [] },
-      "/github/issues": { status: "ok", issues: [issue] },
-    });
-    render(<GithubView workspaceId="ws1" />);
-
-    await screen.findByTestId("github-empty");
-    fireEvent.click(
-      screen.getByRole("button", { name: m.workbench_github_issues() }),
-    );
+  it("a lista de issues mostra rótulos e comentários", async () => {
+    mockGithub({ "/github/issues": { status: "ok", issues: [issue] } });
+    render(<GithubView workspaceId="ws1" kind="issues" />);
 
     const link = await screen.findByRole("link", { name: /bug no chat/ });
     const row = link.closest("li") as HTMLElement;
@@ -90,11 +82,61 @@ describe("GithubView", () => {
     expect(row.textContent).toContain("4");
   });
 
+  it("cada lista é uma aba própria: não há botões para alternar entre elas", async () => {
+    mockGithub({ "/github/pulls": { status: "ok", pulls: [] } });
+    render(<GithubView workspaceId="ws1" kind="pulls" />);
+    await screen.findByTestId("github-empty");
+
+    expect(
+      screen.queryByRole("button", { name: m.workbench_github_issues() }),
+    ).toBeNull();
+  });
+
+  it("filtra pelo título (e pelo número) sem nova chamada ao servidor", async () => {
+    const fetchMock = mockGithub({
+      "/github/pulls": {
+        status: "ok",
+        pulls: [
+          { ...pull, number: 7, title: "feat: algo novo" },
+          { ...pull, number: 8, title: "fix: bug no chat" },
+        ],
+      },
+    });
+    render(<GithubView workspaceId="ws1" kind="pulls" />);
+    await screen.findByRole("link", { name: /feat: algo novo/ });
+    const calls = fetchMock.mock.calls.length;
+
+    fireEvent.change(screen.getByTestId("github-filter"), {
+      target: { value: "BUG" },
+    });
+    expect(screen.queryByRole("link", { name: /feat: algo novo/ })).toBeNull();
+    expect(screen.getByRole("link", { name: /fix: bug no chat/ })).toBeTruthy();
+
+    fireEvent.change(screen.getByTestId("github-filter"), {
+      target: { value: "#7" },
+    });
+    expect(screen.getByRole("link", { name: /feat: algo novo/ })).toBeTruthy();
+    expect(fetchMock.mock.calls.length).toBe(calls);
+  });
+
+  it("avisa quando o filtro não encontra nada, diferente de lista vazia", async () => {
+    mockGithub({ "/github/pulls": { status: "ok", pulls: [pull] } });
+    render(<GithubView workspaceId="ws1" kind="pulls" />);
+    await screen.findByRole("link", { name: /feat: algo/ });
+
+    fireEvent.change(screen.getByTestId("github-filter"), {
+      target: { value: "zzz" },
+    });
+
+    expect(screen.getByTestId("github-no-match")).toBeTruthy();
+    expect(screen.queryByTestId("github-empty")).toBeNull();
+  });
+
   it("pede ao servidor o estado e o workspace escolhidos", async () => {
     const fetchMock = mockGithub({
       "/github/pulls": { status: "ok", pulls: [] },
     });
-    render(<GithubView workspaceId="ws1" />);
+    render(<GithubView workspaceId="ws1" kind="pulls" />);
     await screen.findByTestId("github-empty");
 
     fireEvent.change(screen.getByLabelText(m.workbench_github_state()), {
@@ -117,7 +159,7 @@ describe("GithubView", () => {
         message: "gh not found in PATH",
       },
     });
-    render(<GithubView workspaceId="ws1" />);
+    render(<GithubView workspaceId="ws1" kind="pulls" />);
 
     expect(
       (await screen.findByTestId("github-unavailable")).textContent,
@@ -131,7 +173,7 @@ describe("GithubView", () => {
         message: "repositório não encontrado",
       },
     });
-    render(<GithubView workspaceId="ws1" />);
+    render(<GithubView workspaceId="ws1" kind="pulls" />);
 
     const error = await screen.findByTestId("github-error");
     expect(error.textContent).toContain("repositório não encontrado");
@@ -141,7 +183,7 @@ describe("GithubView", () => {
     const fetchMock = mockGithub({
       "/github/pulls": { status: "ok", pulls: [] },
     });
-    render(<GithubView workspaceId="ws1" />);
+    render(<GithubView workspaceId="ws1" kind="pulls" />);
     await screen.findByTestId("github-empty");
     const before = fetchMock.mock.calls.length;
 

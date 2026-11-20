@@ -7,7 +7,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { GitPullRequest, MessageSquare, RefreshCw } from "lucide-react";
+import { GitPullRequest, MessageSquare, RefreshCw, Search } from "lucide-react";
 
 import { m } from "@/lib/paraglide/messages";
 import {
@@ -142,8 +142,81 @@ function IssueRow({ issue }: { issue: GithubIssue }) {
   );
 }
 
-export function GithubView({ workspaceId }: { workspaceId: string }) {
-  const [kind, setKind] = useState<Kind>("pulls");
+/** Mantém só os itens cujo título (ou #número) contém o texto digitado. */
+export function filterByTitle<T extends { number: number; title: string }>(
+  items: T[],
+  query: string,
+): T[] {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return items;
+  return items.filter(
+    (item) =>
+      item.title.toLowerCase().includes(needle) ||
+      `#${item.number}`.includes(needle),
+  );
+}
+
+function PullList({ pulls, query }: { pulls: GithubPull[]; query: string }) {
+  const shown = filterByTitle(pulls, query);
+  if (pulls.length === 0)
+    return (
+      <WorkbenchEmpty testId="github-empty">
+        {m.workbench_github_empty_pulls()}
+      </WorkbenchEmpty>
+    );
+  if (shown.length === 0)
+    return (
+      <WorkbenchEmpty testId="github-no-match">
+        {m.workbench_github_no_match()}
+      </WorkbenchEmpty>
+    );
+  return (
+    <ul>
+      {shown.map((pull) => (
+        <PullRow key={pull.number} pull={pull} />
+      ))}
+    </ul>
+  );
+}
+
+function IssueList({
+  issues,
+  query,
+}: {
+  issues: GithubIssue[];
+  query: string;
+}) {
+  const shown = filterByTitle(issues, query);
+  if (issues.length === 0)
+    return (
+      <WorkbenchEmpty testId="github-empty">
+        {m.workbench_github_empty_issues()}
+      </WorkbenchEmpty>
+    );
+  if (shown.length === 0)
+    return (
+      <WorkbenchEmpty testId="github-no-match">
+        {m.workbench_github_no_match()}
+      </WorkbenchEmpty>
+    );
+  return (
+    <ul>
+      {shown.map((issue) => (
+        <IssueRow key={issue.number} issue={issue} />
+      ))}
+    </ul>
+  );
+}
+
+export function GithubView({
+  workspaceId,
+  kind,
+}: {
+  workspaceId: string;
+  /** Qual lista mostrar: cada uma é uma aba própria da workbench Git. */
+  kind: Kind;
+}) {
+  const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<StateFilter>("open");
   const [loaded, setLoaded] = useState<Loaded>({ status: "loading" });
   const controllerRef = useRef<AbortController | null>(null);
@@ -205,25 +278,6 @@ export function GithubView({ workspaceId }: { workspaceId: string }) {
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="github-view">
       <WorkbenchToolbar className="flex-wrap">
-        <div role="group" className="flex gap-1">
-          {(["pulls", "issues"] as Kind[]).map((option) => (
-            <button
-              key={option}
-              type="button"
-              aria-pressed={kind === option}
-              onClick={() => setKind(option)}
-              className={`rounded px-2 py-1 text-xs ${
-                kind === option
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {option === "pulls"
-                ? m.workbench_github_pulls()
-                : m.workbench_github_issues()}
-            </button>
-          ))}
-        </div>
         <select
           value={filter}
           onChange={(e) => setFilter(e.target.value as StateFilter)}
@@ -236,6 +290,18 @@ export function GithubView({ workspaceId }: { workspaceId: string }) {
             </option>
           ))}
         </select>
+        <label className="relative flex min-w-24 flex-1 items-center">
+          <Search className="pointer-events-none absolute left-1.5 h-3 w-3 text-muted-foreground" />
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={m.workbench_github_filter_placeholder()}
+            aria-label={m.workbench_github_filter_placeholder()}
+            data-testid="github-filter"
+            className="h-6 w-full rounded border border-border bg-background pr-1.5 pl-5 text-xs outline-none focus:border-primary"
+          />
+        </label>
         <button
           type="button"
           aria-label={m.workbench_github_refresh()}
@@ -264,30 +330,12 @@ export function GithubView({ workspaceId }: { workspaceId: string }) {
             {m.workbench_github_error()} {loaded.message}
           </WorkbenchError>
         )}
-        {loaded.status === "ok" &&
-          (kind === "pulls" ? (
-            loaded.pulls.length === 0 ? (
-              <WorkbenchEmpty testId="github-empty">
-                {m.workbench_github_empty_pulls()}
-              </WorkbenchEmpty>
-            ) : (
-              <ul>
-                {loaded.pulls.map((pull) => (
-                  <PullRow key={pull.number} pull={pull} />
-                ))}
-              </ul>
-            )
-          ) : loaded.issues.length === 0 ? (
-            <WorkbenchEmpty testId="github-empty">
-              {m.workbench_github_empty_issues()}
-            </WorkbenchEmpty>
-          ) : (
-            <ul>
-              {loaded.issues.map((issue) => (
-                <IssueRow key={issue.number} issue={issue} />
-              ))}
-            </ul>
-          ))}
+        {loaded.status === "ok" && kind === "pulls" && (
+          <PullList pulls={loaded.pulls} query={query} />
+        )}
+        {loaded.status === "ok" && kind === "issues" && (
+          <IssueList issues={loaded.issues} query={query} />
+        )}
       </div>
     </div>
   );
