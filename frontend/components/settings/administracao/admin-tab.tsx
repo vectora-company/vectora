@@ -65,6 +65,7 @@ import {
   settingsItemClass,
 } from "@/components/settings/primitives";
 import { cn } from "@/lib/utils";
+import { useConfirm } from "@/components/ui/use-confirm";
 
 // ---------------------------------------------------------------------------
 // Tipos
@@ -484,6 +485,7 @@ function UserToolsRow({ userId }: { userId: string }) {
 }
 
 export function UsersPanel() {
+  const { confirm, dialog } = useConfirm();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<string | null>(null);
@@ -518,7 +520,13 @@ export function UsersPanel() {
   };
 
   const handleDelete = async (userId: string) => {
-    if (!confirm(m.admin_users_confirm_delete())) return;
+    if (
+      !(await confirm({
+        message: m.admin_users_confirm_delete(),
+        variant: "destructive",
+      }))
+    )
+      return;
     await api.users.delete(userId);
     setUsers((prev) => prev.filter((u) => u.id !== userId));
   };
@@ -589,6 +597,7 @@ export function UsersPanel() {
           {openTools === u.id && <UserToolsRow userId={u.id} />}
         </div>
       ))}
+      {dialog}
     </div>
   );
 }
@@ -599,6 +608,7 @@ export function UsersPanel() {
 
 //: Altura de linha estimada (nome+badge + descrição truncada + padding) —
 export function SystemPanel() {
+  const { confirm, dialog } = useConfirm();
   const [info, setInfo] = useState<SystemInfo | null>(null);
   const [traces, setTraces] = useState<TraceSpan[]>([]);
   const [clearingTraces, setClearingTraces] = useState(false);
@@ -616,7 +626,13 @@ export function SystemPanel() {
   }, []);
 
   const clearTraces = async () => {
-    if (!window.confirm(m.admin_system_confirm_clear_traces())) return;
+    if (
+      !(await confirm({
+        message: m.admin_system_confirm_clear_traces(),
+        variant: "destructive",
+      }))
+    )
+      return;
     setClearingTraces(true);
     try {
       await api.clearTraces();
@@ -700,6 +716,7 @@ export function SystemPanel() {
         <p className="text-xs font-medium">{m.admin_system_config_heading()}</p>
         <ConfigSection />
       </div>
+      {dialog}
     </div>
   );
 }

@@ -37,6 +37,7 @@ import { WorkbenchSettingsSurface } from "@/components/workbench/settings/workbe
 import { memorySettings } from "@/components/workbench/settings/workbench-settings-registry";
 import { m } from "@/lib/paraglide/messages";
 import { WorkbenchEmpty } from "../primitives";
+import { useConfirm } from "@/components/ui/use-confirm";
 
 interface RagBucketEntry {
   id: string;
@@ -77,6 +78,7 @@ function useWorkspaceRagBuckets(workspaceId: string | undefined) {
 }
 
 function BucketsPanel() {
+  const { confirm, dialog } = useConfirm();
   const workspaceId = useWorkspacesStore((s) => s.getActive()?.id);
   const { buckets, refetch } = useWorkspaceRagBuckets(workspaceId);
   const [ingestOpen, setIngestOpen] = useState(false);
@@ -96,7 +98,13 @@ function BucketsPanel() {
 
   async function handleRemove(bucketId: string) {
     if (!workspaceId) return;
-    if (!window.confirm(m.workbench_memory_buckets_remove_confirm())) return;
+    if (
+      !(await confirm({
+        message: m.workbench_memory_buckets_remove_confirm(),
+        variant: "destructive",
+      }))
+    )
+      return;
     await fetch(
       `/workspaces/${encodeURIComponent(workspaceId)}/rag/buckets/${encodeURIComponent(bucketId)}`,
       { method: "DELETE" },
@@ -167,6 +175,7 @@ function BucketsPanel() {
         }}
         mode="ingest"
       />
+      {dialog}
     </section>
   );
 }
@@ -242,7 +251,11 @@ function useJourney() {
     let alive = true;
     void (async () => {
       try {
-        const res = await fetch("/memory/journey");
+        const res = await fetch(
+          `/memory/journey?workspace_id=${encodeURIComponent(
+            useWorkspacesStore.getState().getActive()?.id ?? "",
+          )}`,
+        );
         if (!res.ok || !alive) return;
         const data = (await res.json()) as {
           facts?: JourneyFact[];

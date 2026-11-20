@@ -8,8 +8,13 @@ import { useDialogSizeStore } from "@/lib/stores/dialog-size-store";
 
 vi.mock("@/lib/paraglide/messages", () => ({
   m: {
+    window_layout: () => "Layout",
     dialog_close: () => "Fechar",
     dialog_resize: () => "Redimensionar diálogo",
+    window_minimize: () => "Minimizar",
+    window_maximize: () => "Maximizar",
+    window_restore: () => "Restaurar",
+    window_close: () => "Fechar janela",
   },
 }));
 
@@ -21,6 +26,9 @@ describe("CanvasDocumentDialog", () => {
   afterEach(cleanup);
 
   it("permite redimensionar e persiste o tamanho do documento", () => {
+    // O diálogo nunca passa da janela do app; o jsdom tem só 1024x768.
+    vi.stubGlobal("innerWidth", 1920);
+    vi.stubGlobal("innerHeight", 1080);
     render(
       <CanvasDocumentDialog open onOpenChange={vi.fn()} title="AGENTS.md">
         Conteúdo
@@ -48,5 +56,42 @@ describe("CanvasDocumentDialog", () => {
       w: 1348,
       h: 882,
     });
+  });
+
+  it("minimizado, a janela some mas o conteúdo continua montado", () => {
+    render(
+      <CanvasDocumentDialog
+        open
+        onOpenChange={vi.fn()}
+        title="AGENTS.md"
+        minimized
+        onMinimize={vi.fn()}
+      >
+        <span>editor vivo</span>
+      </CanvasDocumentDialog>,
+    );
+
+    expect(screen.getByRole("dialog", { hidden: true }).style.display).toBe(
+      "none",
+    );
+    expect(screen.getByText("editor vivo")).toBeTruthy();
+  });
+
+  it("o botão de minimizar avisa quem controla o estado", () => {
+    const onMinimize = vi.fn();
+    render(
+      <CanvasDocumentDialog
+        open
+        onOpenChange={vi.fn()}
+        title="AGENTS.md"
+        onMinimize={onMinimize}
+      >
+        Conteúdo
+      </CanvasDocumentDialog>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /minimiz/i }));
+
+    expect(onMinimize).toHaveBeenCalledOnce();
   });
 });

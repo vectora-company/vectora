@@ -6,6 +6,9 @@
  * publicado — essas chaves simplesmente não existem no mapa de extensão/
  * nome), e mapeia `tscn`/`tres` pra ícones sem relação (Dune/AngularService).
  */
+import { ExtensionIcon } from "@/lib/extensions/icons";
+import { fileIconFor } from "@/lib/extensions/registry";
+import { useExtensionsStore } from "@/lib/stores/extensions-store";
 import {
   FileIcon as ReactSymbolsFileIcon,
   type ExtensionType,
@@ -37,6 +40,11 @@ export function FileIcon({
   name: string;
   className?: string;
 }) {
+  const contributions = useExtensionsStore((state) => state.contributions);
+  const contributed = fileIconFor(contributions, name);
+  if (contributed) {
+    return <ExtensionIcon name={contributed.icon} className={className} />;
+  }
   return (
     <ReactSymbolsFileIcon
       fileName={name.toLowerCase()}

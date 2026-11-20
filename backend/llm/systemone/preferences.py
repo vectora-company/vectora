@@ -94,7 +94,7 @@ def decision_model_surfaces_for_tool(ctx: object, tool_name: str) -> tuple[str, 
     extra = getattr(ctx, "_extra", None)
     extra = extra if isinstance(extra, dict) else {}
     name = tool_name.lower()
-    if name == "call_mcp_tool" or name.startswith("mcp_"):
+    if name in {"call_mcp_tool", "call_extension_tool"} or name.startswith("mcp_"):
         surface = "mcp"
     elif name in {
         "bash",

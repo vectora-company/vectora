@@ -1,69 +1,104 @@
 // @vitest-environment jsdom
 /**
- * WindowDock — barra de janelas minimizadas. Fica oculta quando não há
- * nenhuma janela minimizada, mesmo com janelas abertas e visíveis.
+ * WindowDock — dock única das janelas de arquivo e dos documentos minimizados.
+ * Usa a store real: o que importa é o caminho minimizar → dock → restaurar.
  */
-import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
-
-const mockRestore = vi.fn();
-const mockWindowsState = {
-  windows: [] as Array<{ id: string; title: string; minimized: boolean }>,
-  restore: mockRestore,
-};
-
-vi.mock("@/lib/stores/windows-store", () => ({
-  useWindowsStore: (sel: (s: typeof mockWindowsState) => unknown) =>
-    sel(mockWindowsState),
-}));
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 vi.mock("@/lib/paraglide/messages", () => ({
   m: new Proxy({}, { get: (_t, prop) => () => String(prop) }),
 }));
 
 import { WindowDock } from "../window-dock";
+import { useWindowsStore } from "@/lib/stores/windows-store";
+import { useSettingsStore } from "@/lib/stores/settings-store";
 
-afterEach(() => {
-  cleanup();
-  vi.clearAllMocks();
-  mockWindowsState.windows = [];
+const doc = (id: string, title: string) => ({
+  id,
+  kind: "file" as const,
+  workspaceId: "ws",
+  title,
+  path: `/p/${title}`,
 });
 
+beforeEach(() => {
+  useSettingsStore.setState({ uiMode: "assistant" });
+  useWindowsStore.getState().closeAll();
+});
+afterEach(cleanup);
+
 describe("WindowDock", () => {
-  it("retorna null quando não há janelas", () => {
-    mockWindowsState.windows = [];
+  it("fica oculta sem nada minimizado, mesmo com janelas e documentos abertos", () => {
+    useWindowsStore.getState().open("ws", "/p/a.ts");
+    useWindowsStore.getState().openCanvasDocument(doc("d1", "README.md"));
+
     const { container } = render(<WindowDock />);
+
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("retorna null quando há janelas abertas mas nenhuma minimizada", () => {
-    mockWindowsState.windows = [
-      { id: "w1", title: "a.ts", minimized: false },
-      { id: "w2", title: "b.ts", minimized: false },
-    ];
-    const { container } = render(<WindowDock />);
-    expect(container).toBeEmptyDOMElement();
-  });
+  it("lista só as janelas de arquivo minimizadas", () => {
+    useWindowsStore.getState().open("ws1", "/p/aberta.ts");
+    useWindowsStore.getState().open("ws2", "/p/minimizada.ts");
+    useWindowsStore.getState().minimize("ws2");
 
-  it("lista só as janelas minimizadas, ignorando as visíveis", () => {
-    mockWindowsState.windows = [
-      { id: "w1", title: "aberta.ts", minimized: false },
-      { id: "w2", title: "minimizada.ts", minimized: true },
-    ];
-    const { container } = render(<WindowDock />);
-    expect(screen.getByText("minimizada.ts")).toBeInTheDocument();
-    expect(screen.queryByText("aberta.ts")).not.toBeInTheDocument();
-    expect(container.firstElementChild).toHaveClass("safe-area-bottom-dock");
-  });
-
-  it("clicar numa janela minimizada chama restore com o id correto", () => {
-    mockWindowsState.windows = [
-      { id: "w1", title: "foo.ts", minimized: true },
-      { id: "w2", title: "bar.ts", minimized: true },
-    ];
     render(<WindowDock />);
-    fireEvent.click(screen.getByText("bar.ts"));
-    expect(mockRestore).toHaveBeenCalledWith("w2");
-    expect(mockRestore).not.toHaveBeenCalledWith("w1");
+
+    expect(screen.getByText("minimizada.ts")).toBeTruthy();
+    expect(screen.queryByText("aberta.ts")).toBeNull();
+  });
+
+  it("documento minimizado aparece na dock e clicar o restaura como ativo", () => {
+    const { openCanvasDocument, minimizeCanvasDocument } =
+      useWindowsStore.getState();
+    openCanvasDocument(doc("d1", "README.md"));
+    minimizeCanvasDocument("d1");
+
+    render(<WindowDock />);
+    fireEvent.click(screen.getByText("README.md"));
+
+    const state = useWindowsStore.getState();
+    expect(state.minimizedCanvasDocumentIds).toEqual([]);
+    expect(state.activeCanvasDocumentId).toBe("d1");
+    expect(screen.queryByTestId("window-dock")).toBeNull();
+  });
+
+  it("vários documentos minimizados convivem na mesma dock, em ordem", () => {
+    const store = useWindowsStore.getState();
+    store.openCanvasDocument(doc("d1", "um.md"));
+    store.openCanvasDocument(doc("d2", "dois.md"));
+    store.minimizeCanvasDocument("d1");
+    store.minimizeCanvasDocument("d2");
+
+    render(<WindowDock />);
+
+    const labels = screen
+      .getAllByTestId(/^dock-document-/)
+      .map((item) => item.textContent);
+    expect(labels).toEqual(["um.md", "dois.md"]);
+  });
+
+  it("o X da dock fecha o documento de vez", () => {
+    const store = useWindowsStore.getState();
+    store.openCanvasDocument(doc("d1", "README.md"));
+    store.minimizeCanvasDocument("d1");
+
+    render(<WindowDock />);
+    fireEvent.click(screen.getByRole("button", { name: "window_close" }));
+
+    expect(useWindowsStore.getState().canvasDocuments).toEqual([]);
+    expect(useWindowsStore.getState().minimizedCanvasDocumentIds).toEqual([]);
+  });
+
+  it("fora do modo assistente os documentos não aparecem (não há janela para restaurar)", () => {
+    useSettingsStore.setState({ uiMode: "ide" });
+    const store = useWindowsStore.getState();
+    store.openCanvasDocument(doc("d1", "README.md"));
+    store.minimizeCanvasDocument("d1");
+
+    const { container } = render(<WindowDock />);
+
+    expect(container).toBeEmptyDOMElement();
   });
 });

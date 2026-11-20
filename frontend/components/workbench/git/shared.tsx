@@ -2,17 +2,13 @@
 
 /** Peças compartilhadas entre as views do painel Git. */
 
-import type {
-  DiffFile,
-  DiffHunk,
-  DiffLine,
-} from "@/lib/stores/workbench-store";
+import type { DiffHunk, DiffLine } from "@/lib/stores/workbench-store";
 import { m } from "@/lib/paraglide/messages";
 import { useEffect, useState } from "react";
 import { colorizeLines } from "@/lib/monaco/colorize";
 import { languageFromPath } from "@/lib/monaco/languages";
 
-export const STATUS_TONE: Record<string, string> = {
+const STATUS_TONE: Record<string, string> = {
   M: "text-git-modification",
   A: "text-git-addition",
   D: "text-destructive",
@@ -112,5 +108,3 @@ export function HunkView({ hunk, path }: { hunk: DiffHunk; path?: string }) {
     </div>
   );
 }
-
-export type { DiffFile, DiffHunk, DiffLine };

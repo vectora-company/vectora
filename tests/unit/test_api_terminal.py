@@ -150,3 +150,51 @@ async def test_close_route_closes_only_matching_context() -> None:
 
     assert result == {"status": "closed", "terminal_id": "owned"}
     assert pty_registry.get("owned") is None
+
+
+@pytest.mark.asyncio
+async def test_list_route_thread_scope_returns_only_this_conversation() -> None:
+    for terminal_id, thread_id in (("here", "thread-1"), ("elsewhere", "thread-2")):
+        pty_registry.add(
+            _session(
+                terminal_id,
+                user_id="alice",
+                thread_id=thread_id,
+                workspace_id="workspace-1",
+            )
+        )
+
+    result = await list_terminals(
+        _request("alice"),
+        thread_id="thread-1",
+        workspace_id="workspace-1",
+        scope="thread",
+    )
+
+    assert [item["terminal_id"] for item in result["terminals"]] == ["here"]
+
+
+@pytest.mark.asyncio
+async def test_close_route_thread_scope_rejects_terminal_from_another_thread() -> None:
+    pty_registry.add(
+        _session(
+            "elsewhere",
+            user_id="alice",
+            thread_id="thread-2",
+            workspace_id="workspace-1",
+        )
+    )
+
+    with pytest.raises(HTTPException) as excinfo:
+        await close_terminal(
+            CloseBody(
+                terminal_id="elsewhere",
+                thread_id="thread-1",
+                workspace_id="workspace-1",
+                scope="thread",
+            ),
+            _request("alice"),
+        )
+
+    assert excinfo.value.status_code == 404
+    assert pty_registry.get("elsewhere") is not None

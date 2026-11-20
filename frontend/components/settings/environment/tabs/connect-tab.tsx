@@ -138,7 +138,7 @@ export function ConnectTab() {
         body: JSON.stringify(payload),
       });
 
-      if (!res.ok) throw new Error("Falha ao salvar configurações.");
+      if (!res.ok) throw new Error(m.connect_save_failed());
 
       useToastStore
         .getState()

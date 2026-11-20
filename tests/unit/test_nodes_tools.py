@@ -150,9 +150,10 @@ def test_all_tools_count() -> None:
     # sumiu, e a contagem já ficou defasada em silêncio uma vez por isso.
     """Verifica o comportamento de all tools count."""
     names = sorted(t.name for t in ALL_TOOLS)
-    assert len(ALL_TOOLS) == 196, f"tools registradas: {names}"
+    assert len(ALL_TOOLS) == 197, f"tools registradas: {names}"
     registered_names = set(names)
     for expected in (
+        "call_extension_tool",
         "pdf_to_images",
         "graph_resolve_symbol",
         "video_to_frames",

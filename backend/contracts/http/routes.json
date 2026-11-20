@@ -31,6 +31,34 @@
   },
   {
     "methods": [
+      "GET"
+    ],
+    "name": "get_embedding_queue_state_admin_embedding_queue_get",
+    "path": "/admin/embedding-queue"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "name": "cleanup_embedding_queue_admin_embedding_queue_cleanup_post",
+    "path": "/admin/embedding-queue/cleanup"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "name": "retry_embedding_queue_admin_embedding_queue_retry_post",
+    "path": "/admin/embedding-queue/retry"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "name": "discard_embedding_queue_item_admin_embedding_queue__queue_id__discard_post",
+    "path": "/admin/embedding-queue/{queue_id}/discard"
+  },
+  {
+    "methods": [
       "GET",
       "POST"
     ],
@@ -605,6 +633,92 @@
     ],
     "name": "set_platform_enabled_connect__platform__enabled_post",
     "path": "/connect/{platform}/enabled"
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "name": "list_channels_distribution_channels_get",
+    "path": "/distribution/channels"
+  },
+  {
+    "methods": [
+      "GET",
+      "POST"
+    ],
+    "name": "list_extensions_extensions_get",
+    "path": "/extensions"
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "name": "list_contributions_extensions_contributions_get",
+    "path": "/extensions/contributions"
+  },
+  {
+    "methods": [
+      "DELETE",
+      "GET"
+    ],
+    "name": "get_extension_extensions__extension_id__get",
+    "path": "/extensions/{extension_id}"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "name": "activate_extension_extensions__extension_id__activate_post",
+    "path": "/extensions/{extension_id}/activate"
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "name": "extension_audit_extensions__extension_id__audit_get",
+    "path": "/extensions/{extension_id}/audit"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "name": "deactivate_extension_extensions__extension_id__deactivate_post",
+    "path": "/extensions/{extension_id}/deactivate"
+  },
+  {
+    "methods": [
+      "PUT"
+    ],
+    "name": "set_extension_grants_extensions__extension_id__grants_put",
+    "path": "/extensions/{extension_id}/grants"
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "name": "extension_health_extensions__extension_id__health_get",
+    "path": "/extensions/{extension_id}/health"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "name": "revoke_extension_extensions__extension_id__revoke_post",
+    "path": "/extensions/{extension_id}/revoke"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "name": "rollback_extension_extensions__extension_id__rollback_post",
+    "path": "/extensions/{extension_id}/rollback"
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "name": "extension_ui_file_extensions__extension_id__ui__path__get",
+    "path": "/extensions/{extension_id}/ui/{path}"
   },
   {
     "methods": [

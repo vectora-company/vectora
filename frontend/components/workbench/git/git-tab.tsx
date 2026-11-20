@@ -11,12 +11,8 @@
 import { GitBranch, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ResizableDialogContent } from "@/components/ui/resizable-dialog";
 import { useWorkbenchSWR } from "@/lib/hooks/workbench/use-swr";
 import { useDelayedLoading } from "@/lib/hooks/use-delayed-loading";
 import {
@@ -102,7 +98,14 @@ function PrDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <ResizableDialogContent
+        storageKey="git-pr"
+        defaultWidth={520}
+        defaultHeight={480}
+        minWidth={380}
+        minHeight={300}
+        className="gap-4 p-6 overflow-y-auto"
+      >
         <DialogHeader>
           <DialogTitle>{m.workbench_git_pr()}</DialogTitle>
         </DialogHeader>
@@ -166,7 +169,7 @@ function PrDialog({
             </div>
           </>
         )}
-      </DialogContent>
+      </ResizableDialogContent>
     </Dialog>
   );
 }

@@ -6,6 +6,7 @@ import {
   getIdeLayoutState,
   getSessionLayoutState,
   getUnscaledViewportWidth,
+  useIdeLayoutState,
   useMediaQuery,
   useSessionLayoutState,
 } from "../use-media-query";
@@ -179,5 +180,63 @@ describe("useSessionLayoutState", () => {
         value: originalVisualViewport,
       });
     }
+  });
+});
+
+function widthIs(value: number) {
+  Object.defineProperty(window, "innerWidth", {
+    configurable: true,
+    value,
+  });
+  Object.defineProperty(window, "visualViewport", {
+    configurable: true,
+    value: {
+      width: value,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    },
+  });
+}
+
+describe("primeiro render dos hooks de layout", () => {
+  // Começar em "wide" e corrigir depois do mount pintava o shell de desktop
+  // (com a terceira coluna) por um quadro numa janela estreita.
+  it("sessão: a primeira renderização já usa a largura real", () => {
+    widthIs(820);
+    const seen: string[] = [];
+
+    renderHook(() => {
+      const state = useSessionLayoutState();
+      seen.push(state);
+      return state;
+    });
+
+    expect(seen[0]).toBe("compact");
+    expect(new Set(seen)).toEqual(new Set(["compact"]));
+  });
+
+  it("IDE: a primeira renderização já usa a largura real", () => {
+    widthIs(400);
+    const seen: string[] = [];
+
+    renderHook(() => {
+      const state = useIdeLayoutState();
+      seen.push(state);
+      return state;
+    });
+
+    expect(seen[0]).toBe("mobile");
+    expect(new Set(seen)).toEqual(new Set(["mobile"]));
+  });
+
+  it("largura ampla continua começando em wide", () => {
+    widthIs(1500);
+    const seen: string[] = [];
+
+    renderHook(() => {
+      seen.push(useSessionLayoutState());
+    });
+
+    expect(seen[0]).toBe("wide");
   });
 });

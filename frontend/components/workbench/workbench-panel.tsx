@@ -21,6 +21,7 @@
  * evitar divergência SSR/cliente.
  */
 
+import { useMemo } from "react";
 import {
   FileText,
   FolderTree,
@@ -48,6 +49,13 @@ import {
   TooltipContent,
 } from "@/components/ui/tooltip";
 import { TerminalPanel } from "@/components/workbench/terminal/terminal-panel";
+import { ExtensionFrame } from "@/components/extensions/extension-frame";
+import { ExtensionIcon } from "@/lib/extensions/icons";
+import {
+  contributionsOfKind,
+  type ExtensionContribution,
+} from "@/lib/extensions/registry";
+import { useExtensionsStore } from "@/lib/stores/extensions-store";
 import { FilesTab } from "./files/files-tab";
 import { GitTab } from "./git/git-tab";
 import { PlanTab } from "./tabs/plan-tab";
@@ -132,6 +140,36 @@ function useTabBadge(
     case "library":
       return null;
   }
+}
+
+function ExtensionViewNavButton({
+  view,
+  active,
+  onSelect,
+}: {
+  view: ExtensionContribution;
+  active: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          onClick={onSelect}
+          aria-label={view.label}
+          data-testid={`workbench-nav-extension-${view.id}`}
+          className={`relative flex items-center justify-center w-8 h-8 pointer-coarse:w-10 pointer-coarse:h-10 rounded-md transition-colors ${
+            active
+              ? "bg-muted text-foreground"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+          }`}
+        >
+          <ExtensionIcon name={view.icon} className="w-4 h-4" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="left">{view.label}</TooltipContent>
+    </Tooltip>
+  );
 }
 
 function NavTabButton({
@@ -228,6 +266,13 @@ export function WorkbenchNavBar({
   const isOpen = useWorkbenchStore((s) => s.isOpen(threadId));
   const selectTab = useWorkbenchStore((s) => s.selectTab);
   const setPanelOpen = useWorkbenchStore((s) => s.setPanelOpen);
+  const contributions = useExtensionsStore((s) => s.contributions);
+  const activeViewId = useExtensionsStore((s) => s.activeViewId);
+  const setActiveView = useExtensionsStore((s) => s.setActiveView);
+  const extensionViews = useMemo(
+    () => contributionsOfKind(contributions, "workbench_view"),
+    [contributions],
+  );
 
   return (
     <div
@@ -261,11 +306,27 @@ export function WorkbenchNavBar({
           <NavTabButton
             key={tab}
             tab={tab}
-            active={hydrated && isOpen && tab === activeTab}
+            active={
+              hydrated && isOpen && tab === activeTab && activeViewId === null
+            }
             threadId={threadId}
             workspaceId={wsId}
             hydrated={hydrated}
-            onSelect={() => selectTab(threadId, tab)}
+            onSelect={() => {
+              setActiveView(null);
+              selectTab(threadId, tab);
+            }}
+          />
+        ))}
+        {extensionViews.map((view) => (
+          <ExtensionViewNavButton
+            key={view.id}
+            view={view}
+            active={hydrated && isOpen && activeViewId === view.id}
+            onSelect={() => {
+              setActiveView(view.id);
+              setPanelOpen(threadId, true);
+            }}
           />
         ))}
       </div>
@@ -294,6 +355,11 @@ export function WorkbenchContent({
   const wsId = workspace?.id ?? "";
   const activeTab = useWorkbenchStore((s) => s.getActiveTab(threadId));
   const setPanelOpen = useWorkbenchStore((s) => s.setPanelOpen);
+  const extensionView = useExtensionsStore((s) =>
+    s.contributions.find(
+      (item) => item.id === s.activeViewId && item.kind === "workbench_view",
+    ),
+  );
   const ActiveIcon = TAB_ICON[activeTab];
   const reducedMotion = useReducedMotion();
 
@@ -312,8 +378,17 @@ export function WorkbenchContent({
           data-testid="workbench-header-title"
           data-active-tab={activeTab}
         >
-          <ActiveIcon className="w-4 h-4 text-muted-foreground" />
-          {mDyn(`workbench.tab.${activeTab}`)}
+          {extensionView ? (
+            <ExtensionIcon
+              name={extensionView.icon}
+              className="w-4 h-4 text-muted-foreground"
+            />
+          ) : (
+            <ActiveIcon className="w-4 h-4 text-muted-foreground" />
+          )}
+          {extensionView
+            ? extensionView.label
+            : mDyn(`workbench.tab.${activeTab}`)}
         </span>
         <div className="flex items-center gap-1">
           <Tooltip>
@@ -339,45 +414,57 @@ export function WorkbenchContent({
           só o header seguia trocando. Unmount/mount é instantâneo agora;
           só a entrada anima. */}
       <div className="flex-1 min-h-0 overflow-hidden relative">
-        <motion.div
-          key={activeTab}
-          initial={reducedMotion ? false : { opacity: 0, x: 6 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={reducedMotion ? { duration: 0 } : PANEL_TRANSITION}
-          className="absolute inset-0"
-          data-testid="workbench-tab-content"
-          data-tab={activeTab}
-        >
-          {activeTab === "terminal" && <TerminalPanel threadId={threadId} />}
-          {activeTab === "files" && (
-            <FilesTab threadId={threadId} onAddToContext={onAddToContext} />
-          )}
-          {activeTab === "git" && (
-            <GitTab
-              threadId={threadId}
-              onOpenCommitDetails={onOpenCommitDetails}
-            />
-          )}
-          {activeTab === "plan" && (
-            <PlanTab
-              threadId={threadId}
-              onOpenPlanDocument={onOpenPlanDocument}
-            />
-          )}
-          {activeTab === "browser" && (
-            <BrowserTab
-              key={`${wsId}:${threadId}`}
-              threadId={threadId}
-              visible={visible}
-            />
-          )}
-          {activeTab === "storage" && <MemoryTab threadId={threadId} />}
-          {activeTab === "tasks" && <TasksTab threadId={threadId} />}
-          {activeTab === "context_graph" && (
-            <ContextGraphTab threadId={threadId} onSendPrompt={onSendPrompt} />
-          )}
-          {activeTab === "library" && <LibraryTab threadId={threadId} />}
-        </motion.div>
+        {extensionView ? (
+          <div
+            className="absolute inset-0"
+            data-testid="workbench-extension-view"
+          >
+            <ExtensionFrame contribution={extensionView} />
+          </div>
+        ) : (
+          <motion.div
+            key={activeTab}
+            initial={reducedMotion ? false : { opacity: 0, x: 6 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={reducedMotion ? { duration: 0 } : PANEL_TRANSITION}
+            className="absolute inset-0"
+            data-testid="workbench-tab-content"
+            data-tab={activeTab}
+          >
+            {activeTab === "terminal" && <TerminalPanel threadId={threadId} />}
+            {activeTab === "files" && (
+              <FilesTab threadId={threadId} onAddToContext={onAddToContext} />
+            )}
+            {activeTab === "git" && (
+              <GitTab
+                threadId={threadId}
+                onOpenCommitDetails={onOpenCommitDetails}
+              />
+            )}
+            {activeTab === "plan" && (
+              <PlanTab
+                threadId={threadId}
+                onOpenPlanDocument={onOpenPlanDocument}
+              />
+            )}
+            {activeTab === "browser" && (
+              <BrowserTab
+                key={`${wsId}:${threadId}`}
+                threadId={threadId}
+                visible={visible}
+              />
+            )}
+            {activeTab === "storage" && <MemoryTab threadId={threadId} />}
+            {activeTab === "tasks" && <TasksTab threadId={threadId} />}
+            {activeTab === "context_graph" && (
+              <ContextGraphTab
+                threadId={threadId}
+                onSendPrompt={onSendPrompt}
+              />
+            )}
+            {activeTab === "library" && <LibraryTab threadId={threadId} />}
+          </motion.div>
+        )}
       </div>
     </div>
   );

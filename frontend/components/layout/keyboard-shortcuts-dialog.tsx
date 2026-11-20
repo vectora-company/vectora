@@ -9,11 +9,11 @@
 
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ResizableDialogContent } from "@/components/ui/resizable-dialog";
 import { isMac } from "@/hooks/useKeyboardShortcuts";
 import { m } from "@/lib/paraglide/messages";
 import { mDyn } from "@/lib/i18n-dyn";
@@ -81,7 +81,14 @@ export function KeyboardShortcutsDialog({
 }: KeyboardShortcutsDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+      <ResizableDialogContent
+        storageKey="shortcuts"
+        defaultWidth={672}
+        defaultHeight={560}
+        minWidth={480}
+        minHeight={320}
+        className="gap-4 p-6 overflow-y-auto"
+      >
         <DialogHeader>
           <DialogTitle className="text-xl">{m.shortcuts_title()}</DialogTitle>
           <DialogDescription className="sr-only">
@@ -113,7 +120,7 @@ export function KeyboardShortcutsDialog({
             </div>
           ))}
         </div>
-      </DialogContent>
+      </ResizableDialogContent>
     </Dialog>
   );
 }

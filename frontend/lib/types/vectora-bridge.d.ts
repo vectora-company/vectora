@@ -177,6 +177,12 @@ export interface VectoraDesktopBridge {
    * URL relativa de WebSocket não resolve pra `ws://` (só HTTP/fetch passa
    * pelo proxy de protocolo). `null` se o backend ainda não subiu porta. */
   getBackendWsOrigin?: () => Promise<string | null>;
+  /** Menu de clique direito nativo (Electron) para itens escolhidos pela interface. */
+  contextMenu?: {
+    popup: (
+      items: ReadonlyArray<{ id: string; label: string; enabled?: boolean }>,
+    ) => Promise<string | null>;
+  };
   windowControls?: {
     minimize: () => void;
     maximizeToggle: () => void;

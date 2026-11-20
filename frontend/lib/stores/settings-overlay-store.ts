@@ -40,7 +40,9 @@ export type SettingsCategoryId =
   | "admin_storage"
   | "billing"
   | "git"
-  | "about";
+  | "about"
+  /** Página contribuída por uma extensão: `ext:<id efetivo>`. */
+  | `ext:${string}`;
 
 interface SettingsOverlayState {
   open: boolean;

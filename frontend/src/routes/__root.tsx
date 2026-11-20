@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { useExtensionsStore } from "@/lib/stores/extensions-store";
 import {
   Outlet,
   createRootRouteWithContext,
@@ -285,6 +286,10 @@ function RootComponent() {
     if (prefsHydratedRef.current) return;
     prefsHydratedRef.current = true;
     void hydrateFromBackend();
+  }, [location.pathname]);
+  useEffect(() => {
+    if (isPublicPath(location.pathname)) return;
+    void useExtensionsStore.getState().load();
   }, [location.pathname]);
   useEffect(() => {
     if (typeof document !== "undefined") {

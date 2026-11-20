@@ -59,9 +59,16 @@ export function getSessionLayoutState(width: number): SessionLayoutState {
   return "wide";
 }
 
-/** Reads the physical viewport once mounted and updates on resize/rotation. */
+/**
+ * Reads the physical viewport and updates on resize/rotation. The first render
+ * already uses the real width: starting as "wide" and correcting after mount
+ * painted the desktop shell (with its third column) for one frame on narrow
+ * windows.
+ */
 export function useSessionLayoutState(): SessionLayoutState {
-  const [state, setState] = useState<SessionLayoutState>("wide");
+  const [state, setState] = useState<SessionLayoutState>(() =>
+    getSessionLayoutState(getUnscaledViewportWidth()),
+  );
 
   useEffect(() => {
     const update = () =>
@@ -87,10 +94,12 @@ export function getIdeLayoutState(width: number): IdeLayoutState {
 }
 
 export function useIdeLayoutState(): IdeLayoutState {
-  // Keep the first render identical between SSR and the browser. The actual
-  // unscaled window geometry is read after mount, so mobile can switch in
-  // without producing a hydration mismatch.
-  const [state, setState] = useState<IdeLayoutState>("wide");
+  // The app is a client-only SPA, so the real unscaled window geometry can be
+  // read on the first render; correcting it after mount flashed the wide IDE
+  // (and remounted the chat) before switching to the mobile layout.
+  const [state, setState] = useState<IdeLayoutState>(() =>
+    getIdeLayoutState(getUnscaledViewportWidth()),
+  );
 
   useEffect(() => {
     const update = () =>

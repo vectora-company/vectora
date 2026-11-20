@@ -4,11 +4,11 @@ import { useEffect, useState } from "react";
 import { Check, Copy, Link2 } from "lucide-react";
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ResizableDialogContent } from "@/components/ui/resizable-dialog";
 import { createShare, listShares, revokeShare } from "@/lib/api/vectora-client";
 import type { CreatedShare } from "@/lib/api/vectora-client";
 import { m } from "@/lib/paraglide/messages";
@@ -97,7 +97,14 @@ export function ShareThreadDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <ResizableDialogContent
+        storageKey="share-thread"
+        defaultWidth={512}
+        defaultHeight={420}
+        minWidth={360}
+        minHeight={260}
+        className="gap-4 p-6 overflow-y-auto"
+      >
         <DialogHeader>
           <DialogTitle>{m.share_dialog_title()}</DialogTitle>
           <DialogDescription>{m.share_dialog_description()}</DialogDescription>
@@ -202,7 +209,7 @@ export function ShareThreadDialog({
             {m.share_dialog_error()}
           </p>
         )}
-      </DialogContent>
+      </ResizableDialogContent>
     </Dialog>
   );
 }

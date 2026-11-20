@@ -477,3 +477,92 @@
 .scroll-gutter-stable {
   scrollbar-gutter: stable;
 }
+
+/* Gaveta compacta das colunas laterais (components/layout/compact-drawer.tsx):
+   entra deslizando com uma desaceleração suave e sai mais rápido; o fundo escuro
+   faz fade. A largura é arrastável, então nada aqui anima `width`. */
+@keyframes compact-drawer-in-left {
+  from {
+    transform: translate3d(-100%, 0, 0);
+    opacity: 0.7;
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+    opacity: 1;
+  }
+}
+@keyframes compact-drawer-out-left {
+  from {
+    transform: translate3d(0, 0, 0);
+    opacity: 1;
+  }
+  to {
+    transform: translate3d(-100%, 0, 0);
+    opacity: 0.7;
+  }
+}
+@keyframes compact-drawer-in-right {
+  from {
+    transform: translate3d(100%, 0, 0);
+    opacity: 0.7;
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+    opacity: 1;
+  }
+}
+@keyframes compact-drawer-out-right {
+  from {
+    transform: translate3d(0, 0, 0);
+    opacity: 1;
+  }
+  to {
+    transform: translate3d(100%, 0, 0);
+    opacity: 0.7;
+  }
+}
+@keyframes compact-drawer-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes compact-drawer-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.compact-drawer.compact-drawer {
+  transition: none;
+  will-change: transform;
+}
+.compact-drawer.compact-drawer[data-state="open"] {
+  animation: compact-drawer-in-right 340ms cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+.compact-drawer.compact-drawer[data-state="closed"] {
+  animation: compact-drawer-out-right 200ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+.compact-drawer.compact-drawer[data-side="left"][data-state="open"] {
+  animation-name: compact-drawer-in-left;
+}
+.compact-drawer.compact-drawer[data-side="left"][data-state="closed"] {
+  animation-name: compact-drawer-out-left;
+}
+[data-slot="sheet-overlay"]:has(+ .compact-drawer)[data-state="open"] {
+  animation: compact-drawer-fade-in 260ms ease-out both;
+}
+[data-slot="sheet-overlay"]:has(+ .compact-drawer)[data-state="closed"] {
+  animation: compact-drawer-fade-out 200ms ease-in both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .compact-drawer.compact-drawer,
+  [data-slot="sheet-overlay"]:has(+ .compact-drawer) {
+    animation-duration: 1ms !important;
+  }
+}

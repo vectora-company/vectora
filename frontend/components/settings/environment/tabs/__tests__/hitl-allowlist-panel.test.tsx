@@ -15,6 +15,8 @@ import { HITLPanel } from "@/components/chat/features/hitl-panel";
 
 vi.mock("@/lib/paraglide/messages", () => ({
   m: {
+    dialog_close: () => "Fechar",
+    dialog_resize: () => "Redimensionar",
     hitl_allowlist_title: () => "Regras",
     hitl_allowlist_subtitle: () => "Subtítulo",
     hitl_allowlist_workspace: () => "Workspace",

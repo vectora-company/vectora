@@ -20,7 +20,7 @@ import contextlib
 import json
 import logging
 import uuid
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Request, WebSocket
 from fastapi.websockets import WebSocketDisconnect
@@ -233,6 +233,9 @@ class CloseBody(BaseModel):
     terminal_id: str
     thread_id: str
     workspace_id: str
+    # ``thread`` só fecha um terminal anexado a esta conversa; ``workspace``
+    # (padrão) fecha qualquer terminal do usuário no workspace.
+    scope: Literal["workspace", "thread"] = "workspace"
 
 
 def _request_user_id(request: Request) -> str:
@@ -244,17 +247,34 @@ def _request_user_id(request: Request) -> str:
 
 
 @router.get("/list")
-async def list_terminals(request: Request, thread_id: str, workspace_id: str) -> dict:
-    """Lista os terminais ativos da sessão (do usuário autenticado)."""
+async def list_terminals(
+    request: Request,
+    thread_id: str,
+    workspace_id: str,
+    scope: Literal["workspace", "thread"] = "workspace",
+) -> dict:
+    """Lista os terminais ativos da sessão (do usuário autenticado).
+
+    O padrão (``workspace``) lista todos os terminais do usuário no workspace:
+    a thread da interface e a do agente são diferentes de propósito, e filtrar
+    por thread faria um terminal já aberto sumir e outro shell ser criado.
+    ``scope=thread`` restringe aos terminais anexados a esta conversa.
+    """
     user_id = _request_user_id(request)
     if not thread_id or not workspace_id:
         raise HTTPException(status_code=404, detail="Contexto não encontrado.")
-    # PTYs are workspace resources.  The UI thread and the agent thread are
-    # intentionally different, so filtering by thread makes an already-open
-    # terminal disappear and causes a second shell to be spawned.
-    sessions = pty_registry.list_for_user_workspace(
-        user_id=user_id, workspace_id=workspace_id
-    )
+    if scope == "thread":
+        sessions = [
+            session
+            for session in pty_registry.list_for_context(
+                user_id=user_id, thread_id=thread_id, workspace_id=workspace_id
+            )
+            if session.is_alive()
+        ]
+    else:
+        sessions = pty_registry.list_for_user_workspace(
+            user_id=user_id, workspace_id=workspace_id
+        )
     return {
         "terminals": [
             {
@@ -271,12 +291,18 @@ async def list_terminals(request: Request, thread_id: str, workspace_id: str) ->
 @router.post("/close")
 async def close_terminal(body: CloseBody, request: Request) -> dict:
     user_id = _request_user_id(request)
-    if (
-        pty_registry.resolve_for_user_workspace(
+    if body.scope == "thread":
+        owned = pty_registry.resolve_for_context(
+            body.terminal_id,
+            user_id=user_id,
+            thread_id=body.thread_id,
+            workspace_id=body.workspace_id,
+        )
+    else:
+        owned = pty_registry.resolve_for_user_workspace(
             body.terminal_id, user_id=user_id, workspace_id=body.workspace_id
         )
-        is None
-    ):
+    if owned is None:
         raise HTTPException(status_code=404, detail="Terminal não encontrado.")
     pty_registry.close(body.terminal_id)
     return {"status": "closed", "terminal_id": body.terminal_id}

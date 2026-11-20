@@ -27,6 +27,7 @@ import {
 import { useToastStore } from "@/lib/stores/toast-store";
 import { WorkbenchDialog } from "@/components/workbench/workbench-dialog";
 import { m } from "@/lib/paraglide/messages";
+import { useConfirm } from "@/components/ui/use-confirm";
 
 interface RagSettings {
   reranker_enabled: boolean;
@@ -156,7 +157,6 @@ export function useRagSettings({
   }, []);
 
   const deleteCollection = useCallback(async (name: string) => {
-    if (!window.confirm(m.rag_collection_delete_confirm({ name }))) return;
     if (pendingDeleteRef.current === name) return;
     pendingDeleteRef.current = name;
     setPendingDelete(name);
@@ -248,6 +248,7 @@ export function RagSettingsForm({
   includeIngestionSettings?: boolean;
   includeCollections?: boolean;
 }) {
+  const { confirm, dialog } = useConfirm();
   if (settingsStatus === "loading" || settingsStatus === "idle") {
     return (
       <p className="p-4 text-xs text-muted-foreground">
@@ -350,7 +351,15 @@ export function RagSettingsForm({
                     )}
                   </span>
                   <button
-                    onClick={() => void deleteCollection(c.name)}
+                    onClick={async () => {
+                      const confirmed = await confirm({
+                        message: m.rag_collection_delete_confirm({
+                          name: c.name,
+                        }),
+                        variant: "destructive",
+                      });
+                      if (confirmed) void deleteCollection(c.name);
+                    }}
                     disabled={pendingDelete === c.name}
                     aria-label={m.rag_collection_delete()}
                     title={m.rag_collection_delete()}
@@ -364,6 +373,7 @@ export function RagSettingsForm({
           )}
         </div>
       )}
+      {dialog}
     </div>
   );
 }

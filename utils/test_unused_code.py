@@ -279,3 +279,14 @@ def test_main_trata_o_flag_estrito_e_nao_o_repassa(
     unused_code.main(["routes"])
     assert unused_code._STRICT is True
     monkeypatch.setattr(unused_code, "_STRICT", False)
+
+
+@pytest.mark.parametrize(
+    "callback", ["connection_made", "data_received", "connection_lost"]
+)
+def test_callbacks_do_protocolo_asyncio_nao_contam_como_sem_uso(
+    callback: str,
+) -> None:
+    ignored = unused_code.VULTURE_IGNORE_NAMES.split(",")
+
+    assert callback in ignored

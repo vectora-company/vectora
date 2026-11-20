@@ -37,12 +37,12 @@ import {
 } from "@/components/ui/tooltip";
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ResizableDialogContent } from "@/components/ui/resizable-dialog";
 import { Input } from "@/components/ui/input";
 import { useWorkbenchSWR } from "@/lib/hooks/workbench/use-swr";
 import { useToastStore } from "@/lib/stores/toast-store";
@@ -1021,7 +1021,14 @@ export function FilesTab({ threadId, onAddToContext }: FilesTabProps) {
           if (!o) setGitignoreOpen(false);
         }}
       >
-        <DialogContent className="max-w-lg">
+        <ResizableDialogContent
+          storageKey="files-gitignore"
+          defaultWidth={520}
+          defaultHeight={420}
+          minWidth={380}
+          minHeight={280}
+          className="gap-4 p-6 overflow-y-auto"
+        >
           <DialogHeader>
             <DialogTitle>{m.workbench_files_gitignore_title()}</DialogTitle>
             <DialogDescription>
@@ -1081,7 +1088,7 @@ export function FilesTab({ threadId, onAddToContext }: FilesTabProps) {
               )}
             </Button>
           </DialogFooter>
-        </DialogContent>
+        </ResizableDialogContent>
       </Dialog>
 
       {/* Confirmação de delete (Radix Dialog — acessível) */}

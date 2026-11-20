@@ -21,13 +21,14 @@
 
 import {
   Dialog,
-  DialogContent,
   DialogHeader,
   DialogTitle,
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { ResizableDialogContent } from "@/components/ui/resizable-dialog";
 import { Button } from "@/components/ui/button";
+import { m } from "@/lib/paraglide/messages";
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -45,32 +46,43 @@ export function ConfirmDialog({
   open,
   title,
   description,
-  confirmLabel = "Confirmar",
-  cancelLabel = "Cancelar",
+  confirmLabel = m.confirm_dialog_confirm(),
+  cancelLabel = m.confirm_dialog_cancel(),
   variant = "default",
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onCancel()}>
-      <DialogContent role="alertdialog" aria-modal="true" className="max-w-sm">
+      <ResizableDialogContent
+        resizable={false}
+        defaultWidth={384}
+        className="gap-4 p-6"
+        role="alertdialog"
+        aria-modal="true"
+      >
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           {description && <DialogDescription>{description}</DialogDescription>}
         </DialogHeader>
         <DialogFooter>
-          <Button variant="outline" onClick={onCancel}>
+          <Button
+            variant="outline"
+            onClick={onCancel}
+            data-testid="confirm-dialog-cancel"
+          >
             {cancelLabel}
           </Button>
           <Button
             variant={variant === "destructive" ? "destructive" : "default"}
             onClick={() => void onConfirm()}
             autoFocus
+            data-testid="confirm-dialog-confirm"
           >
             {confirmLabel}
           </Button>
         </DialogFooter>
-      </DialogContent>
+      </ResizableDialogContent>
     </Dialog>
   );
 }

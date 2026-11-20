@@ -31,12 +31,12 @@ import {
 
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ResizableDialogContent } from "@/components/ui/resizable-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -424,7 +424,14 @@ export function WorkspaceTrustDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+      <ResizableDialogContent
+        storageKey="workspace-trust"
+        defaultWidth={560}
+        defaultHeight={560}
+        minWidth={420}
+        minHeight={320}
+        className="gap-4 p-6 overflow-y-auto"
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {mode === "ingest"
@@ -1026,7 +1033,7 @@ export function WorkspaceTrustDialog({
             </DialogFooter>
           </>
         )}
-      </DialogContent>
+      </ResizableDialogContent>
     </Dialog>
   );
 }

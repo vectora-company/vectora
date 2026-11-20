@@ -3,6 +3,8 @@
 import { ContextualHelp } from "./contextual-help";
 import { SettingsMenu } from "./settings-menu";
 import { ModeSwitch } from "./mode-switcher";
+import { ExtensionHeaderActions } from "./extension-header-actions";
+import { ExtensionModeButtons } from "./extension-mode-buttons";
 import { useElementWidth } from "@/lib/hooks/use-element-width";
 import { MessageSquare, PanelLeftOpen, PanelRightOpen } from "lucide-react";
 import { m } from "@/lib/paraglide/messages";
@@ -106,6 +108,7 @@ export function Header({
         {showModeSwitch && (
           <div className="flex-1 flex justify-center min-w-0">
             <ModeSwitch show width={rowWidth} />
+            <ExtensionModeButtons />
           </div>
         )}
 
@@ -117,6 +120,7 @@ export function Header({
             renderSessionsButton()}
           {compactNavigation?.workbenchSide !== "left" &&
             renderWorkbenchButton()}
+          <ExtensionHeaderActions />
           <ContextualHelp onShowShortcuts={onShowShortcuts} />
           <SettingsMenu />
         </div>

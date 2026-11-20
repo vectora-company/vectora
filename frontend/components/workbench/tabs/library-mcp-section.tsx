@@ -16,12 +16,12 @@ import { Download, Loader2, Puzzle, Star, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ResizableDialogContent } from "@/components/ui/resizable-dialog";
 import { Input } from "@/components/ui/input";
 import { m } from "@/lib/paraglide/messages";
 import { useLibraryStore, type MCPConnector } from "@/lib/stores/library-store";
@@ -29,6 +29,7 @@ import { useWindowsStore } from "@/lib/stores/windows-store";
 import { useWorkspacesStore } from "@/lib/stores/workspaces-store";
 import { LibraryCard, LibraryTag } from "./library-card";
 import type { LibraryItem } from "./library-tab";
+import { useConfirm } from "@/components/ui/use-confirm";
 
 async function saveEnvVar(key: string, value: string): Promise<void> {
   const res = await fetch("/auth/envs", {
@@ -81,6 +82,7 @@ function ConfigureDialog({
   onClose: () => void;
   onInstalled: () => void;
 }) {
+  const { confirm, dialog } = useConfirm();
   const [values, setValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -101,7 +103,10 @@ function ConfigureDialog({
       setError(m.library_mcp_trust_invalid_install());
       return;
     }
-    if (requiresConfirmation && !window.confirm(m.library_mcp_trust_confirm()))
+    if (
+      requiresConfirmation &&
+      !(await confirm({ message: m.library_mcp_trust_confirm() }))
+    )
       return;
 
     setSaving(true);
@@ -125,7 +130,14 @@ function ConfigureDialog({
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent>
+      <ResizableDialogContent
+        storageKey="library-mcp"
+        defaultWidth={560}
+        defaultHeight={520}
+        minWidth={400}
+        minHeight={300}
+        className="gap-4 p-6 overflow-y-auto"
+      >
         <DialogHeader>
           <DialogTitle>
             {m.library_mcp_configure_title({ name: connector.name })}
@@ -162,7 +174,8 @@ function ConfigureDialog({
             {m.library_mcp_install()}
           </Button>
         </DialogFooter>
-      </DialogContent>
+      </ResizableDialogContent>
+      {dialog}
     </Dialog>
   );
 }
@@ -178,6 +191,7 @@ function ConnectorCard({
   onChanged: () => void;
   onOpen: () => void;
 }) {
+  const { confirm, dialog } = useConfirm();
   const [busy, setBusy] = useState(false);
   const [configuring, setConfiguring] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -205,7 +219,7 @@ function ConnectorCard({
       }
       if (
         requiresConfirmation &&
-        !window.confirm(m.library_mcp_trust_confirm())
+        !(await confirm({ message: m.library_mcp_trust_confirm() }))
       )
         return;
       const result = await installMcp(connector.id, requiresConfirmation);
@@ -338,6 +352,7 @@ function ConnectorCard({
           onInstalled={onChanged}
         />
       )}
+      {dialog}
     </LibraryCard>
   );
 }

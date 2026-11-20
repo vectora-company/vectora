@@ -25,6 +25,7 @@ import {
   approveThreadDAG,
   cancelThreadDAG,
 } from "@/lib/api/vectora-client";
+import { m } from "@/lib/paraglide/messages";
 
 function jsonResponse(data: unknown, status = 200) {
   return {
@@ -325,7 +326,10 @@ describe("branches de conversa", () => {
       throw new Error("a seleção deveria falhar");
     } catch (error) {
       expect(error).toBeInstanceOf(BranchRequestError);
-      expect(error).toMatchObject({ status: 401, detail: "sessão expirada" });
+      expect(error).toMatchObject({
+        status: 401,
+        detail: m.api_error_session_expired(),
+      });
     }
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock.mock.calls[1]?.[0]).toBe("/auth/refresh");

@@ -15,11 +15,11 @@
 import { Suspense, useMemo, useState } from "react";
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ResizableDialogContent } from "@/components/ui/resizable-dialog";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { useFeatureFlags } from "@/lib/hooks/use-feature-flags";
@@ -32,6 +32,8 @@ import {
   firstAvailableCategory,
 } from "./settings-categories";
 import { m } from "@/lib/paraglide/messages";
+import { useExtensionsStore } from "@/lib/stores/extensions-store";
+import { contributionsOfKind } from "@/lib/extensions/registry";
 
 //: Abaixo desta largura o rail vira dropdown — mesmo espírito do
 //: `47.5rem` do Hermes, ajustado ao conteúdo real deste rail (menos
@@ -57,13 +59,19 @@ export function SettingsOverlay() {
   const [containerRef, containerWidth] = useElementWidth<HTMLDivElement>();
 
   const isAdmin = user?.role === "root" || user?.role === "admin";
+  const contributions = useExtensionsStore((state) => state.contributions);
+  const extensionPages = useMemo(
+    () => contributionsOfKind(contributions, "settings_page"),
+    [contributions],
+  );
   const groups = useMemo(
     () =>
       buildSettingsCategoryGroups({
         connectEnabled: enableFeaturesBeta,
         isAdmin,
+        extensionPages,
       }),
-    [enableFeaturesBeta, isAdmin],
+    [enableFeaturesBeta, isAdmin, extensionPages],
   );
 
   const effectiveCategoryId =
@@ -93,8 +101,13 @@ export function SettingsOverlay() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent
-        className="p-0 gap-0 w-[92vw] h-[88vh] max-w-6xl overflow-hidden flex flex-col sm:max-w-6xl"
+      <ResizableDialogContent
+        storageKey="settings"
+        defaultWidth={1152}
+        defaultHeight={760}
+        minWidth={720}
+        minHeight={480}
+        className="p-0 gap-0 overflow-hidden"
         showCloseButton
       >
         <DialogHeader className="sr-only">
@@ -197,7 +210,7 @@ export function SettingsOverlay() {
             </>
           )}
         </div>
-      </DialogContent>
+      </ResizableDialogContent>
     </Dialog>
   );
 }

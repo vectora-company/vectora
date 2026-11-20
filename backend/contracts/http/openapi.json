@@ -1288,6 +1288,60 @@
         "title": "ChangePasswordRequest",
         "type": "object"
       },
+      "Channel": {
+        "properties": {
+          "formats": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Formats",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "install_validated": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Install Validated",
+            "type": "array"
+          },
+          "integrity": {
+            "title": "Integrity",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "available",
+              "build_only",
+              "planned"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "status",
+          "formats",
+          "install_validated",
+          "integrity",
+          "note"
+        ],
+        "title": "Channel",
+        "type": "object"
+      },
       "ChatConfig": {
         "properties": {
           "chat_mode": {
@@ -1458,6 +1512,15 @@
       },
       "CloseBody": {
         "properties": {
+          "scope": {
+            "default": "workspace",
+            "enum": [
+              "workspace",
+              "thread"
+            ],
+            "title": "Scope",
+            "type": "string"
+          },
           "terminal_id": {
             "title": "Terminal Id",
             "type": "string"
@@ -1779,6 +1842,71 @@
           "password"
         ],
         "title": "ConnectBody",
+        "type": "object"
+      },
+      "Contribution": {
+        "description": "Contribuição de interface declarada por uma extensão.\n\nA declaração só descreve o que a extensão quer mostrar; o host decide se\naceita, ordena e ativa. Nenhuma contribuição carrega código para dentro do\nprocesso da aplicação.",
+        "properties": {
+          "entry": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entry"
+          },
+          "file_extensions": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "File Extensions",
+            "type": "array"
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "mode",
+              "workbench_view",
+              "settings_page",
+              "header_action",
+              "file_icon"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "label"
+        ],
+        "title": "Contribution",
         "type": "object"
       },
       "ConversationBranch": {
@@ -3254,6 +3382,94 @@
         "title": "DmrModelRequest",
         "type": "object"
       },
+      "EmbeddingQueueCleanupBody": {
+        "properties": {
+          "days": {
+            "default": 30,
+            "maximum": 365.0,
+            "minimum": 1.0,
+            "title": "Days",
+            "type": "integer"
+          }
+        },
+        "title": "EmbeddingQueueCleanupBody",
+        "type": "object"
+      },
+      "EmbeddingQueueFailure": {
+        "properties": {
+          "attempt_count": {
+            "title": "Attempt Count",
+            "type": "integer"
+          },
+          "collection": {
+            "title": "Collection",
+            "type": "string"
+          },
+          "error": {
+            "title": "Error",
+            "type": "string"
+          },
+          "queue_id": {
+            "title": "Queue Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "queue_id",
+          "collection",
+          "status",
+          "attempt_count",
+          "error"
+        ],
+        "title": "EmbeddingQueueFailure",
+        "type": "object"
+      },
+      "EmbeddingQueueRetryBody": {
+        "properties": {
+          "limit": {
+            "default": 100,
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "title": "EmbeddingQueueRetryBody",
+        "type": "object"
+      },
+      "EmbeddingQueueState": {
+        "properties": {
+          "failures": {
+            "items": {
+              "$ref": "#/components/schemas/EmbeddingQueueFailure"
+            },
+            "title": "Failures",
+            "type": "array"
+          },
+          "pending": {
+            "title": "Pending",
+            "type": "integer"
+          },
+          "stats": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Stats",
+            "type": "object"
+          }
+        },
+        "required": [
+          "stats",
+          "pending",
+          "failures"
+        ],
+        "title": "EmbeddingQueueState",
+        "type": "object"
+      },
       "EnvOverrideRequest": {
         "properties": {
           "key": {
@@ -3288,6 +3504,152 @@
           "node_id"
         ],
         "title": "ExplainRequest",
+        "type": "object"
+      },
+      "ExtensionRelease": {
+        "description": "Uma versão instalada: o que é preciso para ativá-la e para voltar a ela.",
+        "properties": {
+          "args": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 64,
+            "title": "Args",
+            "type": "array"
+          },
+          "command": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Command",
+            "type": "string"
+          },
+          "contributions": {
+            "items": {
+              "$ref": "#/components/schemas/Contribution"
+            },
+            "maxItems": 64,
+            "title": "Contributions",
+            "type": "array"
+          },
+          "declared_tools": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 128,
+            "title": "Declared Tools",
+            "type": "array"
+          },
+          "digest": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Digest",
+            "type": "string"
+          },
+          "host_api": {
+            "default": 1,
+            "title": "Host Api",
+            "type": "integer"
+          },
+          "install_path": {
+            "title": "Install Path",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "digest",
+          "install_path",
+          "command"
+        ],
+        "title": "ExtensionRelease",
+        "type": "object"
+      },
+      "ExtensionSummary": {
+        "properties": {
+          "allow_hosts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allow Hosts",
+            "type": "array"
+          },
+          "contributions": {
+            "title": "Contributions",
+            "type": "integer"
+          },
+          "digest": {
+            "title": "Digest",
+            "type": "string"
+          },
+          "granted_tools": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Granted Tools",
+            "type": "array"
+          },
+          "has_previous": {
+            "title": "Has Previous",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "publisher": {
+            "title": "Publisher",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "state_reason": {
+            "title": "State Reason",
+            "type": "string"
+          },
+          "tools": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tools",
+            "type": "array"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          },
+          "workspaces": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Workspaces",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "publisher",
+          "version",
+          "digest",
+          "state",
+          "state_reason",
+          "has_previous",
+          "tools",
+          "granted_tools",
+          "allow_hosts",
+          "workspaces",
+          "contributions"
+        ],
+        "title": "ExtensionSummary",
         "type": "object"
       },
       "FalkorDBConfigRequest": {
@@ -4395,6 +4757,33 @@
           "lines"
         ],
         "title": "GitignoreUpdateRequest",
+        "type": "object"
+      },
+      "GrantsUpdate": {
+        "properties": {
+          "allow_hosts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allow Hosts",
+            "type": "array"
+          },
+          "tools": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tools",
+            "type": "array"
+          },
+          "workspaces": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Workspaces",
+            "type": "array"
+          }
+        },
+        "title": "GrantsUpdate",
         "type": "object"
       },
       "GraphCommunity": {
@@ -8501,6 +8890,18 @@
           "sha"
         ],
         "title": "RevertCommitRequest",
+        "type": "object"
+      },
+      "RevokeBody": {
+        "properties": {
+          "reason": {
+            "default": "",
+            "maxLength": 300,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "title": "RevokeBody",
         "type": "object"
       },
       "RevokeInviteResponse": {
@@ -12791,6 +13192,34 @@
         },
         "title": "DiffHunk",
         "type": "object"
+      },
+      "backend__extensions__host__InstallRequest": {
+        "description": "O que o host precisa para instalar uma versão já verificada pelo Vext.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "publisher": {
+            "title": "Publisher",
+            "type": "string"
+          },
+          "release": {
+            "$ref": "#/components/schemas/ExtensionRelease"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "publisher",
+          "release"
+        ],
+        "title": "InstallRequest",
+        "type": "object"
       }
     }
   },
@@ -13038,6 +13467,191 @@
           }
         },
         "summary": "Patch Server Config",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/embedding-queue": {
+      "get": {
+        "description": "Estado da indexação: itens por status e as falhas mais recentes.",
+        "operationId": "get_embedding_queue_state_admin_embedding_queue_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmbeddingQueueState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Embedding Queue State",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/embedding-queue/cleanup": {
+      "post": {
+        "description": "Remove falhas e itens da DLQ mais antigos que o prazo informado.",
+        "operationId": "cleanup_embedding_queue_admin_embedding_queue_cleanup_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmbeddingQueueCleanupBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "title": "Response Cleanup Embedding Queue Admin Embedding Queue Cleanup Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cleanup Embedding Queue",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/embedding-queue/retry": {
+      "post": {
+        "description": "Reenfileira falhas e itens da DLQ para uma nova tentativa.",
+        "operationId": "retry_embedding_queue_admin_embedding_queue_retry_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmbeddingQueueRetryBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "title": "Response Retry Embedding Queue Admin Embedding Queue Retry Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retry Embedding Queue",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/embedding-queue/{queue_id}/discard": {
+      "post": {
+        "description": "Move um item para a DLQ, sem novas tentativas automáticas.",
+        "operationId": "discard_embedding_queue_item_admin_embedding_queue__queue_id__discard_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "queue_id",
+            "required": true,
+            "schema": {
+              "title": "Queue Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Discard Embedding Queue Item Admin Embedding Queue  Queue Id  Discard Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Discard Embedding Queue Item",
         "tags": [
           "admin"
         ]
@@ -16895,6 +17509,592 @@
         "summary": "Set Platform Enabled",
         "tags": [
           "connect"
+        ]
+      }
+    },
+    "/distribution/channels": {
+      "get": {
+        "description": "Canais de distribuição, com o estado real de cada um.",
+        "operationId": "list_channels_distribution_channels_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Channel"
+                  },
+                  "title": "Response List Channels Distribution Channels Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Channels",
+        "tags": [
+          "distribution"
+        ]
+      }
+    },
+    "/extensions": {
+      "get": {
+        "operationId": "list_extensions_extensions_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ExtensionSummary"
+                  },
+                  "title": "Response List Extensions Extensions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Extensions",
+        "tags": [
+          "extensions"
+        ]
+      },
+      "post": {
+        "operationId": "install_extension_extensions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/backend__extensions__host__InstallRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Install Extension",
+        "tags": [
+          "extensions"
+        ]
+      }
+    },
+    "/extensions/contributions": {
+      "get": {
+        "description": "Contribuições de interface das extensões ativas.",
+        "operationId": "list_contributions_extensions_contributions_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response List Contributions Extensions Contributions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Contributions",
+        "tags": [
+          "extensions"
+        ]
+      }
+    },
+    "/extensions/{extension_id}": {
+      "delete": {
+        "operationId": "remove_extension_extensions__extension_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "extension_id",
+            "required": true,
+            "schema": {
+              "title": "Extension Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Remove Extension Extensions  Extension Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Extension",
+        "tags": [
+          "extensions"
+        ]
+      },
+      "get": {
+        "operationId": "get_extension_extensions__extension_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "extension_id",
+            "required": true,
+            "schema": {
+              "title": "Extension Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Extension",
+        "tags": [
+          "extensions"
+        ]
+      }
+    },
+    "/extensions/{extension_id}/activate": {
+      "post": {
+        "operationId": "activate_extension_extensions__extension_id__activate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "extension_id",
+            "required": true,
+            "schema": {
+              "title": "Extension Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Activate Extension",
+        "tags": [
+          "extensions"
+        ]
+      }
+    },
+    "/extensions/{extension_id}/audit": {
+      "get": {
+        "operationId": "extension_audit_extensions__extension_id__audit_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "extension_id",
+            "required": true,
+            "schema": {
+              "title": "Extension Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response Extension Audit Extensions  Extension Id  Audit Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Extension Audit",
+        "tags": [
+          "extensions"
+        ]
+      }
+    },
+    "/extensions/{extension_id}/deactivate": {
+      "post": {
+        "operationId": "deactivate_extension_extensions__extension_id__deactivate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "extension_id",
+            "required": true,
+            "schema": {
+              "title": "Extension Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Deactivate Extension",
+        "tags": [
+          "extensions"
+        ]
+      }
+    },
+    "/extensions/{extension_id}/grants": {
+      "put": {
+        "operationId": "set_extension_grants_extensions__extension_id__grants_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "extension_id",
+            "required": true,
+            "schema": {
+              "title": "Extension Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GrantsUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Extension Grants",
+        "tags": [
+          "extensions"
+        ]
+      }
+    },
+    "/extensions/{extension_id}/health": {
+      "get": {
+        "operationId": "extension_health_extensions__extension_id__health_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "extension_id",
+            "required": true,
+            "schema": {
+              "title": "Extension Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Extension Health Extensions  Extension Id  Health Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Extension Health",
+        "tags": [
+          "extensions"
+        ]
+      }
+    },
+    "/extensions/{extension_id}/revoke": {
+      "post": {
+        "operationId": "revoke_extension_extensions__extension_id__revoke_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "extension_id",
+            "required": true,
+            "schema": {
+              "title": "Extension Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevokeBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke Extension",
+        "tags": [
+          "extensions"
+        ]
+      }
+    },
+    "/extensions/{extension_id}/rollback": {
+      "post": {
+        "operationId": "rollback_extension_extensions__extension_id__rollback_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "extension_id",
+            "required": true,
+            "schema": {
+              "title": "Extension Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rollback Extension",
+        "tags": [
+          "extensions"
+        ]
+      }
+    },
+    "/extensions/{extension_id}/ui/{path}": {
+      "get": {
+        "description": "Serve um arquivo da pasta ``ui/`` de uma extensão ativa.",
+        "operationId": "extension_ui_file_extensions__extension_id__ui__path__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "extension_id",
+            "required": true,
+            "schema": {
+              "title": "Extension Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "title": "Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Extension Ui File",
+        "tags": [
+          "extensions"
         ]
       }
     },
@@ -26160,7 +27360,7 @@
     },
     "/vectora.terminal.v1/list": {
       "get": {
-        "description": "Lista os terminais ativos da sessão (do usuário autenticado).",
+        "description": "Lista os terminais ativos da sessão (do usuário autenticado).\n\nO padrão (``workspace``) lista todos os terminais do usuário no workspace:\na thread da interface e a do agente são diferentes de propósito, e filtrar\npor thread faria um terminal já aberto sumir e outro shell ser criado.\n``scope=thread`` restringe aos terminais anexados a esta conversa.",
         "operationId": "list_terminals_vectora_terminal_v1_list_get",
         "parameters": [
           {
@@ -26178,6 +27378,20 @@
             "required": true,
             "schema": {
               "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "default": "workspace",
+              "enum": [
+                "workspace",
+                "thread"
+              ],
+              "title": "Scope",
               "type": "string"
             }
           }

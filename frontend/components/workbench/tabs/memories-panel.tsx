@@ -17,14 +17,15 @@ import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ResizableDialogContent } from "@/components/ui/resizable-dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { useWorkspacesStore } from "@/lib/stores/workspaces-store";
 import { m } from "@/lib/paraglide/messages";
 import { mDyn } from "@/lib/i18n-dyn";
 // ---------------------------------------------------------------------------
@@ -49,17 +50,26 @@ interface ListMemoriesResponse {
 // API helpers
 // ---------------------------------------------------------------------------
 
+/** URL do REST de memória com o workspace ativo, para ler o mesmo escopo
+ * em que as memory tools do agente gravam. */
+function memoryUrl(path: string): string {
+  const workspaceId = useWorkspacesStore.getState().getActive()?.id;
+  if (!workspaceId) return path;
+  const separator = path.includes("?") ? "&" : "?";
+  return `${path}${separator}workspace_id=${encodeURIComponent(workspaceId)}`;
+}
+
 async function fetchMemories(
   limit = 50,
   offset = 0,
 ): Promise<ListMemoriesResponse> {
-  const res = await fetch(`/memory?limit=${limit}&offset=${offset}`);
+  const res = await fetch(memoryUrl(`/memory?limit=${limit}&offset=${offset}`));
   if (!res.ok) throw new Error(`Erro ${res.status}`);
   return res.json();
 }
 
 async function updateMemory(key: string, content: string): Promise<void> {
-  const res = await fetch(`/memory/${encodeURIComponent(key)}`, {
+  const res = await fetch(memoryUrl(`/memory/${encodeURIComponent(key)}`), {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ content }),
@@ -68,19 +78,19 @@ async function updateMemory(key: string, content: string): Promise<void> {
 }
 
 async function deleteMemory(key: string): Promise<void> {
-  const res = await fetch(`/memory/${encodeURIComponent(key)}`, {
+  const res = await fetch(memoryUrl(`/memory/${encodeURIComponent(key)}`), {
     method: "DELETE",
   });
   if (!res.ok) throw new Error(`Erro ${res.status}`);
 }
 
 async function clearAllMemories(): Promise<void> {
-  const res = await fetch(`/memory`, { method: "DELETE" });
+  const res = await fetch(memoryUrl(`/memory`), { method: "DELETE" });
   if (!res.ok) throw new Error(`Erro ${res.status}`);
 }
 
 async function createMemory(key: string, content: string): Promise<void> {
-  const res = await fetch(`/memory`, {
+  const res = await fetch(memoryUrl(`/memory`), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ key, content }),
@@ -375,7 +385,14 @@ export function MemoriesPanel() {
           }
         }}
       >
-        <DialogContent>
+        <ResizableDialogContent
+          storageKey="memory-add"
+          defaultWidth={520}
+          defaultHeight={400}
+          minWidth={380}
+          minHeight={280}
+          className="gap-4 p-6 overflow-y-auto"
+        >
           <DialogHeader>
             <DialogTitle>{m.memory_add_title()}</DialogTitle>
             <DialogDescription>{m.memory_add_desc()}</DialogDescription>
@@ -423,12 +440,16 @@ export function MemoriesPanel() {
               {m.memory_save()}
             </Button>
           </DialogFooter>
-        </DialogContent>
+        </ResizableDialogContent>
       </Dialog>
 
       {/* Dialog de confirmação — limpar tudo */}
       <Dialog open={clearConfirmOpen} onOpenChange={setClearConfirmOpen}>
-        <DialogContent>
+        <ResizableDialogContent
+          resizable={false}
+          defaultWidth={384}
+          className="gap-4 p-6"
+        >
           <DialogHeader>
             <DialogTitle>{m.memory_clear_title()}</DialogTitle>
             <DialogDescription>{m.memory_clear_desc()}</DialogDescription>
@@ -450,7 +471,7 @@ export function MemoriesPanel() {
               {m.memory_clear_all()}
             </Button>
           </DialogFooter>
-        </DialogContent>
+        </ResizableDialogContent>
       </Dialog>
     </div>
   );

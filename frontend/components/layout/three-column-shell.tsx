@@ -48,6 +48,8 @@ export interface ShellCenterColumnState {
 
 export interface ThreeColumnShellProps {
   centerHeader: ReactNode;
+  /** Cobre só o corpo da coluna central; o header e as laterais ficam livres. */
+  centerOverlay?: ReactNode;
   left: ReactNode | null;
   center: ReactNode;
   right: ReactNode | null;
@@ -64,6 +66,7 @@ export interface ThreeColumnShellProps {
 /** Stable geometry for every mode. The application header belongs only here. */
 export function ThreeColumnShell({
   centerHeader,
+  centerOverlay,
   left,
   center,
   right,
@@ -95,7 +98,7 @@ export function ThreeColumnShell({
         <main
           aria-label={columns.center?.label ?? "Conteúdo principal"}
           data-column-visibility="visible"
-          className="flex w-full flex-[1_1_0%] min-h-0 min-w-0 flex-col overflow-hidden"
+          className="relative flex w-full flex-[1_1_0%] min-h-0 min-w-0 flex-col overflow-hidden"
         >
           <div
             data-testid="shell-header-slot"
@@ -103,8 +106,9 @@ export function ThreeColumnShell({
           >
             {centerHeader}
           </div>
-          <div className="flex w-full flex-1 min-h-0 min-w-0 overflow-hidden">
+          <div className="relative flex w-full flex-1 min-h-0 min-w-0 overflow-hidden">
             {center}
+            {centerOverlay}
           </div>
         </main>
         <SideColumn

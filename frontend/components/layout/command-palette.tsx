@@ -10,11 +10,11 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import {
   Dialog,
-  DialogContent,
   DialogHeader,
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { ResizableDialogContent } from "@/components/ui/resizable-dialog";
 import { m } from "@/lib/paraglide/messages";
 // ---------------------------------------------------------------------------
 // Types
@@ -126,7 +126,14 @@ export function CommandPalette({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg p-0 gap-0 overflow-hidden">
+      <ResizableDialogContent
+        storageKey="command-palette"
+        defaultWidth={560}
+        defaultHeight={440}
+        minWidth={420}
+        minHeight={280}
+        className="p-0 gap-0 overflow-hidden"
+      >
         <DialogHeader className="sr-only">
           <DialogTitle>{m.palette_title()}</DialogTitle>
           <DialogDescription>{m.palette_description()}</DialogDescription>
@@ -243,7 +250,7 @@ export function CommandPalette({
           <span>↵ {m.palette_hint_run()}</span>
           <span>Esc {m.palette_hint_close()}</span>
         </div>
-      </DialogContent>
+      </ResizableDialogContent>
     </Dialog>
   );
 }

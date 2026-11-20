@@ -227,6 +227,36 @@ class TestMemorySharedStoreWithAgent:
         assert resp.json()["content"] == "salvo pelo agente"
 
     @pytest.mark.asyncio
+    async def test_memory_saved_in_workspace_appears_in_panel_list(
+        self, client, store, monkeypatch
+    ) -> None:
+        """Sem usuário autenticado, a tool grava sob ``workspace_<id>``; o
+        painel, ao informar o workspace ativo, precisa listar essa memória
+        (antes ficava vazio por ler o namespace ``local``)."""
+        from backend.tools.context import ToolContext
+        from backend.tools.memory import save_memory
+
+        monkeypatch.setattr("backend.tools.memory._get_store", lambda ctx: store)
+
+        await save_memory(
+            ctx=ToolContext(user_id="local", workspace_id="40af66d6"),
+            key="main_project",
+            content="projeto principal",
+        )
+
+        listed = client.get("/memory", params={"workspace_id": "40af66d6"})
+        assert [item["key"] for item in listed.json()["memories"]] == ["main_project"]
+
+        other = client.get("/memory", params={"workspace_id": "outro"})
+        assert other.json()["memories"] == []
+
+        edited = client.put(
+            "/memory/main_project?workspace_id=40af66d6",
+            json={"content": "editado"},
+        )
+        assert edited.status_code == 200
+
+    @pytest.mark.asyncio
     async def test_memory_created_via_api_is_visible_to_agent_tool(
         self, client, store, monkeypatch
     ) -> None:

@@ -37,6 +37,7 @@ import { apiCheckout, apiSync, type GitBranches, type GitStatus } from "./api";
 import type { GitOpsSnapshot } from "@/lib/stores/workbench-store";
 import { m } from "@/lib/paraglide/messages";
 import { useSettingsStore } from "@/lib/stores/settings-store";
+import { useConfirm } from "@/components/ui/use-confirm";
 
 export function GitToolbar({
   workspaceId,
@@ -59,6 +60,7 @@ export function GitToolbar({
   onChanged: () => void;
   operation?: GitOpsSnapshot | null;
 }) {
+  const { confirm, dialog } = useConfirm();
   const [creating, setCreating] = useState(false);
   const [newBranch, setNewBranch] = useState("");
   const [syncing, setSyncing] = useState(false);
@@ -111,7 +113,13 @@ export function GitToolbar({
     if (syncing || operationActive) return;
     if (force) {
       if (!gitBypassEnabled) return;
-      if (!window.confirm(m.workbench_git_force_push_warning())) return;
+      if (
+        !(await confirm({
+          message: m.workbench_git_force_push_warning(),
+          variant: "destructive",
+        }))
+      )
+        return;
     }
     setSyncing(true);
     try {
@@ -344,6 +352,7 @@ export function GitToolbar({
           </button>
         </div>
       )}
+      {dialog}
     </div>
   );
 }

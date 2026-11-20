@@ -29,6 +29,15 @@ import {
 } from "./api";
 import { useContextMenu, type ContextMenuItem } from "./git-context-menu";
 import { m } from "@/lib/paraglide/messages";
+import {
+  Dialog,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { ResizableDialogContent } from "@/components/ui/resizable-dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 const MonacoReadOnly = lazy(
   () => import("@/components/workbench/monaco-readonly"),
@@ -421,6 +430,10 @@ export function HistoryView({
   onOpenCommitDetails?: (details: GitCommitDetailsState) => void;
 }) {
   const menu = useContextMenu();
+  const [squashPrompt, setSquashPrompt] = useState<{ base: string } | null>(
+    null,
+  );
+  const [squashMessage, setSquashMessage] = useState("");
   const [data, setData] = useState<{
     branch: string;
     commits: GitLogCommit[];
@@ -601,16 +614,8 @@ export function HistoryView({
           items.push({
             label: m.workbench_git_ctx_squash_here({ n: baseIdx - idx + 1 }),
             onSelect: () => {
-              const message = window.prompt(
-                m.workbench_diff_commit_placeholder(),
-              );
-              if (!message?.trim()) return;
-              void apiSquash(workspaceId, squashBase, message.trim()).then(
-                () => {
-                  setSquashBase(null);
-                  onChanged();
-                },
-              );
+              setSquashMessage("");
+              setSquashPrompt({ base: squashBase });
             },
           });
       }
@@ -645,6 +650,57 @@ export function HistoryView({
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
       {menu.element}
+      <Dialog
+        open={squashPrompt !== null}
+        onOpenChange={(open) => !open && setSquashPrompt(null)}
+      >
+        <ResizableDialogContent
+          storageKey="git-squash"
+          defaultWidth={440}
+          defaultHeight={300}
+          minWidth={340}
+          minHeight={220}
+          className="gap-4 p-6 overflow-y-auto"
+        >
+          <DialogHeader>
+            <DialogTitle>{m.workbench_git_squash_title()}</DialogTitle>
+          </DialogHeader>
+          <form
+            className="space-y-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const message = squashMessage.trim();
+              const base = squashPrompt?.base;
+              if (!message || !base) return;
+              setSquashPrompt(null);
+              void apiSquash(workspaceId, base, message).then(() => {
+                setSquashBase(null);
+                onChanged();
+              });
+            }}
+          >
+            <Input
+              autoFocus
+              value={squashMessage}
+              placeholder={m.workbench_diff_commit_placeholder()}
+              aria-label={m.workbench_diff_commit_placeholder()}
+              onChange={(event) => setSquashMessage(event.target.value)}
+            />
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setSquashPrompt(null)}
+              >
+                {m.workbench_files_cancel()}
+              </Button>
+              <Button type="submit" disabled={!squashMessage.trim()}>
+                {m.workbench_git_squash_confirm()}
+              </Button>
+            </DialogFooter>
+          </form>
+        </ResizableDialogContent>
+      </Dialog>
       <div className="flex min-h-0 flex-1">
         <section
           className={`flex min-w-64 shrink-0 flex-col border-border/60 ${onOpenCommitDetails ? "w-full" : "w-[min(34%,21rem)] border-r"}`}
