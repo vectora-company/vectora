@@ -409,7 +409,12 @@ VULTURE_IGNORE_DECORATORS: Final = (
     "@validator,@field_validator,@model_validator,@computed_field,@tool,@hookimpl,"
     "@asynccontextmanager,@staticmethod,@classmethod,@override,@overload"
 )
-VULTURE_IGNORE_NAMES: Final = "model_config,model_post_init,lifespan"
+# ``connection_made``/``data_received``/``connection_lost`` são callbacks do
+# ``asyncio.Protocol``: o event loop os chama, nunca o nosso código.
+VULTURE_IGNORE_NAMES: Final = (
+    "model_config,model_post_init,lifespan,"
+    "connection_made,data_received,connection_lost"
+)
 
 
 def parse_vulture(output: str) -> list[str]:
