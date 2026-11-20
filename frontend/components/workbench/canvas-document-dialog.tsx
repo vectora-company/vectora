@@ -30,7 +30,7 @@ export function CanvasDocumentDialog({
         minHeight={320}
         maxWidth={1600}
         maxHeight={1200}
-        className="max-h-[85vh] max-w-[92vw] gap-0 p-0"
+        className="gap-0 p-0"
         aria-describedby={undefined}
       >
         <DialogHeader className="shrink-0 border-b border-border/60 px-4 py-3">

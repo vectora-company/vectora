@@ -2,11 +2,20 @@
 
 import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { GripHorizontal, XIcon } from "lucide-react";
+import { XIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { m } from "@/lib/paraglide/messages";
 import { useDialogSizeStore } from "@/lib/stores/dialog-size-store";
+import {
+  resizeRect,
+  type Rect,
+  type ResizeDir,
+} from "@/lib/layout/window-geometry";
+import { RESIZE_HANDLES } from "@/lib/layout/window-handles";
+
+/** Margem mantida entre o diálogo e a borda da janela do app. */
+const VIEWPORT_MARGIN = 16;
 
 interface ResizableDialogContentProps extends React.ComponentProps<
   typeof DialogPrimitive.Content
@@ -22,6 +31,37 @@ interface ResizableDialogContentProps extends React.ComponentProps<
   storageKey?: string;
 }
 
+const viewport = () => ({ w: window.innerWidth, h: window.innerHeight });
+
+function centeredRect(
+  size: { w: number; h: number },
+  limits: { minW: number; minH: number; maxW: number; maxH: number },
+): Rect {
+  const view = viewport();
+  const w = Math.min(
+    Math.max(size.w, limits.minW),
+    limits.maxW,
+    view.w - VIEWPORT_MARGIN * 2,
+  );
+  const h = Math.min(
+    Math.max(size.h, limits.minH),
+    limits.maxH,
+    view.h - VIEWPORT_MARGIN * 2,
+  );
+  return {
+    w,
+    h,
+    x: Math.round((view.w - w) / 2),
+    y: Math.round((view.h - h) / 2),
+  };
+}
+
+/**
+ * Diálogo redimensionável por qualquer borda ou canto. Ancorado no canto
+ * superior esquerdo (e não no centro), de modo que o canto arrastado segue o
+ * ponteiro; durante o gesto a geometria vai direto para o elemento, um quadro
+ * por vez, e o React só recebe o resultado ao soltar.
+ */
 export function ResizableDialogContent({
   className,
   children,
@@ -38,36 +78,98 @@ export function ResizableDialogContent({
 }: ResizableDialogContentProps) {
   const getSize = useDialogSizeStore((s) => s.getSize);
   const saveSize = useDialogSizeStore((s) => s.setSize);
-
-  const initial = storageKey
-    ? getSize(storageKey, { w: defaultWidth, h: defaultHeight })
-    : { w: defaultWidth, h: defaultHeight };
-
-  const [size, setSize] = React.useState(initial);
-  const dragging = React.useRef(false);
-  const startRef = React.useRef({ x: 0, y: 0, w: 0, h: 0 });
-
-  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    dragging.current = true;
-    startRef.current = { x: e.clientX, y: e.clientY, w: size.w, h: size.h };
-    (e.currentTarget as Element).setPointerCapture(e.pointerId);
+  const limits = {
+    minW: minWidth,
+    minH: minHeight,
+    maxW: maxWidth,
+    maxH: maxHeight,
   };
 
-  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!dragging.current) return;
-    const dx = e.clientX - startRef.current.x;
-    const dy = e.clientY - startRef.current.y;
-    setSize({
-      w: Math.min(maxWidth, Math.max(minWidth, startRef.current.w + dx)),
-      h: Math.min(maxHeight, Math.max(minHeight, startRef.current.h + dy)),
-    });
+  const [rect, setRect] = React.useState<Rect>(() =>
+    centeredRect(
+      storageKey
+        ? getSize(storageKey, { w: defaultWidth, h: defaultHeight })
+        : { w: defaultWidth, h: defaultHeight },
+      limits,
+    ),
+  );
+  const [gesturing, setGesturing] = React.useState(false);
+  const frameRef = React.useRef<HTMLDivElement>(null);
+  const liveRef = React.useRef<Rect>(rect);
+  const frameIdRef = React.useRef(0);
+
+  React.useEffect(() => () => cancelAnimationFrame(frameIdRef.current), []);
+
+  const paint = (next: Rect) => {
+    const el = frameRef.current;
+    if (!el) return;
+    el.style.left = `${next.x}px`;
+    el.style.top = `${next.y}px`;
+    el.style.width = `${next.w}px`;
+    el.style.height = `${next.h}px`;
   };
 
-  const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    dragging.current = false;
-    (e.currentTarget as Element).releasePointerCapture(e.pointerId);
-    if (storageKey) saveSize(storageKey, size);
+  const startResize = (
+    event: React.PointerEvent<HTMLElement>,
+    dir: ResizeDir,
+  ) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const target = event.currentTarget;
+    target.setPointerCapture(event.pointerId);
+    const start = { ...liveRef.current };
+    const originX = event.clientX;
+    const originY = event.clientY;
+    const view = viewport();
+    // O limite visual é a janela do app com margem; os máximos do chamador
+    // continuam valendo para não estourar um tamanho razoável.
+    const bound = {
+      w: Math.min(view.w - VIEWPORT_MARGIN, start.x + maxWidth),
+      h: Math.min(view.h - VIEWPORT_MARGIN, start.y + maxHeight),
+    };
+    setGesturing(true);
+
+    const compute = (dx: number, dy: number) => {
+      const next = resizeRect(
+        start,
+        dir,
+        dx,
+        dy,
+        { w: minWidth, h: minHeight },
+        {
+          w: Math.max(bound.w, start.x + minWidth),
+          h: Math.max(bound.h, start.y + minHeight),
+        },
+      );
+      return {
+        ...next,
+        w: Math.min(next.w, maxWidth),
+        h: Math.min(next.h, maxHeight),
+      };
+    };
+
+    const onMove = (move: PointerEvent) => {
+      const next = compute(move.clientX - originX, move.clientY - originY);
+      liveRef.current = next;
+      cancelAnimationFrame(frameIdRef.current);
+      frameIdRef.current = requestAnimationFrame(() => paint(next));
+    };
+
+    const finish = () => {
+      target.removeEventListener("pointermove", onMove);
+      target.removeEventListener("pointerup", finish);
+      target.removeEventListener("pointercancel", finish);
+      cancelAnimationFrame(frameIdRef.current);
+      const final = liveRef.current;
+      paint(final);
+      setRect(final);
+      setGesturing(false);
+      if (storageKey) saveSize(storageKey, { w: final.w, h: final.h });
+    };
+
+    target.addEventListener("pointermove", onMove);
+    target.addEventListener("pointerup", finish);
+    target.addEventListener("pointercancel", finish);
   };
 
   return (
@@ -76,13 +178,20 @@ export function ResizableDialogContent({
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
-          "fixed top-[50%] left-[50%] z-50 -translate-x-1/2 -translate-y-1/2",
-          "flex flex-col rounded-lg border shadow-lg duration-200 overflow-hidden",
+          "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+          "fixed z-50",
+          "flex flex-col rounded-lg border shadow-lg duration-150 overflow-hidden",
           className,
         )}
-        style={{ width: size.w, height: size.h, ...style }}
+        style={{
+          left: rect.x,
+          top: rect.y,
+          width: rect.w,
+          height: rect.h,
+          ...style,
+        }}
         {...props}
+        ref={frameRef}
       >
         {children}
 
@@ -93,17 +202,25 @@ export function ResizableDialogContent({
           </DialogPrimitive.Close>
         )}
 
-        <div
-          role="separator"
-          aria-label={m.dialog_resize()}
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          onPointerCancel={onPointerUp}
-          className="absolute bottom-0 right-0 w-5 h-5 cursor-se-resize flex items-center justify-center text-muted-foreground/40 hover:text-muted-foreground/70 transition-colors select-none"
-        >
-          <GripHorizontal className="w-3 h-3 rotate-45" />
-        </div>
+        {gesturing && (
+          <div
+            data-testid="dialog-gesture-shield"
+            className="absolute inset-0 z-10"
+          />
+        )}
+
+        {RESIZE_HANDLES.map(({ dir, className: handleClass }) => (
+          <div
+            key={dir}
+            role="separator"
+            aria-label={
+              dir === "se" ? m.dialog_resize() : `${m.dialog_resize()} (${dir})`
+            }
+            data-testid={`dialog-resize-${dir}`}
+            onPointerDown={(event) => startResize(event, dir)}
+            className={cn("absolute z-20 touch-none select-none", handleClass)}
+          />
+        ))}
       </DialogPrimitive.Content>
     </DialogPrimitive.Portal>
   );

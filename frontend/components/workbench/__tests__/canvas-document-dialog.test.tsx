@@ -21,6 +21,9 @@ describe("CanvasDocumentDialog", () => {
   afterEach(cleanup);
 
   it("permite redimensionar e persiste o tamanho do documento", () => {
+    // O diálogo nunca passa da janela do app; o jsdom tem só 1024x768.
+    vi.stubGlobal("innerWidth", 1920);
+    vi.stubGlobal("innerHeight", 1080);
     render(
       <CanvasDocumentDialog open onOpenChange={vi.fn()} title="AGENTS.md">
         Conteúdo

@@ -57,6 +57,31 @@ function drag(dx: number, dy: number) {
   fireEvent.pointerUp(handle, { pointerId: 1 });
 }
 
+/** Arrasta uma alça pelo data-testid, com coordenadas reais. */
+function dragHandle(
+  dir: string,
+  from: [number, number],
+  to: [number, number],
+  release = true,
+) {
+  const handle = screen.getByTestId(`dialog-resize-${dir}`);
+  Object.assign(handle, {
+    setPointerCapture: vi.fn(),
+    releasePointerCapture: vi.fn(),
+  });
+  fireEvent.pointerDown(handle, {
+    clientX: from[0],
+    clientY: from[1],
+    pointerId: 1,
+  });
+  fireEvent.pointerMove(handle, {
+    clientX: to[0],
+    clientY: to[1],
+    pointerId: 1,
+  });
+  if (release) fireEvent.pointerUp(handle, { pointerId: 1 });
+}
+
 beforeEach(() => {
   useDialogSizeStore.setState({ sizes: {} });
   window.localStorage.clear();
@@ -133,5 +158,56 @@ describe("ResizableDialogContent", () => {
     renderDialog();
 
     expect(screen.getByText("Fechar").closest("button")).toBeTruthy();
+  });
+
+  it("é ancorado no canto: arrastar a borda de baixo muda só a altura", () => {
+    renderDialog();
+    const before = { left: content().style.left, top: content().style.top };
+
+    dragHandle("s", [0, 0], [0, 60]);
+
+    expect(content().style.height).toBe("460px");
+    expect(content().style.width).toBe("500px");
+    expect(content().style.left).toBe(before.left);
+    expect(content().style.top).toBe(before.top);
+  });
+
+  it("arrastar o canto superior esquerdo move a origem e mantém o canto oposto", () => {
+    renderDialog();
+    const left = parseFloat(content().style.left);
+    const top = parseFloat(content().style.top);
+
+    dragHandle("nw", [0, 0], [-40, -30]);
+
+    expect(content().style.left).toBe(`${left - 40}px`);
+    expect(content().style.top).toBe(`${top - 30}px`);
+    expect(content().style.width).toBe("540px");
+    expect(content().style.height).toBe("430px");
+  });
+
+  it("não passa dos limites da janela do app", () => {
+    renderDialog();
+
+    drag(9999, 9999);
+
+    expect(parseFloat(content().style.width)).toBeLessThanOrEqual(
+      window.innerWidth,
+    );
+    expect(parseFloat(content().style.height)).toBeLessThanOrEqual(
+      window.innerHeight,
+    );
+  });
+
+  it("um escudo cobre o conteúdo só durante o gesto", () => {
+    renderDialog();
+    expect(screen.queryByTestId("dialog-gesture-shield")).toBeNull();
+
+    dragHandle("e", [0, 0], [10, 0], false);
+    expect(screen.getByTestId("dialog-gesture-shield")).toBeTruthy();
+
+    fireEvent.pointerUp(screen.getByTestId("dialog-resize-e"), {
+      pointerId: 1,
+    });
+    expect(screen.queryByTestId("dialog-gesture-shield")).toBeNull();
   });
 });
