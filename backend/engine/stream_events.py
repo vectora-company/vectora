@@ -33,6 +33,29 @@ class MessageChunk:
 
 
 @dataclass(frozen=True, slots=True)
+class ReasoningChunk:
+    """Fragmento do raciocínio que o provider devolveu (texto do próprio modelo)."""
+
+    content: str
+
+
+@dataclass(frozen=True, slots=True)
+class SteerApplied:
+    """Orientação do usuário que o agente passou a seguir no meio do turno."""
+
+    content: str
+
+
+@dataclass(frozen=True, slots=True)
+class VerificationFinished:
+    """Resultado da verificação pós-execução, mostrado no rodapé do turno."""
+
+    status: str
+    outcome: str
+    detail: str
+
+
+@dataclass(frozen=True, slots=True)
 class MessageBreak:
     """Sinaliza quebra de bolha — sem payload, mesmo shape vazio de
     `MessageBreakEvent`."""
@@ -216,6 +239,9 @@ class Done:
 EngineEvent = (
     ThreadStarted
     | MessageChunk
+    | ReasoningChunk
+    | VerificationFinished
+    | SteerApplied
     | MessageBreak
     | ToolCallStarted
     | ToolResult

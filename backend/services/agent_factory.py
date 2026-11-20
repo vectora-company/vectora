@@ -50,6 +50,7 @@ Dispatch de produção:
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -67,7 +68,11 @@ if TYPE_CHECKING:
     from backend.engine.subagents import SubagentSpec
     from backend.persistence.native.session_store import SessionStore
     from backend.tools.registry import ToolSpec
-    from backend.vtypes.history import ThreadHistoryEntry
+    from backend.vtypes.history import (
+        HistoryPart,
+        HistoryVerification,
+        ThreadHistoryEntry,
+    )
     from backend.vtypes.message import VMessage
 from backend.tools.registry import ToolRegistry
 from backend.workspace.skills import list_skill_paths
@@ -897,6 +902,8 @@ async def aget_thread_messages(
 def _history_pairs_from_messages(
     thread_id: str,
     pares: list[tuple[int, VMessage]],
+    *,
+    keep_tool_only: bool = False,
 ) -> list[tuple[str, str, str, list[dict[str, Any]]]]:
     """Converte um snapshot de mensagens em pares de histórico.
 
@@ -963,10 +970,103 @@ def _history_pairs_from_messages(
             if block.kind == "media"
         )
         text = msg.text().strip()
-        if not text and not attachments:
+        has_parts = keep_tool_only and bool(msg.tool_calls)
+        if not text and not attachments and not has_parts:
             continue
         out.append((role, text, str(msg_id), attachments))
     return out
+
+
+async def _history_verifications(
+    store: SessionStore, thread_id: str
+) -> dict[str, HistoryVerification]:
+    """Desfecho da verificação de cada turno, na última resposta do assistente."""
+    from backend.vtypes.history import HistoryVerification
+
+    try:
+        runs = await store.list_agent_runs(thread_id, limit=200)
+    except Exception:
+        logger.warning("history: falha ao ler as execuções de %s", thread_id)
+        return {}
+    by_message: dict[str, HistoryVerification] = {}
+    for run in runs:
+        entries = [
+            item
+            for item in run.evidence
+            if isinstance(item, dict)
+            and item.get("kind") == "quality_gate_verification"
+            and "step_id" not in item
+        ]
+        if not entries:
+            continue
+        last = entries[-1]
+        message_id = await store.latest_assistant_message_id(thread_id, run.run_id)
+        if message_id is None:
+            continue
+        by_message[str(message_id)] = HistoryVerification(
+            status=str(last.get("status", "")),
+            outcome=str(last.get("outcome", "")),
+            detail=run.detail or "",
+        )
+    return by_message
+
+
+def _history_parts(
+    history: list[tuple[int, VMessage]],
+) -> dict[str, list[HistoryPart]]:
+    """Raciocínio e tool calls de cada mensagem do assistente, por id.
+
+    Os resultados vêm das mensagens TOOL que respondem a cada chamada e saem
+    cortados em ``RESULT_PREVIEW_CHARS`` para o histórico não carregar saídas
+    enormes.
+    """
+    from backend.tools.registry import TOOL_REGISTRY
+    from backend.vtypes.history import (
+        RESULT_PREVIEW_CHARS,
+        HistoryReasoningPart,
+        HistoryToolCallPart,
+    )
+    from backend.vtypes.message import MessageRole
+
+    results = {
+        message.tool_call_id: message
+        for _id, message in history
+        if message.role is MessageRole.TOOL and message.tool_call_id
+    }
+    parts_by_id: dict[str, list[HistoryPart]] = {}
+    for message_id, message in history:
+        if message.role is not MessageRole.ASSISTANT:
+            continue
+        parts: list[HistoryPart] = []
+        reasoning = "".join(
+            block.reasoning_text or ""
+            for block in message.content
+            if block.kind == "reasoning"
+        )
+        if reasoning:
+            parts.append(HistoryReasoningPart(text=reasoning))
+        for call in message.tool_calls:
+            spec = TOOL_REGISTRY.get(call.name)
+            result = results.get(call.id)
+            extras = spec.extras if spec is not None else None
+            parts.append(
+                HistoryToolCallPart(
+                    tool_call_id=call.id,
+                    tool_name=call.name,
+                    args_json=json.dumps(call.args, ensure_ascii=False),
+                    render_hint=extras.render_hint if extras else "json",
+                    category=extras.category if extras else "general",
+                    destructive=extras.destructive if extras else False,
+                    icon=extras.icon if extras else "tool",
+                    result_json=(
+                        result.text()[:RESULT_PREVIEW_CHARS] if result else None
+                    ),
+                    is_error=(result.is_error if result else None),
+                )
+            )
+        if parts:
+            parts_by_id[str(message_id)] = parts
+    return parts_by_id
 
 
 async def aget_thread_messages_with_files(
@@ -1002,7 +1102,12 @@ async def aget_thread_messages_with_files(
         for message_id, message in history_snapshot
     }
 
-    pairs = _history_pairs_from_messages(thread_id, history_snapshot)
+    parts_by_id = _history_parts(history_snapshot)
+    verification_by_id = await _history_verifications(store, thread_id)
+
+    pairs = _history_pairs_from_messages(
+        thread_id, history_snapshot, keep_tool_only=True
+    )
     return [
         ThreadHistoryEntry(
             role=cast("Literal['human', 'assistant']", item[0]),
@@ -1010,6 +1115,8 @@ async def aget_thread_messages_with_files(
             checkpoint_id=item[2],
             message_id=int(item[2]) if item[2].isdigit() else None,
             is_error=error_by_id.get(item[2]),
+            parts=parts_by_id.get(item[2], []),
+            verification=verification_by_id.get(item[2]),
             attachments=item[3],
             edited_files=files_for_checkpoint(item[2]),
         )

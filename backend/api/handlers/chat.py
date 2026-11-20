@@ -82,6 +82,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+class SteerRunRequest(BaseModel):
+    thread_id: str
+    text: str
+
+
 class CancelRunRequest(BaseModel):
     thread_id: str = Field(min_length=1, max_length=200)
 
@@ -904,6 +909,7 @@ async def stream_chat(
         "workspace_id": workspace_id or None,
         "context_max_tokens": request.config.context_max_tokens,
         "context_compaction_enabled": request.config.context_compaction_enabled,
+        "reasoning_effort": request.config.reasoning_effort or None,
     }
     try:
         session_store = await agent_factory.get_session_store()
@@ -1103,6 +1109,7 @@ async def stream_chat(
             max_iterations=request.config.recursion_limit or 50,
             context_max_tokens=request.config.context_max_tokens,
             context_compaction_enabled=request.config.context_compaction_enabled,
+            reasoning_effort=request.config.reasoning_effort or None,
             run_id=run_id,
         )
         if native_agent.subagent_catalog:
@@ -1221,6 +1228,24 @@ async def cancel_run(
 
     cancelled = cancel_active_runs(request.thread_id)
     return {"cancelled": cancelled > 0, "cancelled_runs": cancelled}
+
+
+@router.post("/vectora.chat.v1.ChatService/SteerRun")
+async def steer_run(request: SteerRunRequest, http_request: Request) -> dict[str, bool]:
+    """Entrega uma orientação ao run ativo da conversa sem interrompê-lo.
+
+    ``queued`` é falso quando não há run ativo (o cliente envia como mensagem
+    normal) ou a orientação não pôde ser enfileirada.
+    """
+    from backend.api.handlers.threads import _assert_owns_thread
+
+    await _assert_owns_thread(request.thread_id, http_request, require_existing=True)
+    from backend.api.native_stream import has_active_run
+    from backend.engine.steering import push_steer
+
+    if not has_active_run(request.thread_id):
+        return {"queued": False, "active": False}
+    return {"queued": push_steer(request.thread_id, request.text), "active": True}
 
 
 @router.post("/vectora.chat.v1.ChatService/ResumeStream")
@@ -1443,6 +1468,7 @@ async def resume_chat(
                 if request.context_compaction_enabled is not None
                 else selector_compaction_enabled
             ),
+            reasoning_effort=selector.get("reasoning_effort"),
             run_id=run_id,
         )
         if native_agent.subagent_catalog:

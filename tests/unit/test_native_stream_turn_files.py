@@ -11,33 +11,33 @@ from backend.api import native_stream
 
 
 @pytest.mark.asyncio
-async def test_varredura_lenta_e_abandonada_no_prazo(monkeypatch) -> None:
+async def test_slow_scan_is_abandoned_at_deadline(monkeypatch) -> None:
     monkeypatch.setattr(native_stream, "_TURN_FILES_TIMEOUT_SECONDS", 0.05)
 
-    def lenta(_snapshot):
+    def slow_scan(_snapshot):
         time.sleep(0.3)
         return ["a.py"]
 
-    inicio = time.monotonic()
-    resultado = await native_stream._finalize_turn_files(lenta, object())
+    started_at = time.monotonic()
+    result = await native_stream._finalize_turn_files(slow_scan, object())
 
-    assert resultado == []
-    assert time.monotonic() - inicio < 0.25
-
-
-@pytest.mark.asyncio
-async def test_varredura_rapida_devolve_as_mudancas() -> None:
-    resultado = await native_stream._finalize_turn_files(lambda _s: ["a.py"], object())
-    assert resultado == ["a.py"]
+    assert result == []
+    assert time.monotonic() - started_at < 0.25
 
 
 @pytest.mark.asyncio
-async def test_persistencia_dos_arquivos_roda_em_segundo_plano(monkeypatch) -> None:
-    chamado = asyncio.Event()
+async def test_fast_scan_returns_changes() -> None:
+    result = await native_stream._finalize_turn_files(lambda _s: ["a.py"], object())
+    assert result == ["a.py"]
+
+
+@pytest.mark.asyncio
+async def test_file_persistence_runs_in_background(monkeypatch) -> None:
+    called = asyncio.Event()
 
     class _Store:
         async def attach_edited_files(self, thread_id, run_id, files) -> None:
-            chamado.set()
+            called.set()
 
     async def _get_store():
         return _Store()
@@ -46,18 +46,18 @@ async def test_persistencia_dos_arquivos_roda_em_segundo_plano(monkeypatch) -> N
 
     native_stream._schedule_attach_edited_files("t", "r", [{"path": "a.py"}])
 
-    await asyncio.wait_for(chamado.wait(), timeout=1)
+    await asyncio.wait_for(called.wait(), timeout=1)
 
 
 @pytest.mark.asyncio
-async def test_finalize_and_attach_devolve_a_lista_e_agenda_a_persistencia(
+async def test_finalize_and_attach_returns_list_and_schedules_persistence(
     monkeypatch,
 ) -> None:
-    agendados: list[tuple] = []
+    scheduled: list[tuple] = []
     monkeypatch.setattr(
         native_stream,
         "_schedule_attach_edited_files",
-        lambda *args: agendados.append(args),
+        lambda *args: scheduled.append(args),
     )
 
     payload = await native_stream._finalize_and_attach(
@@ -69,16 +69,18 @@ async def test_finalize_and_attach_devolve_a_lista_e_agenda_a_persistencia(
     )
 
     assert payload == [{"path": "a.py"}]
-    assert agendados == [("t1", "r1", [{"path": "a.py"}])]
+    assert scheduled == [("t1", "r1", [{"path": "a.py"}])]
 
 
 @pytest.mark.asyncio
-async def test_finalize_and_attach_sem_mudancas_nao_persiste(monkeypatch) -> None:
-    agendados: list[tuple] = []
+async def test_finalize_and_attach_without_changes_does_not_persist(
+    monkeypatch,
+) -> None:
+    scheduled: list[tuple] = []
     monkeypatch.setattr(
         native_stream,
         "_schedule_attach_edited_files",
-        lambda *args: agendados.append(args),
+        lambda *args: scheduled.append(args),
     )
 
     payload = await native_stream._finalize_and_attach(
@@ -86,4 +88,4 @@ async def test_finalize_and_attach_sem_mudancas_nao_persiste(monkeypatch) -> Non
     )
 
     assert payload == []
-    assert agendados == []
+    assert scheduled == []

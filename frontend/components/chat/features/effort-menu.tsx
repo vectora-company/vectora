@@ -21,7 +21,7 @@ import {
   useSettingsStore,
   REASONING_EFFORTS,
 } from "@/lib/stores/settings-store";
-import { m as msg } from "@/lib/paraglide/messages";
+import { m } from "@/lib/paraglide/messages";
 import { mDyn } from "@/lib/i18n-dyn";
 
 export function EffortMenu({ compact = false }: { compact?: boolean }) {
@@ -34,8 +34,8 @@ export function EffortMenu({ compact = false }: { compact?: boolean }) {
       <PopoverTrigger asChild>
         <button
           className={`flex min-w-0 max-w-full shrink items-center rounded-md text-xs leading-4 font-medium text-muted-foreground transition-colors select-none ${compact ? "h-7 w-full min-w-0 gap-0.5 px-1" : "gap-1.5 px-2.5 py-1.5"}`}
-          title={msg.effort_title()}
-          aria-label={`${msg.effort_title()}: ${mDyn(`effort.${effort}`)}`}
+          title={m.effort_title()}
+          aria-label={`${m.effort_title()}: ${mDyn(`effort.${effort}`)}`}
           aria-expanded={open}
         >
           <span
@@ -55,7 +55,7 @@ export function EffortMenu({ compact = false }: { compact?: boolean }) {
         className="z-50 w-32 rounded-lg border border-border bg-background shadow-xl p-0 py-1"
       >
         <div className="px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          {msg.effort_title()}
+          {m.effort_title()}
         </div>
         {REASONING_EFFORTS.map((e) => (
           <button

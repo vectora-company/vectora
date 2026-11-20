@@ -103,6 +103,9 @@ export type StreamEvent =
       run_id?: string;
     }
   | { type: "token"; content: string; node?: string }
+  | { type: "reasoning"; content: string }
+  | { type: "steer_applied"; content: string }
+  | { type: "verification"; status: string; outcome: string; detail?: string }
   | {
       type: "tool_call";
       tool_name: string;
@@ -312,6 +315,22 @@ export interface HistoryEditedFile {
   hunks: Array<{ header: string; lines: string[] }>;
 }
 
+export type HistoryPart =
+  | { kind: "reasoning"; text: string }
+  | {
+      kind: "tool_call";
+      tool_call_id: string;
+      tool_name: string;
+      args_json: string;
+      render_hint?: string;
+      category?: string;
+      destructive?: boolean;
+      icon?: string;
+      /** Resultado cortado pelo backend; ausente se a tool não terminou. */
+      result_json?: string | null;
+      is_error?: boolean | null;
+    };
+
 export interface HistoryMessage {
   role: "human" | "assistant";
   content: string;
@@ -324,6 +343,10 @@ export interface HistoryMessage {
   checkpoint_id?: string;
   attachments?: HistoryAttachment[];
   edited_files?: HistoryEditedFile[];
+  /** Raciocínio e tool calls da mensagem, na ordem em que o stream os mostrou. */
+  parts?: HistoryPart[];
+  /** Desfecho da verificação do turno que gerou esta resposta. */
+  verification?: { status: string; outcome: string; detail?: string };
   /** Falha persistida; `null` é estado desconhecido e não marca erro. */
   is_error?: boolean | null;
 }
@@ -387,6 +410,29 @@ function redirectToLogin(): void {
 // ============================================================================
 
 /** Explicitly stop the server-side run before closing its SSE connection. */
+/** Entrega uma orientação ao run ativo sem interrompê-lo. `queued` é falso
+ * quando não há run ativo (envie como mensagem normal) ou a fila está cheia. */
+export async function steerRun(
+  threadId: string,
+  text: string,
+): Promise<{ queued: boolean; active: boolean }> {
+  const deviceId = getDeviceId();
+  const res = await fetch(
+    `${VECTORA_API_URL}/vectora.chat.v1.ChatService/SteerRun`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(deviceId ? { "X-Vectora-Device-Id": deviceId } : {}),
+      },
+      credentials: "include",
+      body: JSON.stringify({ thread_id: threadId, text }),
+    },
+  );
+  if (!res.ok) return { queued: false, active: false };
+  return (await res.json()) as { queued: boolean; active: boolean };
+}
+
 export async function cancelRun(threadId: string): Promise<boolean> {
   const url = `${VECTORA_API_URL}/vectora.chat.v1.ChatService/CancelRun`;
   const doFetch = () => {

@@ -23,6 +23,7 @@ from backend.services.media_types import (
     max_bytes_for,
 )
 from backend.vtypes.contracts import ToolOption
+from backend.vtypes.history import HistoryPart, HistoryVerification
 from backend.vtypes.permission import PermissionMode
 
 # ---------------------------------------------------------------------------
@@ -271,6 +272,26 @@ class DiffHunk(BaseModel):
 class TokenEvent(BaseModel):
     content: str
     node: str = ""
+
+
+class ReasoningEvent(BaseModel):
+    """Fragmento de raciocínio do modelo, mostrado recolhido no chat."""
+
+    content: str
+
+
+class SteerAppliedEvent(BaseModel):
+    """Orientação enviada durante o turno que o agente já está seguindo."""
+
+    content: str
+
+
+class VerificationEvent(BaseModel):
+    """Desfecho da verificação do turno: passed, degraded ou failed."""
+
+    status: str
+    outcome: str
+    detail: str = ""
 
 
 class ToolCallEvent(BaseModel):
@@ -531,6 +552,9 @@ class TodosUpdatedEvent(BaseModel):
 StreamChatEventPayload = (
     ThreadEvent
     | TokenEvent
+    | ReasoningEvent
+    | VerificationEvent
+    | SteerAppliedEvent
     | ToolCallEvent
     | ToolResultEvent
     | NodeEvent
@@ -554,6 +578,9 @@ StreamChatEventPayload = (
 _TYPE_MAP: dict[type, str] = {
     ThreadEvent: "thread",
     TokenEvent: "token",
+    ReasoningEvent: "reasoning",
+    VerificationEvent: "verification",
+    SteerAppliedEvent: "steer_applied",
     ToolCallEvent: "tool_call",
     ToolResultEvent: "tool_result",
     NodeEvent: "node",
@@ -637,6 +664,11 @@ class HistoryMessage(BaseModel):
     checkpoint_id: str = ""
     attachments: list[dict[str, Any]] = Field(default_factory=list)
     edited_files: list[TurnFileChange] = Field(default_factory=list)
+    # Raciocínio e tool calls (com resultado resumido) desta mensagem, na ordem
+    # em que o stream os mostrou; o recarregamento reconstrói a mesma tela.
+    parts: list[HistoryPart] = Field(default_factory=list)
+    # Desfecho da verificação do turno, na última resposta dele.
+    verification: HistoryVerification | None = None
 
 
 class ListThreadsResponse(BaseModel):
@@ -690,6 +722,7 @@ class ThreadUsageResponse(BaseModel):
     output_tokens: int = 0
     total_tokens: int = 0
     cached_input_tokens: int = 0
+    cache_write_tokens: int = 0
     runs: int = 0
     model: str = ""
     context_window: int | None = None

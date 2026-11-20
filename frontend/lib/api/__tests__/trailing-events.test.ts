@@ -2,67 +2,67 @@ import { describe, expect, it } from "vitest";
 
 import { withTrailingEvents, type StreamEvent } from "../vectora-client";
 
-function evento(type: string, extra: Record<string, unknown> = {}) {
+function makeEvent(type: string, extra: Record<string, unknown> = {}) {
   return { type, ...extra } as unknown as StreamEvent;
 }
 
-async function* fonte(
-  eventos: StreamEvent[],
-  atrasoFinalMs = 0,
+async function* source(
+  events: StreamEvent[],
+  finalDelayMs = 0,
 ): AsyncGenerator<StreamEvent> {
-  for (const e of eventos.slice(0, -1)) yield e;
-  if (atrasoFinalMs) await new Promise((r) => setTimeout(r, atrasoFinalMs));
-  yield eventos[eventos.length - 1];
+  for (const e of events.slice(0, -1)) yield e;
+  if (finalDelayMs) await new Promise((r) => setTimeout(r, finalDelayMs));
+  yield events[events.length - 1];
 }
 
 describe("withTrailingEvents", () => {
   it("entrega o done na hora e segue lendo só os arquivos do turno", async () => {
-    const recebidos: string[] = [];
+    const received: string[] = [];
     const trailing: StreamEvent[] = [];
-    const eventos = [
-      evento("token"),
-      evento("done"),
-      evento("token"),
-      evento("turn_files_changed", { run_id: "r1", files: [] }),
+    const events = [
+      makeEvent("token"),
+      makeEvent("done"),
+      makeEvent("token"),
+      makeEvent("turn_files_changed", { run_id: "r1", files: [] }),
     ];
-    const lidos: string[] = [];
-    for await (const e of withTrailingEvents(fonte(eventos, 20), (t) => {
+    const read: string[] = [];
+    for await (const e of withTrailingEvents(source(events, 20), (t) => {
       trailing.push(t);
     })) {
-      lidos.push(e.type);
-      recebidos.push(e.type);
+      read.push(e.type);
+      received.push(e.type);
       if (e.type === "done") break;
     }
 
-    expect(recebidos).toEqual(["token", "done"]);
+    expect(received).toEqual(["token", "done"]);
     await new Promise((r) => setTimeout(r, 100));
     expect(trailing.map((t) => t.type)).toEqual(["turn_files_changed"]);
   });
 
   it("sem done encerra a fonte quando o consumidor sai", async () => {
-    let fechada = false;
-    async function* origem(): AsyncGenerator<StreamEvent> {
+    let closed = false;
+    async function* upstream(): AsyncGenerator<StreamEvent> {
       try {
-        yield evento("token");
-        yield evento("token");
+        yield makeEvent("token");
+        yield makeEvent("token");
       } finally {
-        fechada = true;
+        closed = true;
       }
     }
-    const leitor = withTrailingEvents(origem(), () => {});
-    await leitor.next();
-    await leitor.return(undefined);
-    expect(fechada).toBe(true);
+    const reader = withTrailingEvents(upstream(), () => {});
+    await reader.next();
+    await reader.return(undefined);
+    expect(closed).toBe(true);
   });
 
   it("desiste da espera pela lista quando passa do prazo", async () => {
     const trailing: StreamEvent[] = [];
-    const eventos = [
-      evento("done"),
-      evento("turn_files_changed", { run_id: "r1", files: [] }),
+    const events = [
+      makeEvent("done"),
+      makeEvent("turn_files_changed", { run_id: "r1", files: [] }),
     ];
     for await (const e of withTrailingEvents(
-      fonte(eventos, 200),
+      source(events, 200),
       (t) => {
         trailing.push(t);
       },

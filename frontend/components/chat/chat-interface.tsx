@@ -31,6 +31,7 @@ import {
   getThread,
   markThreadRead,
   cancelRun,
+  steerRun,
   type HistoryMessage,
   type PagedHistoryResponse,
 } from "@/lib/api/vectora-client";
@@ -74,7 +75,7 @@ const VOICE_LANG: Record<Lang, string> = {
 };
 
 import { LARGE_PASTE_THRESHOLD } from "@/lib/constants/features";
-import { m as msg } from "@/lib/paraglide/messages";
+import { m } from "@/lib/paraglide/messages";
 import { mDyn } from "@/lib/i18n-dyn";
 import { captureScreenshotAttachment } from "@/lib/utils/screenshot-capture";
 import { classifySmartPaste } from "@/lib/utils/chat/smart-paste";
@@ -280,7 +281,9 @@ export function ChatInterface({
   // Barra de uso de contexto: estima tokens e deriva pct de uso.
   // Aviso (toast) em 80% e bloqueio de send em 95%.
   const contextTokens = estimateTokens(
-    messages.map((m) => (typeof m.content === "string" ? m.content : "")),
+    messages.map((item) =>
+      typeof item.content === "string" ? item.content : "",
+    ),
   );
   const contextWindowSize = getContextWindow(
     (agentConfig?.model ?? "") as ModelOption,
@@ -581,7 +584,7 @@ export function ChatInterface({
       }
       useToastStore
         .getState()
-        .warning(msg.chat_model_switched({ from: fromModel, to: toModel }));
+        .warning(m.chat_model_switched({ from: fromModel, to: toModel }));
     },
   });
 
@@ -706,7 +709,7 @@ export function ChatInterface({
       if (consumeInterruptedFlag(currentThreadId)) {
         // `translate` (não o `t` do useT()) — evita acrescentar dependência
         // de hook a este efeito só por causa de um toast condicional.
-        useToastStore.getState().warning(msg.chat_stream_interrupted());
+        useToastStore.getState().warning(m.chat_stream_interrupted());
       }
 
       try {
@@ -772,7 +775,26 @@ export function ChatInterface({
           .map((hist, idx) =>
             historyMessageToMessage(hist, `history-${currentThreadId}-${idx}`),
           )
-          .filter((message) => message.content.trim().length > 0);
+          .filter(
+            (message) =>
+              message.content.trim().length > 0 ||
+              (message.toolCalls?.length ?? 0) > 0 ||
+              Boolean(message.reasoning),
+          );
+
+        // O plano (write_todos) é do turno mais recente: vira bloco na última
+        // resposta do assistente, como no stream.
+        if (historyTodos?.length) {
+          const lastAssistant = convertedMessages.findLastIndex(
+            (message) => message.role === "assistant",
+          );
+          if (lastAssistant >= 0) {
+            convertedMessages[lastAssistant] = {
+              ...convertedMessages[lastAssistant],
+              plan: historyTodos,
+            };
+          }
+        }
 
         console.log(
           `SUCCESS: Loaded ${convertedMessages.length} messages from thread history`,
@@ -1007,7 +1029,9 @@ export function ChatInterface({
           // Título atribuído pela IA, uma única vez (no 1º turno) — não muda a
           // cada nova mensagem. `customTitle` (renomeação manual) tem
           // precedência. Para turnos seguintes não reescrevemos o título.
-          const isFirstExchange = !messages.some((m) => m.role === "assistant");
+          const isFirstExchange = !messages.some(
+            (item) => item.role === "assistant",
+          );
           if (customTitle) {
             onThreadUpdate(
               threadId,
@@ -1051,7 +1075,10 @@ export function ChatInterface({
 
         // Só define título no 1º turno (sem resposta da IA, usa o provisório);
         // turnos seguintes não reescrevem o título já atribuído.
-        if (onThreadUpdate && !messages.some((m) => m.role === "assistant")) {
+        if (
+          onThreadUpdate &&
+          !messages.some((item) => item.role === "assistant")
+        ) {
           const messageCount = messages.length + 2;
           onThreadUpdate(
             threadId,
@@ -1161,7 +1188,7 @@ export function ChatInterface({
         .catch((error) => {
           const errText =
             error instanceof Error ? error.message : String(error);
-          useToastStore.getState().error(msg.chat_auto_send_failed(), {
+          useToastStore.getState().error(m.chat_auto_send_failed(), {
             description: errText,
           });
           onInitialMessageSent?.(); // Clear URL param even on error to prevent retry loops
@@ -1210,9 +1237,9 @@ export function ChatInterface({
     async (content: string): Promise<string> => {
       const mentionRegex = /@([^\s@]+)/g;
       const paths: string[] = [];
-      let m: RegExpExecArray | null;
-      while ((m = mentionRegex.exec(content)) !== null) {
-        paths.push(m[1]);
+      let mention: RegExpExecArray | null;
+      while ((mention = mentionRegex.exec(content)) !== null) {
+        paths.push(mention[1]);
       }
       if (paths.length === 0) return content;
 
@@ -1396,6 +1423,28 @@ export function ChatInterface({
     [handleStop, syncQueueDisplay, uiState.isLoading, uiState.isRegenerating],
   );
 
+  const handleSteerQueued = useCallback(
+    (messageId: string) => {
+      const item = queuedMessagesDisplay.find(
+        (entry) => entry.id === messageId,
+      );
+      if (!item) return;
+      void steerRun(threadId, item.content)
+        .then((result) => {
+          // O servidor aceitou: o item sai da fila e a nota aparece quando o
+          // agente a aplicar. Sem run ativo ou com a fila cheia, o item
+          // continua na fila e segue o fluxo normal.
+          if (result.queued && queueRef.current.remove(messageId)) {
+            syncQueueDisplay();
+          }
+        })
+        .catch((error: unknown) => {
+          console.error("Failed to steer the active run:", error);
+        });
+    },
+    [queuedMessagesDisplay, syncQueueDisplay, threadId],
+  );
+
   const handleRemoveQueued = useCallback(
     (messageId: string) => {
       if (queueRef.current.remove(messageId)) syncQueueDisplay();
@@ -1423,11 +1472,11 @@ export function ChatInterface({
 
     const lastUserMessage = messages
       .toReversed()
-      .find((m) => m.role === "user");
+      .find((item) => item.role === "user");
     if (!lastUserMessage) return;
 
     const lastUserIndex = messages.findIndex(
-      (m) => m.id === lastUserMessage.id,
+      (item) => item.id === lastUserMessage.id,
     );
     const messagesUpToLastUser = messages.slice(0, lastUserIndex + 1);
     // A resposta descartada (mensagem logo após a última do usuário) carrega
@@ -1449,7 +1498,7 @@ export function ChatInterface({
 
       if (onThreadUpdate && assistantContent) {
         const firstUserMsg = messagesUpToLastUser.find(
-          (m) => m.role === "user",
+          (item) => item.role === "user",
         );
         const title =
           customTitle ||
@@ -1498,7 +1547,7 @@ export function ChatInterface({
 
       if (uiState.isLoading || uiState.isRegenerating) return;
 
-      const messageIndex = messages.findIndex((m) => m.id === messageId);
+      const messageIndex = messages.findIndex((item) => item.id === messageId);
       if (messageIndex === -1) return;
 
       const messagesUpToEdit = messages.slice(0, messageIndex);
@@ -1530,7 +1579,8 @@ export function ChatInterface({
 
         if (onThreadUpdate && assistantContent) {
           const firstUserMsg =
-            messagesUpToEdit.find((m) => m.role === "user") || updatedMessage;
+            messagesUpToEdit.find((item) => item.role === "user") ||
+            updatedMessage;
           const title =
             customTitle ||
             truncate(firstUserMsg.content, 60) ||
@@ -1602,7 +1652,7 @@ export function ChatInterface({
     const capture = window.vectora?.captureScreenshot;
     if (!capture) return;
     await captureScreenshotAttachment(capture, processFiles, () =>
-      setUploadError(msg.plus_capture_screenshot_error()),
+      setUploadError(m.plus_capture_screenshot_error()),
     );
   }, [processFiles]);
 
@@ -1661,7 +1711,7 @@ export function ChatInterface({
             role="alert"
             className="border-b border-destructive/40 bg-destructive/10 px-4 py-2 text-sm text-destructive"
           >
-            {msg.chat_branch_history_reload_error()}
+            {m.chat_branch_history_reload_error()}
           </div>
         )}
         {isNewChat ? (
@@ -1736,6 +1786,7 @@ export function ChatInterface({
           voiceError={voiceError}
           queuedMessages={queuedMessagesDisplay}
           onRunQueuedNow={handleRunQueuedNow}
+          onSteerQueued={handleSteerQueued}
           onRemoveQueued={handleRemoveQueued}
           onRetryQueued={handleRetryQueued}
           modelId={agentConfig?.model}

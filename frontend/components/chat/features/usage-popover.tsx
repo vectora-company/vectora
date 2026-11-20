@@ -92,6 +92,7 @@ interface ThreadUsage {
   output_tokens: number;
   total_tokens: number;
   cached_input_tokens?: number;
+  cache_write_tokens?: number;
   runs: number;
 }
 
@@ -158,11 +159,11 @@ export function UsagePopover({
   // cacheia — não faz sentido consultar a cada render do composer.
   useEffect(() => {
     if (!open) return;
-    let cancelado = false;
+    let cancelled = false;
     void fetch("/usage/providers", { credentials: "include" })
       .then((r) => (r.ok ? r.json() : { providers: [] }))
       .then((data) => {
-        if (!cancelado) setProviders(data.providers ?? []);
+        if (!cancelled) setProviders(data.providers ?? []);
       })
       .catch(() => {
         // Sem consumo remoto o popover ainda mostra a janela de contexto.
@@ -173,11 +174,11 @@ export function UsagePopover({
     void fetch("/usage/media", { credentials: "include", cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
-        if (!cancelado && data) setMediaQuota(data as MediaQuota);
-        else if (!cancelado) setMediaQuota(null);
+        if (!cancelled && data) setMediaQuota(data as MediaQuota);
+        else if (!cancelled) setMediaQuota(null);
       })
       .catch(() => {
-        if (!cancelado) setMediaQuota(null);
+        if (!cancelled) setMediaQuota(null);
       });
     if (threadId) {
       void fetch(`/threads/${encodeURIComponent(threadId)}/usage`, {
@@ -186,14 +187,14 @@ export function UsagePopover({
       })
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => {
-          if (!cancelado) setThreadUsage((data as ThreadUsage | null) ?? null);
+          if (!cancelled) setThreadUsage((data as ThreadUsage | null) ?? null);
         })
         .catch(() => {
-          if (!cancelado) setThreadUsage(null);
+          if (!cancelled) setThreadUsage(null);
         });
     }
     return () => {
-      cancelado = true;
+      cancelled = true;
     };
   }, [open, threadId]);
 
@@ -265,6 +266,16 @@ export function UsagePopover({
                   </span>
                   <span className="font-mono text-foreground/90">
                     {formatTokens(threadUsage.cached_input_tokens ?? 0)}
+                  </span>
+                </div>
+              )}
+              {(threadUsage.cache_write_tokens ?? 0) > 0 && (
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">
+                    {m.meter_thread_cache_write()}
+                  </span>
+                  <span className="font-mono text-foreground/90">
+                    {formatTokens(threadUsage.cache_write_tokens ?? 0)}
                   </span>
                 </div>
               )}

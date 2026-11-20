@@ -5,7 +5,8 @@
  */
 
 import type { Message } from "../../types";
-import type { HistoryMessage } from "../../api/vectora-client";
+import type { HistoryMessage, HistoryPart } from "../../api/vectora-client";
+import { buildToolCall, parseToolOutput } from "./tool-call";
 
 // ============================================================================
 // Message ID Generation
@@ -84,6 +85,37 @@ export const ensureMessageExists = (
  * (persistence failed, or messages from before this field existed) drop
  * silently; the turn's text is still shown.
  */
+/** Reconstrói raciocínio e tool calls a partir das partes persistidas. */
+const historyPartsToMessageFields = (
+  parts: HistoryPart[] | undefined,
+): Pick<Message, "reasoning" | "toolCalls"> => {
+  if (!parts?.length) return {};
+  const reasoning = parts
+    .flatMap((part) => (part.kind === "reasoning" ? [part.text] : []))
+    .join("");
+  const toolCalls = parts.flatMap((part) => {
+    if (part.kind !== "tool_call") return [];
+    const call = buildToolCall({
+      id: part.tool_call_id,
+      name: part.tool_name,
+      argsJson: part.args_json,
+      renderHint: part.render_hint,
+      category: part.category,
+      destructive: part.destructive,
+      icon: part.icon,
+    });
+    if (part.result_json != null) {
+      call.output = parseToolOutput(part.result_json);
+      call.isError = part.is_error === true;
+    }
+    return [call];
+  });
+  return {
+    ...(reasoning ? { reasoning } : {}),
+    ...(toolCalls.length ? { toolCalls } : {}),
+  };
+};
+
 export const historyMessageToMessage = (
   hist: HistoryMessage,
   id: string,
@@ -111,6 +143,16 @@ export const historyMessageToMessage = (
     timestamp: hist.created_at ? new Date(hist.created_at) : new Date(),
     checkpointId: hist.checkpoint_id,
     ...(hist.is_error === true ? { isError: true } : {}),
+    ...historyPartsToMessageFields(hist.parts),
+    ...(hist.verification
+      ? {
+          verification: {
+            status: hist.verification.status,
+            outcome: hist.verification.outcome,
+            detail: hist.verification.detail ?? "",
+          },
+        }
+      : {}),
     ...(images?.length ? { images } : {}),
     ...(hist.edited_files?.length
       ? {

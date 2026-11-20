@@ -40,6 +40,7 @@ from uuid import uuid4
 
 from backend.engine.guardrails import LoopCapConfig, TurnBudget
 from backend.engine.hooks import MAX_RESPONSE_REVISIONS, response_denial_feedback
+from backend.engine.steering import drain_steers, has_pending_steers
 from backend.engine.stream_events import (
     ErrorSignal,
     HitlRequested,
@@ -47,11 +48,14 @@ from backend.engine.stream_events import (
     MediaRouted,
     MessageBreak,
     MessageChunk,
+    ReasoningChunk,
+    SteerApplied,
     TodoItem,
     TodosUpdated,
     ToolActivity,
     ToolCallStarted,
     ToolResult,
+    VerificationFinished,
     WorkbenchInvalidate,
 )
 from backend.engine.tool_batch import (
@@ -80,7 +84,13 @@ from backend.persistence.native.ledger import (
 from backend.services.context_planner import compute_transcript_hash
 from backend.services.memory_store import MemoryRecord
 from backend.vtypes.contracts import ToolOption
-from backend.vtypes.message import ContentBlock, MessageRole, ToolCall, VMessage
+from backend.vtypes.message import (
+    ContentBlock,
+    MessageRole,
+    ToolCall,
+    VMessage,
+    text_message,
+)
 
 _REPEATED_CALL_THRESHOLD = 3
 """Quantas chamadas idênticas seguidas (mesma tool, mesmos args) disparam o
@@ -571,6 +581,7 @@ class LoopConfig:
     max_tokens: int | None = None
     loop_caps: LoopCapConfig = field(default_factory=LoopCapConfig)
     context_max_tokens: int | None = None
+    reasoning_effort: str | None = None
     context_compaction_enabled: bool = True
     run_id: str | None = None
     """Tetos de volume por turno (`backend/engine/guardrails.py`) —
@@ -730,7 +741,27 @@ def _drop_terminal_notices(history: list[VMessage]) -> list[VMessage]:
             and m.text().lstrip().startswith(_TERMINAL_NOTICE_PREFIXES)
         )
     ]
-    return _merge_consecutive_user_messages(kept)
+    return _merge_consecutive_user_messages(_strip_reasoning_blocks(kept))
+
+
+def _strip_reasoning_blocks(history: list[VMessage]) -> list[VMessage]:
+    """Tira o raciocínio persistido do que vai ao modelo.
+
+    O raciocínio guardado serve à UI; reenviá-lo gastaria tokens e, em alguns
+    provedores, exigiria a assinatura original do bloco.
+    """
+    cleaned: list[VMessage] = []
+    for message in history:
+        has_reasoning = any(block.kind == "reasoning" for block in message.content)
+        cleaned.append(
+            replace(
+                message,
+                content=[b for b in message.content if b.kind != "reasoning"],
+            )
+            if has_reasoning
+            else message
+        )
+    return cleaned
 
 
 def _merge_consecutive_user_messages(history: list[VMessage]) -> list[VMessage]:
@@ -753,6 +784,69 @@ def _merge_consecutive_user_messages(history: list[VMessage]) -> list[VMessage]:
             continue
         merged.append(m)
     return merged
+
+
+_TERMINAL_RUN_STATUSES = frozenset({"passed", "degraded", "failed", "cancelled"})
+
+
+async def _previous_verification_note(
+    session_store: SessionStore, thread_id: str, current_run_id: str | None
+) -> str | None:
+    """Nota para o modelo quando a verificação do turno anterior falhou.
+
+    Só vale o turno terminal mais recente: se ele passou, ou se o usuário já
+    teve um turno novo que verificou, não há nada a reinjetar.
+    """
+    if not hasattr(session_store, "list_agent_runs"):
+        return None
+    try:
+        runs = await session_store.list_agent_runs(thread_id, limit=5)
+    except Exception:
+        logger.warning("conversation_loop: falha ao ler a execução anterior")
+        return None
+    previous = next(
+        (
+            run
+            for run in runs
+            if run.run_id != current_run_id and run.status in _TERMINAL_RUN_STATUSES
+        ),
+        None,
+    )
+    if previous is None or previous.status != "failed":
+        return None
+    feedback = next(
+        (
+            str(item.get("failure_feedback") or "").strip()
+            for item in reversed(previous.evidence)
+            if isinstance(item, dict)
+            and item.get("kind") == "quality_gate_verification"
+            and "step_id" not in item
+            and item.get("failure_feedback")
+        ),
+        "",
+    )
+    if not feedback:
+        return None
+    return (
+        "A verificação do turno anterior falhou. Corrija o que falhou antes de "
+        "seguir para outra coisa:\n\n" + feedback
+    )
+
+
+def _with_verification_note(
+    history: list[VMessage], note: str | None
+) -> list[VMessage]:
+    """Insere a nota depois das instruções de sistema que abrem o histórico."""
+    if not note:
+        return history
+    lead = 0
+    while lead < len(history) and history[lead].role is MessageRole.SYSTEM:
+        lead += 1
+    return [
+        *history[:lead],
+        text_message(MessageRole.SYSTEM, note),
+        *history[lead:],
+    ]
 
 
 async def _with_llm_summary(
@@ -967,6 +1061,9 @@ async def run_conversation(  # noqa: PLR0911
     from backend.llm.prompt_cache import prompt_cache_key
 
     prompt_cache_key.set(thread_id)
+    from backend.llm.reasoning import reasoning_effort
+
+    reasoning_effort.set(config.reasoning_effort)
     if hasattr(session_store, "get_session") and not (
         isinstance(ctx._extra, dict) and ctx._extra.get("untrusted_content")
     ):
@@ -1128,8 +1225,22 @@ async def run_conversation(  # noqa: PLR0911
 
     media_routed_model: str | None = None
     response_revisions = 0
+    verification_note = await _previous_verification_note(
+        session_store, thread_id, config.run_id
+    )
     prompt_calibration = 1.0
     for _iteracao in range(config.max_iterations):
+        # Orientações enviadas durante o turno viram mensagens do usuário antes
+        # desta chamada ao modelo.
+        for steer_text in drain_steers(thread_id):
+            steer_head = await session_store.get_branch_head_id(thread_id)
+            await session_store.append_message(
+                thread_id,
+                text_message(MessageRole.USER, steer_text),
+                parent_message_id=steer_head,
+                run_id=config.run_id,
+            )
+            await emit(SteerApplied(content=steer_text))
         # Toolsets ativados na chamada anterior entram no schema desta.
         tools = tool_registry.all()
         raw_history = _drop_terminal_notices(await session_store.get_history(thread_id))
@@ -1171,6 +1282,13 @@ async def run_conversation(  # noqa: PLR0911
         planned_context = await _with_llm_summary(
             planned_context, raw_history, thread_id
         )
+        if verification_note:
+            planned_context = replace(
+                planned_context,
+                messages=_with_verification_note(
+                    planned_context.messages, verification_note
+                ),
+            )
         from backend.services.media_hydration import hydrate_media_blocks
 
         historico = hydrate_media_blocks(
@@ -1230,6 +1348,7 @@ async def run_conversation(  # noqa: PLR0911
         chunk_count = 0
         text_chunk_count = 0
         reasoning_chars = 0
+        reasoning_parts: list[str] = []
         tool_chunk_count = 0
         finish_reasons: list[str] = []
 
@@ -1263,7 +1382,10 @@ async def run_conversation(  # noqa: PLR0911
                 partes_texto.append(chunk.delta_text)
                 await emit(MessageChunk(content=chunk.delta_text))
 
-            reasoning_chars += len(chunk.delta_reasoning or "")
+            if chunk.delta_reasoning:
+                reasoning_chars += len(chunk.delta_reasoning)
+                reasoning_parts.append(chunk.delta_reasoning)
+                await emit(ReasoningChunk(content=chunk.delta_reasoning))
             tool_chunk_count += len(chunk.tool_call_chunks)
 
             for tc_chunk in chunk.tool_call_chunks:
@@ -1423,9 +1545,14 @@ async def run_conversation(  # noqa: PLR0911
         tool_calls_for_history = [_sanitize_tool_call(tc, ctx) for tc in tool_calls]
         assistant_msg = VMessage(
             role=MessageRole.ASSISTANT,
-            content=[ContentBlock(kind="text", text=texto_final)]
-            if texto_final
-            else [],
+            content=[
+                *(
+                    [ContentBlock(kind="reasoning", reasoning_text=reasoning_text)]
+                    if (reasoning_text := "".join(reasoning_parts))
+                    else []
+                ),
+                *([ContentBlock(kind="text", text=texto_final)] if texto_final else []),
+            ],
             tool_calls=tool_calls_for_history,
             finish_reason="tool_calls" if tool_calls else "stop",
         )
@@ -1508,7 +1635,15 @@ async def run_conversation(  # noqa: PLR0911
             cached_input_tokens=int(
                 last_usage.get("cached_input_tokens", 0) if last_usage else 0
             ),
+            cache_write_tokens=int(
+                last_usage.get("cache_write_tokens", 0) if last_usage else 0
+            ),
         )
+
+        if not tool_calls and has_pending_steers(thread_id):
+            # Chegou uma orientação enquanto o modelo respondia: em vez de
+            # encerrar o turno, o modelo responde a ela na próxima volta.
+            continue
 
         if not tool_calls:
             response_denial = await _pre_response_hooks(ctx, texto_final)
@@ -1614,6 +1749,19 @@ async def run_conversation(  # noqa: PLR0911
                             detail="Erro interno durante a verificação pós-execução.",
                             error_code="VERIFICATION_ERROR",
                             metrics=iter_metrics,
+                        )
+
+                    # Só mostra o rodapé quando o turno mexeu em arquivos ou algum
+                    # gate rodou: conversa comum não precisa de "não verificado".
+                    if v_res is not None and (
+                        files_touched or v_res.outcome != "not_run"
+                    ):
+                        await emit(
+                            VerificationFinished(
+                                status=v_res.status,
+                                outcome=v_res.outcome,
+                                detail=v_res.detail,
+                            )
                         )
 
                     # 3. Persiste o resultado da verificação e a evidência com SHA-256 no AgentRun
@@ -2430,6 +2578,9 @@ async def run_conversation(  # noqa: PLR0911
                 ),
                 cached_input_tokens=int(
                     last_usage.get("cached_input_tokens", 0) if last_usage else 0
+                ),
+                cache_write_tokens=int(
+                    last_usage.get("cache_write_tokens", 0) if last_usage else 0
                 ),
             )
             await session_store.update_agent_run_status(

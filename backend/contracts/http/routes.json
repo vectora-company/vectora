@@ -631,6 +631,20 @@
     "methods": [
       "GET"
     ],
+    "name": "list_issues_github_issues_get",
+    "path": "/github/issues"
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "name": "list_pulls_github_pulls_get",
+    "path": "/github/pulls"
+  },
+  {
+    "methods": [
+      "GET"
+    ],
     "name": "health_health_get",
     "path": "/health"
   },
@@ -1781,6 +1795,13 @@
     ],
     "name": "resume_stream_vectora_chat_v1_ChatService_ResumeStream_post",
     "path": "/vectora.chat.v1.ChatService/ResumeStream"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "name": "steer_run_vectora_chat_v1_ChatService_SteerRun_post",
+    "path": "/vectora.chat.v1.ChatService/SteerRun"
   },
   {
     "methods": [

@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any
 
 from backend.llm.anthropic.client import AnthropicClient, AnthropicResponseError
 from backend.llm.media_parts import prepare_content, split_data_url
+from backend.llm.reasoning import reasoning_effort, thinking_budget
 from backend.vtypes.contracts import UsageSnapshot
 from backend.vtypes.message import (
     ContentBlock,
@@ -176,7 +177,7 @@ def _to_anthropic_messages(messages: list[VMessage]) -> tuple[str | None, list[d
 _CACHE_CONTROL = {"type": "ephemeral"}
 
 
-def _with_prompt_cache(corpo: dict[str, Any]) -> dict[str, Any]:
+def _with_prompt_cache(body: dict[str, Any]) -> dict[str, Any]:
     """Marca o prefixo estável para o cache de prompt da Anthropic.
 
     Até 4 pontos: última tool, system e as duas últimas mensagens. O que está
@@ -185,16 +186,16 @@ def _with_prompt_cache(corpo: dict[str, Any]) -> dict[str, Any]:
     from backend.settings import settings
 
     if not settings.prompt_cache_enabled:
-        return corpo
-    tools = corpo.get("tools")
+        return body
+    tools = body.get("tools")
     if tools:
         tools[-1] = {**tools[-1], "cache_control": _CACHE_CONTROL}
-    system = corpo.get("system")
+    system = body.get("system")
     if isinstance(system, str) and system:
-        corpo["system"] = [
+        body["system"] = [
             {"type": "text", "text": system, "cache_control": _CACHE_CONTROL}
         ]
-    for message in corpo["messages"][-2:]:
+    for message in body["messages"][-2:]:
         content = message["content"]
         if isinstance(content, str):
             if not content:
@@ -204,26 +205,27 @@ def _with_prompt_cache(corpo: dict[str, Any]) -> dict[str, Any]:
             continue
         content = [*content[:-1], {**content[-1], "cache_control": _CACHE_CONTROL}]
         message["content"] = content
-    return corpo
+    return body
 
 
 def _usage_metadata(usage: dict | None) -> UsageSnapshot | None:
     if not usage:
         return None
-    lido = int(usage.get("cache_read_input_tokens") or 0)
-    escrito = int(usage.get("cache_creation_input_tokens") or 0)
+    cache_read = int(usage.get("cache_read_input_tokens") or 0)
+    cache_write = int(usage.get("cache_creation_input_tokens") or 0)
     # Nas demais APIs `input_tokens` já inclui o que veio do cache; a Anthropic
     # o reporta à parte, então somamos para o mesmo significado em todo provedor.
-    entrada = int(usage.get("input_tokens") or 0) + lido + escrito
-    saida = int(usage.get("output_tokens") or 0)
+    input_tokens = int(usage.get("input_tokens") or 0) + cache_read + cache_write
+    output_tokens = int(usage.get("output_tokens") or 0)
     snapshot: UsageSnapshot = {
-        "input_tokens": entrada,
-        "output_tokens": saida,
-        "total_tokens": entrada + saida,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "total_tokens": input_tokens + output_tokens,
     }
-    cached = lido
-    if cached:
-        snapshot["cached_input_tokens"] = cached
+    if cache_read:
+        snapshot["cached_input_tokens"] = cache_read
+    if cache_write:
+        snapshot["cache_write_tokens"] = cache_write
     return snapshot
 
 
@@ -244,7 +246,7 @@ class AnthropicChatClient:
         max_tokens: int | None,
     ) -> dict:
         system, traduzidas = _to_anthropic_messages(messages)
-        corpo: dict[str, Any] = {
+        body: dict[str, Any] = {
             "model": self.model,
             "messages": traduzidas,
             # Anthropic exige max_tokens sempre — sem um teto explícito do
@@ -253,12 +255,18 @@ class AnthropicChatClient:
             "max_tokens": max_tokens or 4096,
         }
         if system:
-            corpo["system"] = system
+            body["system"] = system
         if temperature is not None:
-            corpo["temperature"] = temperature
+            body["temperature"] = temperature
         if tools:
-            corpo["tools"] = [_to_anthropic_tool(t) for t in tools]
-        return _with_prompt_cache(corpo)
+            body["tools"] = [_to_anthropic_tool(t) for t in tools]
+        budget = thinking_budget(reasoning_effort.get())
+        if budget is not None:
+            body["thinking"] = {"type": "enabled", "budget_tokens": budget}
+            # O thinking exige max_tokens acima do orçamento e temperatura 1.
+            body["max_tokens"] = max(body["max_tokens"], budget + 4096)
+            body.pop("temperature", None)
+        return _with_prompt_cache(body)
 
     async def agenerate(
         self,
@@ -346,6 +354,10 @@ class AnthropicChatClient:
                     texto = delta.get("text", "")
                     if texto:
                         yield VMessageChunk(delta_text=texto)
+                elif tipo_delta == "thinking_delta":
+                    thought = delta.get("thinking", "")
+                    if thought:
+                        yield VMessageChunk(delta_reasoning=thought)
                 elif tipo_delta == "input_json_delta":
                     nome = (
                         nomes_por_indice.get(indice)

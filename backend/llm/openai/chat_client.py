@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any
 from backend.llm.media_parts import prepare_content
 from backend.llm.openai.client import OpenAIClient, OpenAIResponseError
 from backend.llm.prompt_cache import prompt_cache_key
+from backend.llm.reasoning import openai_reasoning, reasoning_effort
 from backend.vtypes.contracts import UsageSnapshot
 from backend.vtypes.message import (
     ContentBlock,
@@ -237,20 +238,23 @@ class OpenAIChatClient:
         temperature: float | None,
         max_tokens: int | None,
     ) -> dict:
-        corpo: dict[str, Any] = {
+        body: dict[str, Any] = {
             "model": self.model,
             "input": _to_openai_input(messages),
         }
         if temperature is not None:
-            corpo["temperature"] = temperature
+            body["temperature"] = temperature
         if max_tokens is not None:
-            corpo["max_output_tokens"] = max_tokens
+            body["max_output_tokens"] = max_tokens
         if tools:
-            corpo["tools"] = [_to_openai_tool(t) for t in tools]
+            body["tools"] = [_to_openai_tool(t) for t in tools]
         cache_key = prompt_cache_key.get()
         if cache_key:
-            corpo["prompt_cache_key"] = cache_key
-        return corpo
+            body["prompt_cache_key"] = cache_key
+        reasoning = openai_reasoning(self.model, reasoning_effort.get())
+        if reasoning is not None:
+            body["reasoning"] = reasoning
+        return body
 
     async def agenerate(
         self,
@@ -356,6 +360,11 @@ class OpenAIChatClient:
                         )
                     ]
                 )
+
+            elif tipo == "response.reasoning_summary_text.delta":
+                thought = evento.get("delta", "")
+                if thought:
+                    yield VMessageChunk(delta_reasoning=thought)
 
             elif tipo == "response.output_text.delta":
                 texto = evento.get("delta", "")

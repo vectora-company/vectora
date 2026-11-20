@@ -9,11 +9,11 @@ from backend.vtypes.message import MessageRole, text_message
 
 
 @pytest.fixture(autouse=True)
-def _limpa() -> None:
+def _reset_state() -> None:
     cs.reset_state()
 
 
-def _msgs(n: int) -> list:
+def _make_messages(n: int) -> list:
     out = []
     for i in range(n):
         role = MessageRole.USER if i % 2 == 0 else MessageRole.ASSISTANT
@@ -21,14 +21,14 @@ def _msgs(n: int) -> list:
     return out
 
 
-def test_dropped_messages_ignora_o_que_foi_mantido() -> None:
-    raw = _msgs(6)
+def test_dropped_messages_ignores_kept_ones() -> None:
+    raw = _make_messages(6)
     planned = [text_message(MessageRole.SYSTEM, "[Context compacted]"), *raw[4:]]
     assert cs.dropped_messages(raw, planned) == raw[:4]
 
 
-def test_with_summary_troca_o_marcador_na_mesma_posicao() -> None:
-    raw = _msgs(4)
+def test_with_summary_replaces_marker_in_place() -> None:
+    raw = _make_messages(4)
     planned = [
         text_message(MessageRole.SYSTEM, "prompt"),
         text_message(MessageRole.SYSTEM, "[Context compacted]\n- x"),
@@ -41,44 +41,44 @@ def test_with_summary_troca_o_marcador_na_mesma_posicao() -> None:
 
 
 @pytest.mark.asyncio
-async def test_resumo_e_reaproveitado_e_atualizado_de_forma_iterativa() -> None:
-    chamadas: list[tuple[str, str | None]] = []
+async def test_summary_is_reused_and_updated_iteratively() -> None:
+    calls: list[tuple[str, str | None]] = []
 
     async def fake(transcript: str, previous: str | None) -> str:
-        chamadas.append((transcript, previous))
-        return f"resumo{len(chamadas)}"
+        calls.append((transcript, previous))
+        return f"resumo{len(calls)}"
 
-    raw = _msgs(6)
+    raw = _make_messages(6)
     assert await cs.summarize_dropped("t", raw[:4], summarizer=fake) == "resumo1"
     # mesmo conjunto: não chama o LLM de novo
     assert await cs.summarize_dropped("t", raw[:4], summarizer=fake) == "resumo1"
-    assert len(chamadas) == 1
+    assert len(calls) == 1
     # conjunto maior: atualiza o resumo anterior só com a parte nova
     assert await cs.summarize_dropped("t", raw[:6], summarizer=fake) == "resumo2"
-    transcript, previous = chamadas[1]
+    transcript, previous = calls[1]
     assert previous == "resumo1"
     assert "mensagem 4" in transcript
     assert "mensagem 0" not in transcript
 
 
 @pytest.mark.asyncio
-async def test_falha_do_llm_mantem_o_marcador_e_respeita_o_cooldown() -> None:
-    chamadas = 0
+async def test_llm_failure_keeps_marker_and_honors_cooldown() -> None:
+    calls = 0
 
-    async def quebra(transcript: str, previous: str | None) -> str:
-        nonlocal chamadas
-        chamadas += 1
+    async def failing_summarizer(transcript: str, previous: str | None) -> str:
+        nonlocal calls
+        calls += 1
         raise RuntimeError("provider fora")
 
-    raw = _msgs(4)
-    assert await cs.summarize_dropped("t", raw, summarizer=quebra) is None
-    assert await cs.summarize_dropped("t", raw, summarizer=quebra) is None
-    assert chamadas == 1
+    raw = _make_messages(4)
+    assert await cs.summarize_dropped("t", raw, summarizer=failing_summarizer) is None
+    assert await cs.summarize_dropped("t", raw, summarizer=failing_summarizer) is None
+    assert calls == 1
 
 
 @pytest.mark.asyncio
-async def test_sem_mensagens_descartadas_nao_resume() -> None:
-    async def nunca(transcript: str, previous: str | None) -> str:
+async def test_no_dropped_messages_means_no_summary() -> None:
+    async def never_called(transcript: str, previous: str | None) -> str:
         raise AssertionError("não deveria chamar")
 
-    assert await cs.summarize_dropped("t", [], summarizer=nunca) is None
+    assert await cs.summarize_dropped("t", [], summarizer=never_called) is None

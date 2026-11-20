@@ -884,6 +884,148 @@ function KeyStatusIcon({ status }: { status: KeyStatus }) {
   return null;
 }
 
+type RouterStatus = "idle" | "saving" | "ok" | "unreachable" | "error";
+
+/** Roteador compatível com a API da OpenAI (9Router, OmniRoute): um endpoint e
+ * uma chave dão acesso a vários modelos, então é o caminho recomendado. */
+function RouterSetup() {
+  const [baseUrl, setBaseUrl] = useState("");
+  const [apiKey, setApiKey] = useState("");
+  const [configured, setConfigured] = useState(false);
+  const [status, setStatus] = useState<RouterStatus>("idle");
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res = await fetch("/provider-routing/nine-router/status", {
+          credentials: "include",
+        });
+        if (!res.ok) return;
+        const data = (await res.json()) as {
+          configured?: boolean;
+          base_url?: string | null;
+          masked?: string;
+        };
+        if (data.configured) {
+          setConfigured(true);
+          setBaseUrl(data.base_url ?? "");
+          setApiKey(data.masked ?? "");
+          setStatus("ok");
+        }
+      } catch {}
+    })();
+  }, []);
+
+  async function save(): Promise<void> {
+    if (!baseUrl.trim() || !apiKey.trim()) return;
+    setStatus("saving");
+    try {
+      const saved = await fetch("/provider-routing/nine-router/config", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          base_url: baseUrl.trim(),
+          api_key: apiKey.trim(),
+        }),
+      });
+      if (!saved.ok) {
+        setStatus("error");
+        return;
+      }
+      setConfigured(true);
+      const models = await fetch("/provider-routing/nine-router/models", {
+        credentials: "include",
+      });
+      const catalog = models.ok
+        ? ((await models.json()) as { reachable?: boolean })
+        : { reachable: false };
+      setStatus(catalog.reachable ? "ok" : "unreachable");
+    } catch {
+      setStatus("error");
+    }
+  }
+
+  return (
+    <div
+      className="space-y-1.5 rounded-md border border-primary/40 bg-primary/5 px-2.5 py-2"
+      data-testid="router-setup"
+    >
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-medium text-foreground">
+          {m.onboarding_router_title()}
+        </span>
+        <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+          {m.onboarding_router_badge()}
+        </span>
+        {status === "ok" && (
+          <span className="text-xs text-green-500">
+            {m.onboarding_router_ok()}
+          </span>
+        )}
+        {status === "saving" && (
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+        )}
+      </div>
+      <p className="text-[11px] leading-snug text-muted-foreground">
+        {m.onboarding_router_desc()}
+      </p>
+      <Input
+        value={baseUrl}
+        placeholder={m.onboarding_router_url_placeholder()}
+        aria-label={m.onboarding_router_url_label()}
+        className="h-7 font-mono text-xs"
+        autoComplete="off"
+        onChange={(e) => {
+          setBaseUrl(e.target.value);
+          setStatus("idle");
+        }}
+      />
+      <div className="flex gap-1.5">
+        <Input
+          type="password"
+          value={apiKey}
+          placeholder={m.onboarding_router_key_placeholder()}
+          aria-label={m.onboarding_router_key_label()}
+          className="h-7 flex-1 font-mono text-xs"
+          autoComplete="off"
+          onChange={(e) => {
+            setApiKey(e.target.value);
+            setStatus("idle");
+          }}
+        />
+        <Button
+          type="button"
+          size="sm"
+          className="h-7 px-3"
+          disabled={!baseUrl.trim() || !apiKey.trim() || status === "saving"}
+          onClick={() => void save()}
+        >
+          {m.onboarding_router_save()}
+        </Button>
+      </div>
+      {status === "unreachable" && (
+        <p className="text-xs text-destructive">
+          {m.onboarding_router_unreachable()}
+        </p>
+      )}
+      {status === "error" && (
+        <p className="text-xs text-destructive">
+          {m.onboarding_router_error()}
+        </p>
+      )}
+      {configured && status === "idle" && (
+        <p className="text-[11px] text-muted-foreground">
+          {m.onboarding_router_edited()}
+        </p>
+      )}
+      <p className="text-[11px] text-muted-foreground/80">
+        {m.onboarding_router_direct_hint()}
+      </p>
+    </div>
+  );
+}
+
 export function StepApiKeys(_props: StepProps) {
   const [keys, setKeys] = useState<Record<ApiKeyProvider, ApiKeyState>>({
     google: {
@@ -1000,6 +1142,7 @@ export function StepApiKeys(_props: StepProps) {
       <p className="text-xs text-muted-foreground">
         {m.onboarding_api_keys_body()}
       </p>
+      <RouterSetup />
       <p className="text-[11px] text-muted-foreground/80 leading-snug rounded-md border border-border/60 bg-muted/30 px-2 py-1.5">
         {m.onboarding_api_keys_ollama_hint()}
       </p>

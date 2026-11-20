@@ -79,14 +79,17 @@ def resolve_history_budget(
     return max(default, min(budget, HISTORY_BUDGET_CAP))
 
 
-_MIN_CALIBRATION = 0.5
+# Nunca abaixo de 1: Ollama e outros contam só os tokens avaliados (sem os que
+# vieram do cache), então uma contagem menor que a estimativa não prova folga.
+_MIN_CALIBRATION = 1.0
 _MAX_CALIBRATION = 3.0
 
 
 def calibration_ratio(real_prompt_tokens: int, estimated_prompt_tokens: int) -> float:
     """Quanto o provedor contou a mais (>1) ou a menos (<1) que a estimativa local.
 
-    Limitada para uma chamada atípica (cache, imagens) não distorcer o orçamento.
+    Só reduz o orçamento (nunca o amplia) e é limitada para uma chamada atípica
+    (imagens) não distorcer o orçamento.
     """
     if real_prompt_tokens <= 0 or estimated_prompt_tokens <= 0:
         return 1.0

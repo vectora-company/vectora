@@ -120,14 +120,14 @@ class GoogleGenAIClient:
             json=payload,
         )
         try:
-            corpo = resp.json()
+            body = resp.json()
         except Exception:
-            corpo = None
-        self._raise_for_status(resp.status_code, corpo)
-        if not isinstance(corpo, dict):
+            body = None
+        self._raise_for_status(resp.status_code, body)
+        if not isinstance(body, dict):
             msg = "Google Gemini devolveu corpo não-JSON ao criar o cache."
             raise GoogleGenAIResponseError(msg)
-        return corpo
+        return body
 
     async def embed_content(self, model: str, text: str, *, task_type: str) -> dict:
         """``POST /{model}:embedContent`` para documentos ou consultas."""

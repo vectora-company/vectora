@@ -27,6 +27,7 @@ class UsageSnapshot(TypedDict, total=False):
     output_tokens: int
     total_tokens: int
     cached_input_tokens: int
+    cache_write_tokens: int
 
 
 class ChangedFile(TypedDict, total=False):

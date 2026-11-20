@@ -1538,7 +1538,10 @@ async def update_storage_config(request: Request) -> dict:
                 status_code=422,
                 detail="storage_mode deve ser 'lite' ou 'complete'",
             )
-        runtime_settings.storage_mode = mode
+        # A gravação no SQLite é síncrona e pode esperar o `busy_timeout` (30 s
+        # por tentativa). No event loop ela travava as tarefas que seguram o
+        # lock e dependem do mesmo loop para terminar; numa thread, não.
+        await asyncio.to_thread(setattr, runtime_settings, "storage_mode", mode)
 
         from backend.settings import settings as _s
 
@@ -1583,7 +1586,8 @@ async def update_storage_config(request: Request) -> dict:
                 cfg, dict
             ):
                 continue
-            runtime_settings.set_service_startup(
+            await asyncio.to_thread(
+                runtime_settings.set_service_startup,
                 service,
                 self_hosted=bool(cfg.get("self_hosted", False)),
                 start_command=cfg.get("start_command") or None,

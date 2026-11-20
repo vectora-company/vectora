@@ -89,13 +89,17 @@ class TestGetNativeAgent:
         from backend.tools.toolsets import ENABLE_TOOLSET_TOOL, toolset_for
 
         workbench = {s.name for g in (BROWSER_TOOLS, FS_TOOLS, GIT_TOOLS) for s in g}
-        ativas = {
+        active_names = {
             name
             for name in ALL_TOOL_NAMES
             if (spec := TOOL_REGISTRY.get(name)) is not None
             and (toolset_for(spec) is None or name in workbench)
         }
-        assert code_names == {*ativas, "delegate_to_subagent", ENABLE_TOOLSET_TOOL}
+        assert code_names == {
+            *active_names,
+            "delegate_to_subagent",
+            ENABLE_TOOLSET_TOOL,
+        }
 
         chat_agent = await af.get_native_agent(user_id="contract-chat", chat_mode=True)
         chat_names = {tool.name for tool in chat_agent.tool_registry.all()}

@@ -11,7 +11,7 @@ from backend.persistence.native.session_store import (
 from backend.vtypes.message import MessageRole, text_message
 
 
-def test_expressao_fts_e_segura() -> None:
+def test_fts_expression_is_safe() -> None:
     assert _fts_match_expression('meu "github" OR x*') == '"meu" AND "github" AND "OR"'
     assert _fts_match_expression("a b") == ""
     assert _fts_match_expression("   ") == ""
@@ -32,7 +32,7 @@ async def store(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_busca_acha_mensagem_de_outra_conversa(store) -> None:
+async def test_search_finds_message_from_other_thread(store) -> None:
     await store.create_session("t1", user_id="ana")
     await store.create_session("t2", user_id="ana")
     await store.create_session("t3", user_id="bia")
@@ -46,16 +46,16 @@ async def test_busca_acha_mensagem_de_outra_conversa(store) -> None:
         "t3", text_message(MessageRole.USER, "Cloudflare da Bia, privado")
     )
 
-    achados = await store.search_messages("ana", "cloudflare deploy")
+    matches = await store.search_messages("ana", "cloudflare deploy")
 
-    assert [r["thread_id"] for r in achados] == ["t1"]
+    assert [r["thread_id"] for r in matches] == ["t1"]
     assert (
-        "[Cloudflare]" in achados[0]["snippet"] or "Cloudflare" in achados[0]["snippet"]
+        "[Cloudflare]" in matches[0]["snippet"] or "Cloudflare" in matches[0]["snippet"]
     )
 
 
 @pytest.mark.asyncio
-async def test_busca_exclui_a_thread_atual_e_avisos_sinteticos(store) -> None:
+async def test_search_excludes_current_thread_and_synthetic_notices(store) -> None:
     await store.create_session("t1", user_id="ana")
     await store.append_message(
         "t1", text_message(MessageRole.USER, "projeto vectora engine")
@@ -65,17 +65,17 @@ async def test_busca_exclui_a_thread_atual_e_avisos_sinteticos(store) -> None:
     )
 
     assert await store.search_messages("ana", "vectora", exclude_thread_id="t1") == []
-    achados = await store.search_messages("ana", "vectora")
-    assert [r["role"] for r in achados] == ["user"]
+    matches = await store.search_messages("ana", "vectora")
+    assert [r["role"] for r in matches] == ["user"]
 
 
 @pytest.mark.asyncio
-async def test_consulta_vazia_nao_busca(store) -> None:
+async def test_empty_query_does_not_search(store) -> None:
     assert await store.search_messages("ana", "") == []
 
 
 @pytest.mark.asyncio
-async def test_uso_de_tokens_da_conversa_soma_as_execucoes(store) -> None:
+async def test_thread_token_usage_sums_runs(store) -> None:
     await store.create_session("t1", user_id="ana")
     async with store._pool.acquire() as conn:
         for run_id, metrics in (
@@ -83,7 +83,8 @@ async def test_uso_de_tokens_da_conversa_soma_as_execucoes(store) -> None:
                 "r1",
                 (
                     '{"input_tokens": 100, "output_tokens": 20, '
-                    '"total_tokens": 120, "cached_input_tokens": 80}'
+                    '"total_tokens": 120, "cached_input_tokens": 80, '
+                    '"cache_write_tokens": 30}'
                 ),
             ),
             ("r2", '{"input_tokens": 50, "output_tokens": 5, "total_tokens": 55}'),
@@ -96,12 +97,13 @@ async def test_uso_de_tokens_da_conversa_soma_as_execucoes(store) -> None:
             )
         await conn.commit()
 
-    uso = await store.thread_token_usage("t1")
+    usage = await store.thread_token_usage("t1")
 
-    assert uso["input_tokens"] == 150
-    assert uso["output_tokens"] == 25
-    assert uso["total_tokens"] == 175
-    assert uso["runs"] == 2
-    assert uso["cached_input_tokens"] == 80
-    assert uso["model"] == "gemini-2.5-pro"
+    assert usage["input_tokens"] == 150
+    assert usage["output_tokens"] == 25
+    assert usage["total_tokens"] == 175
+    assert usage["runs"] == 2
+    assert usage["cached_input_tokens"] == 80
+    assert usage["cache_write_tokens"] == 30
+    assert usage["model"] == "gemini-2.5-pro"
     assert (await store.thread_token_usage("vazia"))["runs"] == 0

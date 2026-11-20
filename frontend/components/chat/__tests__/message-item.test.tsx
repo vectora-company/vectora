@@ -852,3 +852,119 @@ describe("MessageItem — streaming incremental (token a token, como astream)", 
     expect(container.querySelector("details")).toBeNull();
   });
 });
+
+describe("MessageItem — raciocínio do modelo", () => {
+  it("mostra o raciocínio recolhido por padrão e com o texto que o provider devolveu", () => {
+    render(
+      <MessageItem
+        {...baseProps(
+          msg({ content: "Resposta final", reasoning: "primeiro somo 2 e 2" }),
+        )}
+      />,
+    );
+
+    const block = screen.getByTestId("reasoning-block") as HTMLDetailsElement;
+    expect(block.open).toBe(false);
+    expect(block.textContent).toContain(m.chat_reasoning_title());
+    expect(block.textContent).toContain("primeiro somo 2 e 2");
+  });
+
+  it("expande ao clicar no título", () => {
+    render(
+      <MessageItem
+        {...baseProps(msg({ content: "ok", reasoning: "passo" }))}
+      />,
+    );
+
+    const block = screen.getByTestId("reasoning-block") as HTMLDetailsElement;
+    fireEvent.click(block.querySelector("summary") as HTMLElement);
+    block.open = true;
+
+    expect(block.open).toBe(true);
+  });
+
+  it("não mostra o bloco quando o provider não devolveu raciocínio", () => {
+    render(<MessageItem {...baseProps(msg({ content: "ok" }))} />);
+
+    expect(screen.queryByTestId("reasoning-block")).toBeNull();
+  });
+});
+
+describe("MessageItem — plano e verificação", () => {
+  it("mostra o plano do agente com o progresso e o estado de cada item", () => {
+    render(
+      <MessageItem
+        {...baseProps(
+          msg({
+            content: "Em andamento",
+            plan: [
+              { content: "Ler o código", status: "completed" },
+              { content: "Escrever o teste", status: "in_progress" },
+              { content: "Abrir o PR", status: "pending" },
+            ],
+          }),
+        )}
+      />,
+    );
+
+    const plan = screen.getByTestId("plan-block");
+    expect(plan.textContent).toContain(m.chat_plan_title());
+    expect(plan.textContent).toContain("1/3");
+    const items = plan.querySelectorAll("li");
+    expect(
+      Array.from(items).map((li) => li.getAttribute("data-status")),
+    ).toEqual(["completed", "in_progress", "pending"]);
+  });
+
+  it("não mostra o plano quando o turno não teve checklist", () => {
+    render(<MessageItem {...baseProps(msg({ content: "ok" }))} />);
+
+    expect(screen.queryByTestId("plan-block")).toBeNull();
+  });
+
+  it.each([
+    ["passed", m.chat_verification_passed()],
+    ["degraded", m.chat_verification_not_verified()],
+    ["failed", m.chat_verification_failed()],
+  ])("rodapé de verificação %s", (status, label) => {
+    render(
+      <MessageItem
+        {...baseProps(
+          msg({
+            content: "Feito",
+            verification: { status, outcome: "x", detail: "detalhe do gate" },
+          }),
+        )}
+      />,
+    );
+
+    const footer = screen.getByTestId("verification-footer");
+    expect(footer.textContent).toBe(label);
+    expect(footer.getAttribute("data-status")).toBe(status);
+    expect(footer.getAttribute("title")).toBe("detalhe do gate");
+  });
+
+  it("não mostra rodapé quando não houve verificação", () => {
+    render(<MessageItem {...baseProps(msg({ content: "ok" }))} />);
+
+    expect(screen.queryByTestId("verification-footer")).toBeNull();
+  });
+});
+
+describe("MessageItem — orientações do usuário", () => {
+  it("lista as orientações que o agente passou a seguir", () => {
+    render(
+      <MessageItem
+        {...baseProps(
+          msg({ content: "ok", steers: ["use pnpm", "responda em português"] }),
+        )}
+      />,
+    );
+
+    const notes = screen.getAllByTestId("steer-note");
+    expect(notes.map((note) => note.textContent)).toEqual([
+      m.chat_steer_applied({ text: "use pnpm" }),
+      m.chat_steer_applied({ text: "responda em português" }),
+    ]);
+  });
+});

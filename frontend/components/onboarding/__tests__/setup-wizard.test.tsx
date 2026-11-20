@@ -320,7 +320,122 @@ describe("StepApiKeys", () => {
     mockApiKeysFetch();
     render(<StepApiKeys />);
     expect(await screen.findByText(/Ollama/)).toBeInTheDocument();
-    expect(screen.getByText(/Gateways/)).toBeInTheDocument();
+    expect(screen.getByText(/Provider Routing/)).toBeInTheDocument();
+    expect(screen.queryByText(/Gateways/)).toBeNull();
+  });
+});
+
+function mockRouterFetch(
+  opts: {
+    status?: { configured: boolean; base_url?: string; masked?: string };
+    reachable?: boolean;
+    saveOk?: boolean;
+  } = {},
+) {
+  const {
+    status = { configured: false },
+    reachable = true,
+    saveOk = true,
+  } = opts;
+  const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+    const u = String(url);
+    if (u.includes("/provider-routing/nine-router/status")) {
+      return { ok: true, json: async () => status };
+    }
+    if (
+      u.includes("/provider-routing/nine-router/config") &&
+      init?.method === "POST"
+    ) {
+      return { ok: saveOk, json: async () => ({ configured: true }) };
+    }
+    if (u.includes("/provider-routing/nine-router/models")) {
+      return { ok: true, json: async () => ({ reachable, models: [] }) };
+    }
+    return { ok: true, json: async () => ({}) };
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
+describe("StepApiKeys — roteador recomendado", () => {
+  it("mostra o roteador em destaque antes das chaves diretas", async () => {
+    mockRouterFetch();
+    render(<StepApiKeys />);
+
+    const section = await screen.findByTestId("router-setup");
+    expect(section.textContent).toContain("Recommended");
+    expect(section.textContent).toMatch(/9Router/);
+    expect(section.textContent).toMatch(/OmniRoute/);
+    expect(
+      screen.getByPlaceholderText("http://localhost:20128/v1"),
+    ).toBeInTheDocument();
+  });
+
+  it("salva endereço e chave juntos e confirma a conexão", async () => {
+    const fetchMock = mockRouterFetch({ reachable: true });
+    render(<StepApiKeys />);
+
+    fireEvent.change(
+      await screen.findByPlaceholderText("http://localhost:20128/v1"),
+      { target: { value: "http://localhost:20128/v1/" } },
+    );
+    fireEvent.change(screen.getByPlaceholderText("sk-…"), {
+      target: { value: "sk-router" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByText("Connected")).toBeInTheDocument();
+    const post = fetchMock.mock.calls.find(
+      ([url, init]) =>
+        String(url).includes("/nine-router/config") && init?.method === "POST",
+    );
+    expect(JSON.parse(String(post?.[1]?.body))).toEqual({
+      base_url: "http://localhost:20128/v1/",
+      api_key: "sk-router",
+    });
+  });
+
+  it("avisa quando o roteador foi salvo mas não responde", async () => {
+    mockRouterFetch({ reachable: false });
+    render(<StepApiKeys />);
+
+    fireEvent.change(
+      await screen.findByPlaceholderText("http://localhost:20128/v1"),
+      { target: { value: "http://localhost:9/v1" } },
+    );
+    fireEvent.change(screen.getByPlaceholderText("sk-…"), {
+      target: { value: "sk-x" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByText(/did not respond/)).toBeInTheDocument();
+  });
+
+  it("não deixa salvar com campo vazio", async () => {
+    mockRouterFetch();
+    render(<StepApiKeys />);
+
+    const save = await screen.findByRole("button", { name: "Save" });
+    expect((save as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("pré-preenche o roteador já configurado", async () => {
+    mockRouterFetch({
+      status: {
+        configured: true,
+        base_url: "http://localhost:20128/v1",
+        masked: "sk-r•••ter",
+      },
+    });
+    render(<StepApiKeys />);
+
+    await waitFor(() => {
+      const url = screen.getByPlaceholderText(
+        "http://localhost:20128/v1",
+      ) as HTMLInputElement;
+      expect(url.value).toBe("http://localhost:20128/v1");
+    });
+    expect(await screen.findByText("Connected")).toBeInTheDocument();
   });
 });
 

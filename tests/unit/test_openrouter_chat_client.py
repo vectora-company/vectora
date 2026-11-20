@@ -32,13 +32,13 @@ def _client(handler, **kwargs) -> OpenRouterChatClient:
     return OpenRouterChatClient(model="openrouter/auto", client=http_client, **kwargs)
 
 
-def _resposta_ok(texto: str = "Olá", **extra) -> dict:
+def _ok_response(text: str = "Olá", **extra) -> dict:
     return {
         "id": "gen_1",
         "model": "openrouter/auto",
         "choices": [
             {
-                "message": {"role": "assistant", "content": texto},
+                "message": {"role": "assistant", "content": text},
                 "finish_reason": "stop",
             }
         ],
@@ -50,7 +50,7 @@ def _resposta_ok(texto: str = "Olá", **extra) -> dict:
 class TestAgenerate:
     async def test_prompt_simples_devolve_conteudo(self):
         def handler(_req):
-            return httpx.Response(200, json=_resposta_ok("Olá do OpenRouter"))
+            return httpx.Response(200, json=_ok_response("Olá do OpenRouter"))
 
         resultado = await _client(handler).agenerate(
             [text_message(MessageRole.USER, "oi")]
@@ -73,7 +73,7 @@ class TestConversaoDeMensagens:
 
         def handler(req: httpx.Request) -> httpx.Response:
             capturado.update(json.loads(req.content))
-            return httpx.Response(200, json=_resposta_ok())
+            return httpx.Response(200, json=_ok_response())
 
         client = _client(handler, compact_system_prompt=True)
         await client.agenerate(
@@ -95,7 +95,7 @@ class TestConversaoDeMensagens:
 
         def handler(req: httpx.Request) -> httpx.Response:
             capturado.update(json.loads(req.content))
-            return httpx.Response(200, json=_resposta_ok())
+            return httpx.Response(200, json=_ok_response())
 
         client = _client(handler, compact_system_prompt=True)
         await client.agenerate(
@@ -109,7 +109,7 @@ class TestConversaoDeMensagens:
 
         def handler(req: httpx.Request) -> httpx.Response:
             capturado.update(json.loads(req.content))
-            return httpx.Response(200, json=_resposta_ok())
+            return httpx.Response(200, json=_ok_response())
 
         await _client(handler).agenerate(
             [
@@ -133,7 +133,7 @@ class TestConversaoDeMensagens:
 
         def handler(req: httpx.Request) -> httpx.Response:
             capturado.update(json.loads(req.content))
-            return httpx.Response(200, json=_resposta_ok())
+            return httpx.Response(200, json=_ok_response())
 
         mensagem = VMessage(
             role=MessageRole.ASSISTANT,
@@ -151,7 +151,7 @@ class TestConversaoDeMensagens:
 
     async def test_mensagem_de_role_desconhecido_falha(self):
         def handler(_req):
-            return httpx.Response(200, json=_resposta_ok())
+            return httpx.Response(200, json=_ok_response())
 
         estranha = text_message(MessageRole.USER, "?")
         estranha.role = "extraterrestre"  # ty: ignore[invalid-assignment]
@@ -167,7 +167,7 @@ class TestConversaoDeMensagens:
 
         def handler(req: httpx.Request) -> httpx.Response:
             capturado.update(json.loads(req.content))
-            return httpx.Response(200, json=_resposta_ok())
+            return httpx.Response(200, json=_ok_response())
 
         mensagem = VMessage(
             role=MessageRole.USER,
@@ -193,7 +193,7 @@ class TestToolCalling:
 
         def handler(req: httpx.Request) -> httpx.Response:
             capturado.update(json.loads(req.content))
-            return httpx.Response(200, json=_resposta_ok())
+            return httpx.Response(200, json=_ok_response())
 
         @vtool(extras=ToolExtras())
         async def buscar(query: str) -> str:
@@ -287,7 +287,7 @@ class TestToolCalling:
 
 class TestStreaming:
     async def test_chunks_de_texto_saem_na_ordem(self):
-        corpo = (
+        body = (
             b'data: {"choices":[{"delta":{"content":"Oi"}}]}\n\n'
             b'data: {"choices":[{"delta":{"content":" mundo"}}]}\n\n'
             b"data: [DONE]\n\n"
@@ -295,7 +295,7 @@ class TestStreaming:
 
         def handler(_req):
             return httpx.Response(
-                200, content=corpo, headers={"content-type": "text/event-stream"}
+                200, content=body, headers={"content-type": "text/event-stream"}
             )
 
         chunks = [
@@ -304,12 +304,12 @@ class TestStreaming:
                 [text_message(MessageRole.USER, "oi")]
             )
         ]
-        texto = "".join(c.delta_text for c in chunks)
+        text = "".join(c.delta_text for c in chunks)
 
-        assert texto == "Oi mundo"
+        assert text == "Oi mundo"
 
     async def test_reasoning_nao_entra_no_delta_text(self):
-        corpo = (
+        body = (
             b'data: {"choices":[{"delta":{"reasoning":"pensando..."}}]}\n\n'
             b'data: {"choices":[{"delta":{"content":"resposta"}}]}\n\n'
             b"data: [DONE]\n\n"
@@ -317,7 +317,7 @@ class TestStreaming:
 
         def handler(_req):
             return httpx.Response(
-                200, content=corpo, headers={"content-type": "text/event-stream"}
+                200, content=body, headers={"content-type": "text/event-stream"}
             )
 
         chunks = [
@@ -326,10 +326,10 @@ class TestStreaming:
                 [text_message(MessageRole.USER, "oi")]
             )
         ]
-        texto = "".join(c.delta_text for c in chunks)
+        text = "".join(c.delta_text for c in chunks)
         raciocinio = "".join(c.delta_reasoning or "" for c in chunks)
 
-        assert texto == "resposta"
+        assert text == "resposta"
         assert raciocinio == "pensando..."
 
     async def test_stream_sem_nenhum_chunk_util_nao_trava(self):
@@ -351,7 +351,7 @@ class TestStreaming:
 
 class TestStreamingToolCallsEUsage:
     async def test_tool_call_fragmentada_por_index_sai_completa(self):
-        eventos = [
+        events = [
             {
                 "choices": [
                     {
@@ -396,12 +396,12 @@ class TestStreamingToolCallsEUsage:
                 ]
             },
         ]
-        corpo = "".join(f"data: {json.dumps(e)}\n\n" for e in eventos).encode()
-        corpo += b"data: [DONE]\n\n"
+        body = "".join(f"data: {json.dumps(e)}\n\n" for e in events).encode()
+        body += b"data: [DONE]\n\n"
 
         def handler(_req):
             return httpx.Response(
-                200, content=corpo, headers={"content-type": "text/event-stream"}
+                200, content=body, headers={"content-type": "text/event-stream"}
             )
 
         chunks = [
@@ -419,7 +419,7 @@ class TestStreamingToolCallsEUsage:
         assert names == {"file_read"}
 
     async def test_usage_do_ultimo_evento_vira_usage_metadata(self):
-        corpo = (
+        body = (
             b'data: {"choices":[{"delta":{"content":"oi"}}]}\n\n'
             b'data: {"choices":[],"usage":'
             b'{"prompt_tokens":10,"completion_tokens":3,"total_tokens":13}}\n\n'
@@ -428,7 +428,7 @@ class TestStreamingToolCallsEUsage:
 
         def handler(_req):
             return httpx.Response(
-                200, content=corpo, headers={"content-type": "text/event-stream"}
+                200, content=body, headers={"content-type": "text/event-stream"}
             )
 
         chunks = [
@@ -452,7 +452,7 @@ class TestStreamingToolCallsEUsage:
         def handler(req):
             nonlocal payload_captured
             payload_captured = json.loads(req.content.decode("utf-8"))
-            return httpx.Response(200, json=_resposta_ok("Ok"))
+            return httpx.Response(200, json=_ok_response("Ok"))
 
         client = _client(handler, compact_system_prompt=True)
         system_text = (
@@ -494,7 +494,7 @@ class TestStreamingToolCallsEUsage:
         def handler(req):
             nonlocal payload_captured
             payload_captured = json.loads(req.content.decode("utf-8"))
-            return httpx.Response(200, json=_resposta_ok("Ok"))
+            return httpx.Response(200, json=_ok_response("Ok"))
 
         client = _client(handler, compact_system_prompt=True)
         system_text = (
@@ -525,7 +525,7 @@ class TestStreamingToolCallsEUsage:
         def handler(req):
             nonlocal payload_captured
             payload_captured = json.loads(req.content.decode("utf-8"))
-            return httpx.Response(200, json=_resposta_ok("Ok"))
+            return httpx.Response(200, json=_ok_response("Ok"))
 
         client = _client(handler, compact_system_prompt=True)
         system_text = (
@@ -564,7 +564,7 @@ class TestStreamingToolCallsEUsage:
         def handler(req):
             nonlocal payload_captured
             payload_captured = json.loads(req.content.decode("utf-8"))
-            return httpx.Response(200, json=_resposta_ok("Ok"))
+            return httpx.Response(200, json=_ok_response("Ok"))
 
         client = _client(handler, compact_system_prompt=True)
         system_text = (
@@ -589,3 +589,133 @@ class TestStreamingToolCallsEUsage:
         assert "Documentação de ferramentas" not in sys_msg
         assert "Documentação ainda pertencente a Identity" not in sys_msg
         assert "Execute testes antes de concluir." in sys_msg
+
+
+class TestPromptCache:
+    def _client(self, model: str, origin: str):
+        from backend.llm.openrouter.chat_client import OpenRouterChatClient
+
+        http = OpenRouterClient(
+            api_key="k",
+            http_client=httpx.AsyncClient(
+                transport=httpx.MockTransport(lambda r: httpx.Response(200, json={}))
+            ),
+        )
+        return OpenRouterChatClient(model, http, media_model_id=f"{origin}:{model}")
+
+    def _messages(self):
+        from backend.vtypes.message import MessageRole, text_message
+
+        return [
+            text_message(MessageRole.SYSTEM, "regras"),
+            text_message(MessageRole.USER, "primeira"),
+            text_message(MessageRole.ASSISTANT, "resposta"),
+            text_message(MessageRole.USER, "segunda"),
+        ]
+
+    def test_anthropic_model_on_openrouter_marks_cache_breakpoints(self) -> None:
+        body = self._client("anthropic/claude-sonnet-4.5", "openrouter")._payload(
+            self._messages(), tools=None, temperature=None, max_tokens=None
+        )
+
+        marked = [
+            m["role"]
+            for m in body["messages"]
+            if isinstance(m["content"], list) and m["content"][-1].get("cache_control")
+        ]
+        assert marked == ["system", "assistant", "user"]
+        assert body["messages"][1]["content"] == "primeira"
+
+    def test_model_without_explicit_cache_is_untouched(self) -> None:
+        body = self._client("meta-llama/llama-4", "openrouter")._payload(
+            self._messages(), tools=None, temperature=None, max_tokens=None
+        )
+        assert all(isinstance(m["content"], str) for m in body["messages"])
+        assert "cache_prompt" not in body
+
+    def test_llamacpp_asks_to_reuse_prefix(self) -> None:
+        body = self._client("qwen", "llamacpp")._payload(
+            self._messages(), tools=None, temperature=None, max_tokens=None
+        )
+        assert body["cache_prompt"] is True
+
+
+class TestRouterCacheKey:
+    def _payload(self, origin: str):
+        from backend.llm.prompt_cache import prompt_cache_key
+
+        client = TestPromptCache()._client("cc/claude-sonnet", origin)
+        token = prompt_cache_key.set("thread-9")
+        try:
+            return client._payload(
+                TestPromptCache()._messages(),
+                tools=None,
+                temperature=None,
+                max_tokens=None,
+            )
+        finally:
+            prompt_cache_key.reset(token)
+
+    def test_9router_receives_thread_key(self) -> None:
+        assert self._payload("nine_router")["prompt_cache_key"] == "thread-9"
+
+    def test_openrouter_receives_session_id_for_sticky_routing(self) -> None:
+        body = self._payload("openrouter")
+        assert body["session_id"] == "thread-9"
+        assert "prompt_cache_key" not in body
+
+    def test_llamacpp_does_not_receive_session_key(self) -> None:
+        body = self._payload("llamacpp")
+        assert "prompt_cache_key" not in body
+        assert "session_id" not in body
+
+
+class TestRouterSessionAndUsage:
+    def _client(self, origin: str):
+        return TestPromptCache()._client("modelo", origin)
+
+    def _with_key(self, origin: str):
+        from backend.llm.prompt_cache import prompt_cache_key
+
+        token = prompt_cache_key.set("thread-7")
+        try:
+            return self._client(origin)._session_headers()
+        finally:
+            prompt_cache_key.reset(token)
+
+    def test_session_header_for_openrouter_and_9router(self) -> None:
+        assert self._with_key("openrouter") == {"x-session-id": "thread-7"}
+        assert self._with_key("nine_router") == {"x-session-id": "thread-7"}
+
+    def test_no_header_for_local_runtimes_or_without_thread(self) -> None:
+        assert self._with_key("llamacpp") is None
+        assert self._client("openrouter")._session_headers() is None
+
+    def test_usage_reads_cache_read_and_write_in_both_formats(self) -> None:
+        from backend.llm.openrouter.chat_client import _usage_metadata
+
+        openrouter = _usage_metadata(
+            {
+                "prompt_tokens": 1000,
+                "completion_tokens": 10,
+                "prompt_tokens_details": {
+                    "cached_tokens": 800,
+                    "cache_write_tokens": 50,
+                },
+            }
+        )
+        omniroute_usage = _usage_metadata(
+            {
+                "prompt_tokens": 1000,
+                "completion_tokens": 10,
+                "prompt_tokens_details": {
+                    "cached_tokens": 800,
+                    "cache_creation_tokens": 70,
+                },
+            }
+        )
+
+        assert openrouter is not None and omniroute_usage is not None
+        assert openrouter["cached_input_tokens"] == 800
+        assert openrouter["cache_write_tokens"] == 50
+        assert omniroute_usage["cache_write_tokens"] == 70

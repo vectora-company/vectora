@@ -126,6 +126,7 @@ describe("UsagePopover — consumo da conversa", () => {
               output_tokens: 300,
               total_tokens: 1800,
               cached_input_tokens: 1200,
+              cache_write_tokens: 400,
               runs: 2,
             }),
             { status: 200 },
@@ -145,12 +146,14 @@ describe("UsagePopover — consumo da conversa", () => {
       fireEvent.click(screen.getByRole("button"));
     });
 
-    const bloco = await screen.findByTestId("thread-usage");
-    expect(bloco.textContent).toContain("Consumo da conversa");
-    expect(bloco.textContent).toContain("1.5k");
-    expect(bloco.textContent).toContain("1.8k");
-    expect(bloco.textContent).toContain("Entrada em cache");
-    expect(bloco.textContent).toContain("1.2k");
+    const block = await screen.findByTestId("thread-usage");
+    expect(block.textContent).toContain("Consumo da conversa");
+    expect(block.textContent).toContain("1.5k");
+    expect(block.textContent).toContain("1.8k");
+    expect(block.textContent).toContain("Entrada em cache");
+    expect(block.textContent).toContain("1.2k");
+    expect(block.textContent).toContain("Gravado no cache");
+    expect(block.textContent).toContain("400");
   });
 
   it("não mostra o bloco sem execuções", async () => {

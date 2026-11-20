@@ -1770,6 +1770,8 @@ async def get_history(
                 is_error=entry.is_error,
                 checkpoint_id=entry.checkpoint_id,
                 attachments=entry.attachments,
+                parts=entry.parts,
+                verification=entry.verification,
                 edited_files=[file.model_dump() for file in entry.edited_files],
             )
             for entry in pairs
@@ -1811,6 +1813,7 @@ async def get_thread_usage(thread_id: str, request: Request) -> ThreadUsageRespo
         output_tokens=int(data.get("output_tokens", 0)),
         total_tokens=int(data.get("total_tokens", 0)),
         cached_input_tokens=int(data.get("cached_input_tokens", 0)),
+        cache_write_tokens=int(data.get("cache_write_tokens", 0)),
         runs=int(data.get("runs", 0)),
         model=model,
         context_window=model_context_window(model),
@@ -2381,6 +2384,8 @@ async def get_thread_history_paginated(
             is_error=entry.is_error,
             checkpoint_id=entry.checkpoint_id,
             attachments=entry.attachments,
+            parts=entry.parts,
+            verification=entry.verification,
             edited_files=[file.model_dump() for file in entry.edited_files],
         )
         for entry in page

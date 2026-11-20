@@ -26,7 +26,7 @@ import { useChatInputStore } from "@/lib/stores/chat-input-store";
 import { useWorkspacesStore } from "@/lib/stores/workspaces-store";
 import { useSettingsOverlayStore } from "@/lib/stores/settings-overlay-store";
 import { useSettingsStore } from "@/lib/stores/settings-store";
-import { m as msg } from "@/lib/paraglide/messages";
+import { m } from "@/lib/paraglide/messages";
 import { BrowserDevtoolsPanel } from "./browser-devtools-panel";
 import { WorkbenchSettingsSurface } from "@/components/workbench/settings/workbench-settings-surface";
 import { browserSettings } from "@/components/workbench/settings/workbench-settings-registry";
@@ -1092,9 +1092,9 @@ export function BrowserTab({ threadId, visible = true }: BrowserTabProps) {
 
   const handleAskAgent = useCallback(() => {
     const prompt = [
-      msg.workbench_browser_ask_agent_prompt(),
+      m.workbench_browser_ask_agent_prompt(),
       LAUNCH_JSON_TEMPLATE,
-      msg.workbench_browser_ask_agent_note(),
+      m.workbench_browser_ask_agent_note(),
     ].join("\n\n");
     useChatInputStore.getState().pushDraft(prompt);
   }, []);
@@ -1199,30 +1199,34 @@ export function BrowserTab({ threadId, visible = true }: BrowserTabProps) {
     <div className="w-full max-w-[260px] space-y-1.5 rounded-md border border-border/60 bg-card/40 p-2 text-left">
       <Input
         value={manual.name}
-        onChange={(e) => setManual((m) => ({ ...m, name: e.target.value }))}
-        placeholder={msg.workbench_browser_field_name()}
+        onChange={(e) =>
+          setManual((item) => ({ ...item, name: e.target.value }))
+        }
+        placeholder={m.workbench_browser_field_name()}
         className="h-7 text-xs"
       />
       <Input
         value={manual.runtimeExecutable}
         onChange={(e) =>
-          setManual((m) => ({ ...m, runtimeExecutable: e.target.value }))
+          setManual((item) => ({ ...item, runtimeExecutable: e.target.value }))
         }
-        placeholder={msg.workbench_browser_field_executable()}
+        placeholder={m.workbench_browser_field_executable()}
         className="h-7 text-xs"
       />
       <Input
         value={manual.runtimeArgs}
         onChange={(e) =>
-          setManual((m) => ({ ...m, runtimeArgs: e.target.value }))
+          setManual((item) => ({ ...item, runtimeArgs: e.target.value }))
         }
-        placeholder={msg.workbench_browser_field_args()}
+        placeholder={m.workbench_browser_field_args()}
         className="h-7 text-xs"
       />
       <Input
         value={manual.port}
-        onChange={(e) => setManual((m) => ({ ...m, port: e.target.value }))}
-        placeholder={msg.workbench_browser_field_port()}
+        onChange={(e) =>
+          setManual((item) => ({ ...item, port: e.target.value }))
+        }
+        placeholder={m.workbench_browser_field_port()}
         inputMode="numeric"
         className="h-7 text-xs"
       />
@@ -1233,7 +1237,7 @@ export function BrowserTab({ threadId, visible = true }: BrowserTabProps) {
           disabled={!manual.name.trim() || !manual.runtimeExecutable.trim()}
           className="h-7 flex-1 text-xs"
         >
-          {msg.workbench_browser_manual_save()}
+          {m.workbench_browser_manual_save()}
         </Button>
         <Button
           size="sm"
@@ -1241,7 +1245,7 @@ export function BrowserTab({ threadId, visible = true }: BrowserTabProps) {
           onClick={() => setShowManualForm(false)}
           className="h-7 text-xs"
         >
-          {msg.workbench_browser_manual_cancel()}
+          {m.workbench_browser_manual_cancel()}
         </Button>
       </div>
     </div>
@@ -1255,8 +1259,8 @@ export function BrowserTab({ threadId, visible = true }: BrowserTabProps) {
           onClick={() => setServersCollapsed((v) => !v)}
           title={
             serversCollapsed
-              ? msg.workbench_browser_servers_expand()
-              : msg.workbench_browser_servers_collapse()
+              ? m.workbench_browser_servers_expand()
+              : m.workbench_browser_servers_collapse()
           }
         >
           {serversCollapsed ? (
@@ -1264,12 +1268,12 @@ export function BrowserTab({ threadId, visible = true }: BrowserTabProps) {
           ) : (
             <ChevronDown className="h-3 w-3" />
           )}
-          {msg.workbench_browser_servers()}
+          {m.workbench_browser_servers()}
         </button>
         <button
           onClick={() => setShowManualForm((v) => !v)}
           className="rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-          title={msg.workbench_browser_manual_add()}
+          title={m.workbench_browser_manual_add()}
         >
           <Plus className="h-3.5 w-3.5" />
         </button>
@@ -1322,7 +1326,7 @@ export function BrowserTab({ threadId, visible = true }: BrowserTabProps) {
                   size="icon"
                   variant="ghost"
                   className="h-6 w-6"
-                  title={msg.workbench_browser_console()}
+                  title={m.workbench_browser_console()}
                   onClick={() => setConsoleFor(cfg.name)}
                 >
                   <Terminal className="h-3 w-3" />
@@ -1332,7 +1336,7 @@ export function BrowserTab({ threadId, visible = true }: BrowserTabProps) {
                     size="icon"
                     variant={isActive ? "secondary" : "ghost"}
                     className="h-6 w-6"
-                    title={msg.workbench_browser_open_server()}
+                    title={m.workbench_browser_open_server()}
                     onClick={() => navigate(`http://localhost:${cfg.port}`)}
                   >
                     <ExternalLink className="h-3 w-3" />
@@ -1349,9 +1353,9 @@ export function BrowserTab({ threadId, visible = true }: BrowserTabProps) {
                   title={
                     isRunning
                       ? isManaged
-                        ? msg.workbench_browser_stop()
-                        : msg.workbench_browser_running_external()
-                      : msg.workbench_browser_start()
+                        ? m.workbench_browser_stop()
+                        : m.workbench_browser_running_external()
+                      : m.workbench_browser_start()
                   }
                 >
                   {isAction ? (
@@ -1374,10 +1378,10 @@ export function BrowserTab({ threadId, visible = true }: BrowserTabProps) {
       <Zap className="h-8 w-8 text-muted-foreground/40 shrink-0" />
       <div className="min-w-0 max-w-[260px]">
         <p className="text-sm font-medium text-foreground leading-snug">
-          {msg.workbench_browser_empty_title()}
+          {m.workbench_browser_empty_title()}
         </p>
         <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
-          {msg.workbench_browser_empty_description()}
+          {m.workbench_browser_empty_description()}
         </p>
       </div>
       {configs.length === 0 &&
@@ -1392,9 +1396,7 @@ export function BrowserTab({ threadId, visible = true }: BrowserTabProps) {
               className="gap-1.5 w-full h-auto py-1.5 px-3"
             >
               <Sparkles className="h-3.5 w-3.5 shrink-0" />
-              <span className="text-xs">
-                {msg.workbench_browser_ask_agent()}
-              </span>
+              <span className="text-xs">{m.workbench_browser_ask_agent()}</span>
             </Button>
             <Button
               size="sm"
@@ -1404,7 +1406,7 @@ export function BrowserTab({ threadId, visible = true }: BrowserTabProps) {
             >
               <Plus className="h-3.5 w-3.5 shrink-0" />
               <span className="text-xs">
-                {msg.workbench_browser_manual_add()}
+                {m.workbench_browser_manual_add()}
               </span>
             </Button>
           </div>
@@ -1427,8 +1429,7 @@ export function BrowserTab({ threadId, visible = true }: BrowserTabProps) {
               : t.historyIndex >= 0
                 ? t.history[t.historyIndex]
                 : "";
-            const label =
-              t.title || tUrl || msg.workbench_browser_tab_untitled();
+            const label = t.title || tUrl || m.workbench_browser_tab_untitled();
             const isTabActive = t.id === activeTabId;
             return (
               <div
@@ -1445,7 +1446,7 @@ export function BrowserTab({ threadId, visible = true }: BrowserTabProps) {
                 <button
                   type="button"
                   className="shrink-0 rounded p-0.5 opacity-0 group-hover:opacity-100 hover:bg-accent transition-opacity"
-                  title={msg.workbench_browser_close_tab()}
+                  title={m.workbench_browser_close_tab()}
                   onClick={(e) => {
                     e.stopPropagation();
                     closeTab(t.id);
@@ -1459,7 +1460,7 @@ export function BrowserTab({ threadId, visible = true }: BrowserTabProps) {
           <button
             type="button"
             className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-            title={msg.workbench_browser_new_tab()}
+            title={m.workbench_browser_new_tab()}
             onClick={() => addTab()}
           >
             <Plus className="h-3 w-3" />
@@ -1468,9 +1469,9 @@ export function BrowserTab({ threadId, visible = true }: BrowserTabProps) {
         <button
           type="button"
           data-testid="browser-settings-btn"
-          aria-label={msg.workbench_browser_settings_toggle()}
+          aria-label={m.workbench_browser_settings_toggle()}
           aria-expanded={browserSettingsOpen}
-          title={msg.workbench_browser_settings_toggle()}
+          title={m.workbench_browser_settings_toggle()}
           className={`flex h-6 w-6 shrink-0 items-center justify-center rounded p-1 transition-colors ${browserSettingsOpen ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground"}`}
           onClick={toggleBrowserSettings}
         >
@@ -1498,7 +1499,7 @@ export function BrowserTab({ threadId, visible = true }: BrowserTabProps) {
           className="rounded p-1 hover:bg-accent text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30 disabled:pointer-events-none"
           onClick={goBack}
           disabled={!canGoBack}
-          title={msg.workbench_browser_back()}
+          title={m.workbench_browser_back()}
         >
           <ArrowLeft className="h-3 w-3" />
         </button>
@@ -1506,7 +1507,7 @@ export function BrowserTab({ threadId, visible = true }: BrowserTabProps) {
           className="rounded p-1 hover:bg-accent text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30 disabled:pointer-events-none"
           onClick={goForward}
           disabled={!canGoForward}
-          title={msg.workbench_browser_forward()}
+          title={m.workbench_browser_forward()}
         >
           <ArrowRight className="h-3 w-3" />
         </button>
@@ -1514,7 +1515,7 @@ export function BrowserTab({ threadId, visible = true }: BrowserTabProps) {
           className="rounded p-1 hover:bg-accent text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30 disabled:pointer-events-none"
           onClick={refresh}
           disabled={!currentUrl}
-          title={msg.workbench_files_refresh()}
+          title={m.workbench_files_refresh()}
         >
           {desktopLoading ? (
             <Loader2 className="h-3 w-3 animate-spin" />
@@ -1527,7 +1528,7 @@ export function BrowserTab({ threadId, visible = true }: BrowserTabProps) {
           data-testid="browser-url-bar"
           className="flex-1 min-w-0 bg-background/80 border border-border/40 rounded px-2 py-0.5 text-[11px] font-mono text-foreground focus:outline-none focus:border-primary/60"
           value={editingUrl ? urlInput : currentUrl}
-          placeholder={msg.workbench_browser_url_placeholder()}
+          placeholder={m.workbench_browser_url_placeholder()}
           onFocus={() => {
             setEditingUrl(true);
             setUrlInput(currentUrl);
@@ -1547,7 +1548,7 @@ export function BrowserTab({ threadId, visible = true }: BrowserTabProps) {
           rel="noreferrer"
           aria-disabled={!currentUrl}
           className={`rounded p-1 hover:bg-accent text-muted-foreground hover:text-foreground transition-colors ${!currentUrl ? "opacity-30 pointer-events-none" : ""}`}
-          title={msg.workbench_browser_open_external()}
+          title={m.workbench_browser_open_external()}
         >
           <ExternalLink className="h-3 w-3" />
         </a>
@@ -1555,7 +1556,7 @@ export function BrowserTab({ threadId, visible = true }: BrowserTabProps) {
           data-testid="browser-devtools-toggle"
           className={`rounded p-1 hover:bg-accent transition-colors ${devtoolsOpen ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground"}`}
           onClick={() => setDevtoolsOpen((v) => !v)}
-          title={msg.workbench_browser_devtools_toggle()}
+          title={m.workbench_browser_devtools_toggle()}
         >
           <Code2 className="h-3 w-3" />
         </button>
@@ -1670,7 +1671,7 @@ export function BrowserTab({ threadId, visible = true }: BrowserTabProps) {
         <div className="flex h-56 shrink-0 flex-col border-t border-border/60 bg-background">
           <div className="flex shrink-0 items-center justify-between border-b border-border/60 px-4 py-2">
             <span className="text-xs font-medium text-foreground">
-              {msg.workbench_browser_console_title({ name: consoleFor })}
+              {m.workbench_browser_console_title({ name: consoleFor })}
             </span>
             <div className="flex items-center gap-1">
               <button
@@ -1685,7 +1686,7 @@ export function BrowserTab({ threadId, visible = true }: BrowserTabProps) {
                   );
                 }}
                 className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-                title={msg.workbench_browser_console_refresh()}
+                title={m.workbench_browser_console_refresh()}
               >
                 <RefreshCw
                   className={`h-3.5 w-3.5 ${consoleLoading ? "animate-spin" : ""}`}
@@ -1694,7 +1695,7 @@ export function BrowserTab({ threadId, visible = true }: BrowserTabProps) {
               <button
                 onClick={() => setConsoleFor(null)}
                 className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-                title={msg.workbench_browser_console_close()}
+                title={m.workbench_browser_console_close()}
               >
                 <X className="h-3.5 w-3.5" />
               </button>
@@ -1706,7 +1707,7 @@ export function BrowserTab({ threadId, visible = true }: BrowserTabProps) {
           >
             {consoleLines.length === 0 ? (
               <p className="text-muted-foreground">
-                {msg.workbench_browser_console_empty()}
+                {m.workbench_browser_console_empty()}
               </p>
             ) : (
               consoleLines.map((line, i) => (

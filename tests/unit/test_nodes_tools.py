@@ -149,10 +149,10 @@ def test_all_tools_count() -> None:
     # A mensagem lista os nomes: só o número não diz *qual* tool entrou ou
     # sumiu, e a contagem já ficou defasada em silêncio uma vez por isso.
     """Verifica o comportamento de all tools count."""
-    nomes = sorted(t.name for t in ALL_TOOLS)
-    assert len(ALL_TOOLS) == 196, f"tools registradas: {nomes}"
-    nomes_registrados = set(nomes)
-    for esperado in (
+    names = sorted(t.name for t in ALL_TOOLS)
+    assert len(ALL_TOOLS) == 196, f"tools registradas: {names}"
+    registered_names = set(names)
+    for expected in (
         "pdf_to_images",
         "graph_resolve_symbol",
         "video_to_frames",
@@ -160,7 +160,7 @@ def test_all_tools_count() -> None:
         "systemone_evaluate_pattern",
         "systemone_propose_kanban_transition",
     ):
-        assert esperado in nomes_registrados, f"Ferramenta ausente: {esperado}"
+        assert expected in registered_names, f"Ferramenta ausente: {expected}"
 
 
 def test_all_tools_sem_nome_duplicado() -> None:
@@ -169,9 +169,9 @@ def test_all_tools_sem_nome_duplicado() -> None:
     """Verifica o comportamento de all tools sem nome duplicado."""
     from collections import Counter
 
-    nomes = [t.name for t in ALL_TOOLS]
-    repetidos = [n for n, c in Counter(nomes).items() if c > 1]
-    assert not repetidos, f"tools com nome duplicado: {repetidos}"
+    names = [t.name for t in ALL_TOOLS]
+    duplicates = [n for n, c in Counter(names).items() if c > 1]
+    assert not duplicates, f"tools com nome duplicado: {duplicates}"
 
 
 def test_media_tools_registered() -> None:

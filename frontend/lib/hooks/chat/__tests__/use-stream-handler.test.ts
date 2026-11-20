@@ -54,7 +54,7 @@ function gen(events: StreamEvent[]): AsyncGenerator<StreamEvent> {
 
 const seq = (n: number) => ({ seq: n, event_id: `run-1:${n}` });
 
-async function* turnoComArquivosTardios() {
+async function* turnWithLateFiles() {
   yield { type: "thread", thread_id: "t1" };
   yield { type: "token", content: "Pronto" };
   yield { type: "done", thread_id: "t1", run_id: "run-1" };
@@ -115,8 +115,79 @@ describe("useStreamHandler.processStream", () => {
     expect(assistant?.persistedMessageId).toBe(42);
   });
 
+  it("acumula os eventos reasoning na mensagem do assistente", async () => {
+    streamChatMock.mockReturnValue(
+      gen([
+        { type: "thread", thread_id: "t1" },
+        { type: "reasoning", content: "analiso " },
+        { type: "reasoning", content: "o pedido" },
+        { type: "token", content: "Pronto" },
+        { type: "done", thread_id: "t1", run_id: "run-1" },
+      ]),
+    );
+
+    const { result } = run();
+    await result.current.processStream("oi", "a1");
+
+    expect(messages.find((m) => m.id === "a1")?.reasoning).toBe(
+      "analiso o pedido",
+    );
+  });
+
+  it("guarda o plano e o desfecho da verificação na mensagem do turno", async () => {
+    streamChatMock.mockReturnValue(
+      gen([
+        { type: "thread", thread_id: "t1" },
+        {
+          type: "todos_updated",
+          todos: [{ content: "Escrever o teste", status: "in_progress" }],
+        },
+        { type: "token", content: "Pronto" },
+        {
+          type: "verification",
+          status: "passed",
+          outcome: "passed",
+          detail: "ok",
+        },
+        { type: "done", thread_id: "t1", run_id: "run-1" },
+      ]),
+    );
+
+    const { result } = run();
+    await result.current.processStream("oi", "a1");
+
+    const assistant = messages.find((m) => m.id === "a1");
+    expect(assistant?.plan).toEqual([
+      { content: "Escrever o teste", status: "in_progress" },
+    ]);
+    expect(assistant?.verification).toEqual({
+      status: "passed",
+      outcome: "passed",
+      detail: "ok",
+    });
+  });
+
+  it("registra as orientações aplicadas no meio do turno", async () => {
+    streamChatMock.mockReturnValue(
+      gen([
+        { type: "thread", thread_id: "t1" },
+        { type: "token", content: "Parte 1" },
+        { type: "steer_applied", content: "use pnpm" },
+        { type: "token", content: " e parte 2" },
+        { type: "done", thread_id: "t1", run_id: "run-1" },
+      ]),
+    );
+
+    const { result } = run();
+    await result.current.processStream("oi", "a1");
+
+    const assistant = messages.find((m) => m.id === "a1");
+    expect(assistant?.steers).toEqual(["use pnpm"]);
+    expect(assistant?.content).toBe("Parte 1 e parte 2");
+  });
+
   it("encerra o turno no done e anexa os arquivos editados que chegam depois", async () => {
-    streamChatMock.mockReturnValue(turnoComArquivosTardios());
+    streamChatMock.mockReturnValue(turnWithLateFiles());
 
     const { result } = run();
     const out = await result.current.processStream("oi", "a1");
