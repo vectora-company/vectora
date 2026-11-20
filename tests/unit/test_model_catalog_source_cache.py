@@ -93,6 +93,30 @@ async def test_falha_gera_log_curto_sem_traceback(
 
 
 @pytest.mark.asyncio
+async def test_http_status_falha_registra_codigo_sem_body(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    response = httpx.Response(
+        403,
+        request=httpx.Request("GET", URL),
+        text="sensitive provider response",
+    )
+    client = _client(response)
+
+    with caplog.at_level("WARNING", logger=model_catalog.logger.name):
+        assert await model_catalog._get_json(client, URL) is None
+
+    record = next(
+        r for r in caplog.records if "provider endpoint returned" in r.getMessage()
+    )
+    assert record.levelname == "WARNING"
+    assert "HTTP 403" in record.getMessage()
+    assert URL in record.getMessage()
+    assert "sensitive provider response" not in record.getMessage()
+    assert record.exc_info is None
+
+
+@pytest.mark.asyncio
 async def test_chaves_diferentes_nao_compartilham_cache() -> None:
     client = _client(_ok({"data": ["a"]}), _ok({"data": ["b"]}))
 
