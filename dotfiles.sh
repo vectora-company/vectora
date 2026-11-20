@@ -5,19 +5,23 @@ set -Eeuo pipefail
 
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 MODE=install
-case "${1:-}" in
-  "") ;;
-  --check) MODE=check ;;
-  --toolchain-only) MODE=toolchain ;;
-  -h|--help)
-    printf '%s\n' 'Uso: ./dotfiles.sh [--check|--toolchain-only]' \
-      '  padrão             prepara a toolchain Linux (opcional)' \
-      '  --check            apenas lista o estado das dependências' \
-      '  --toolchain-only   prepara apenas a toolchain (equivalente ao padrão)'
-    exit 0
-    ;;
-  *) printf 'Opção desconhecida: %s\n' "$1" >&2; exit 2 ;;
-esac
+GPU_TOOLS=0
+for option in "$@"; do
+  case "$option" in
+    --check) MODE=check ;;
+    --toolchain-only) MODE=toolchain ;;
+    --gpu-tools) GPU_TOOLS=1 ;;
+    -h|--help)
+      printf '%s\n' 'Uso: ./dotfiles.sh [--check] [--toolchain-only] [--gpu-tools]' \
+        '  padrão             prepara a toolchain Linux (opcional)' \
+        '  --check            apenas lista o estado das dependências' \
+        '  --toolchain-only   prepara apenas a toolchain (equivalente ao padrão)' \
+        '  --gpu-tools        inclui ferramentas opcionais de desenvolvimento Vulkan'
+      exit 0
+      ;;
+    *) printf 'Opção desconhecida: %s\n' "$option" >&2; exit 2 ;;
+  esac
+done
 
 OS=$(uname -s)
 if [[ "$OS" != Linux ]]; then
@@ -76,7 +80,7 @@ has_pyenv_version() {
 printf 'Vectora Linux bootstrap — distro=%s (%s), modo=%s\n' "$DISTRO" "$PACKAGE_MANAGER" "$MODE"
 printf '\nFerramentas detectadas:\n'
 PENDING=0
-for tool in git curl gcc make node pnpm bun pyenv python uv scons go rustup gitleaks prettier claude omniroute wrangler vercel flatpak flatpak-builder bsdtar fusermount3 rpmbuild; do
+for tool in git curl gcc make node pnpm bun pyenv python uv scons go rustup gitleaks prettier claude omniroute wrangler vercel flatpak flatpak-builder bsdtar fusermount3 rpmbuild vulkaninfo; do
   if command_exists "$tool"; then printf '  [ok]      %s: %s\n' "$tool" "$(command -v "$tool")"
   else printf '  [pendente] %s\n' "$tool"; ((PENDING+=1))
   fi
@@ -97,12 +101,18 @@ if command_exists flatpak; then
     printf '  [pendente] remoto Flatpak do Flathub (usuário)\n'
     ((PENDING+=1))
   fi
-  if flatpak info --user org.flatpak.Builder >/dev/null 2>&1; then
-    printf '  [ok]      org.flatpak.Builder (Flathub)\n'
-  else
-    printf '  [pendente] org.flatpak.Builder (Flathub)\n'
-    ((PENDING+=1))
+  flatpak_apps=(org.flatpak.Builder)
+  if [[ "$GPU_TOOLS" == 1 && "$(uname -m)" == x86_64 ]]; then
+    flatpak_apps+=(org.renderdoc.RenderDoc)
   fi
+  for app in "${flatpak_apps[@]}"; do
+    if flatpak info --user "$app" >/dev/null 2>&1; then
+      printf '  [ok]      %s (Flathub)\n' "$app"
+    else
+      printf '  [pendente] %s (Flathub)\n' "$app"
+      ((PENDING+=1))
+    fi
+  done
 fi
 if [[ -s "$NVM_DIR/nvm.sh" ]]; then printf '  [ok]      nvm: %s\n' "$NVM_DIR/nvm.sh"
 else printf '  [pendente] nvm (gerenciador de Node.js)\n'; ((PENDING+=1)); fi
@@ -150,7 +160,16 @@ install_packages() {
         libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev libncursesw5-dev \
         xz-utils tk-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev libgdbm-dev \
         libnss3-dev libpq-dev libatomic1 libayatana-appindicator3-dev flatpak \
-        flatpak-builder fuse3 libarchive-tools rpm snapd)
+        flatpak-builder fuse3 libarchive-tools rpm snapd mesa-vulkan-drivers \
+        libvulkan1 libvulkan-dev vulkan-tools libva-drm2 libva-wayland2 patchelf binutils)
+      if apt-cache show intel-media-va-driver-non-free >/dev/null 2>&1; then
+        wanted+=(intel-media-va-driver-non-free)
+      elif apt-cache show intel-media-va-driver >/dev/null 2>&1; then
+        wanted+=(intel-media-va-driver)
+      fi
+      if [[ "$GPU_TOOLS" == 1 ]]; then
+        wanted+=(libglfw3-dev libglm-dev mangohud glslang-tools vulkan-validationlayers)
+      fi
       for package in "${wanted[@]}"; do dpkg-query -W -f='${db:Status-Abbrev}' "$package" 2>/dev/null | grep -q '^ii' || packages+=("$package"); done
       if ((${#packages[@]})); then run_privileged apt-get update; run_privileged env DEBIAN_FRONTEND=noninteractive apt-get install -y "${packages[@]}"; fi
       ;;
@@ -158,14 +177,22 @@ install_packages() {
       local -a wanted=(gcc gcc-c++ make curl git python3 pkgconf-pkg-config cmake openssl-devel \
         zlib-devel bzip2-devel readline-devel sqlite-devel ncurses-devel xz-devel tk-devel \
         libffi-devel libxml2-devel libxslt-devel gdbm-devel libatomic libpq-devel \
-        flatpak flatpak-builder fuse3 bsdtar rpm-build snapd)
+        flatpak flatpak-builder fuse3 bsdtar rpm-build snapd mesa-vulkan-drivers \
+        vulkan-loader vulkan-headers vulkan-tools libva libva-utils patchelf binutils)
+      if [[ "$GPU_TOOLS" == 1 ]]; then
+        wanted+=(glfw-devel glm-devel mangohud glslang vulkan-validation-layers)
+      fi
       for package in "${wanted[@]}"; do rpm -q "$package" >/dev/null 2>&1 || packages+=("$package"); done
       if ((${#packages[@]})); then run_privileged dnf install -y "${packages[@]}"; fi
       ;;
     pacman)
       local -a wanted=(base-devel curl ca-certificates git python pkgconf cmake openssl zlib bzip2 \
         readline sqlite ncurses xz tk libxml2 libffi gdbm postgresql-libs \
-        flatpak flatpak-builder fuse3 libarchive rpm-tools)
+        flatpak flatpak-builder fuse3 libarchive rpm-tools vulkan-icd-loader \
+        vulkan-intel vulkan-headers vulkan-tools libva libva-utils patchelf binutils)
+      if [[ "$GPU_TOOLS" == 1 ]]; then
+        wanted+=(glfw glm mangohud glslang vulkan-validation-layers)
+      fi
       for package in "${wanted[@]}"; do pacman -Q "$package" >/dev/null 2>&1 || packages+=("$package"); done
       if ((${#packages[@]})); then run_privileged pacman -S --needed "${packages[@]}"; fi
       ;;
@@ -173,7 +200,11 @@ install_packages() {
       local -a wanted=(bash build-base curl ca-certificates git python3 pkgconf cmake linux-headers \
         openssl-dev zlib-dev bzip2-dev readline-dev sqlite-dev ncurses-dev xz-dev tk-dev \
         libxml2-dev libffi-dev gdbm-dev postgresql-dev cargo flatpak flatpak-builder fuse3 \
-        libarchive-tools)
+        libarchive-tools mesa-vulkan-intel vulkan-loader vulkan-headers vulkan-tools \
+        libva patchelf binutils)
+      if [[ "$GPU_TOOLS" == 1 ]]; then
+        wanted+=(glfw-dev glm-dev glslang)
+      fi
       for package in "${wanted[@]}"; do apk info -e "$package" >/dev/null 2>&1 || packages+=("$package"); done
       if ((${#packages[@]})); then run_privileged apk add "${packages[@]}"; fi
       ;;
@@ -204,8 +235,12 @@ if [[ "$MODE" != check ]]; then
   if command_exists flatpak; then
     flatpak remote-add --if-not-exists --user flathub \
       https://dl.flathub.org/repo/flathub.flatpakrepo
+    flatpak_apps=(org.flatpak.Builder)
+    if [[ "$GPU_TOOLS" == 1 && "$(uname -m)" == x86_64 ]]; then
+      flatpak_apps+=(org.renderdoc.RenderDoc)
+    fi
     flatpak install --user --noninteractive --assumeyes --or-update \
-      flathub org.flatpak.Builder
+      flathub "${flatpak_apps[@]}"
   fi
 
   if [[ ! -s "$NVM_DIR/nvm.sh" ]]; then

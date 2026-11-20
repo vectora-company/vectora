@@ -17,6 +17,7 @@ from backend.services.distribution_channels import CHANNELS
 ROOT = Path(__file__).resolve().parents[2]
 BUILDER = (ROOT / "frontend/electron/electron-builder.yml").read_text(encoding="utf-8")
 WORKFLOW = (ROOT / ".github/workflows/vectora.yml").read_text(encoding="utf-8")
+ELECTRON_MAIN = (ROOT / "frontend/electron/src/main.ts").read_text(encoding="utf-8")
 
 
 def _builder_targets() -> set[str]:
@@ -86,6 +87,25 @@ def test_flatpak_uses_the_current_supported_freedesktop_runtime() -> None:
     assert 'runtimeVersion: "26.08"' in flatpak["body"]
     assert "appId: company.vectora.vectora" in BUILDER
     assert "Icon: company.vectora.vectora" in flatpak["body"]
+
+
+def test_linux_packages_declare_vulkan_runtime_and_snap_opengl_plug() -> None:
+    deb = re.search(r"^deb:\n(?P<body>(?:[ \t].*\n|\n)+)", BUILDER, re.MULTILINE)
+    snap = re.search(r"^snapcraft:\n(?P<body>(?:[ \t].*\n|\n)+)", BUILDER, re.MULTILINE)
+    assert deb and snap
+    assert "- libvulkan1" in deb["body"]
+    assert "- mesa-vulkan-drivers" in deb["body"]
+    assert "plugs:" in snap["body"]
+    assert "- opengl" in snap["body"]
+
+
+def test_linux_electron_explicitly_enables_angle_vulkan() -> None:
+    assert 'appendSwitch("ignore-gpu-blocklist")' in ELECTRON_MAIN
+    assert 'appendSwitch("use-vulkan")' in ELECTRON_MAIN
+    assert (
+        "Vulkan,VulkanFromANGLE,DefaultANGLEVulkan,VaapiVideoDecoder" in ELECTRON_MAIN
+    )
+    assert 'appendSwitch("disable-features", "SkiaGraphite")' in ELECTRON_MAIN
 
 
 def test_endpoint_requires_authentication_and_returns_the_manifest() -> None:

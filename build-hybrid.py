@@ -108,6 +108,26 @@ def _assert_backend_data_bundled(dist_dir: Path) -> None:
     print("Dados do backend embutidos (defaults.env idêntico ao do build).")
 
 
+def _assert_pydantic_core_extension_bundled(
+    dist_dir: Path, platform: str = sys.platform
+) -> None:
+    """Falha cedo se a extensão nativa obrigatória do Pydantic não foi coletada."""
+    suffix = "pyd" if platform == "win32" else "so"
+    extension = next(
+        (
+            path
+            for path in dist_dir.rglob(f"_pydantic_core*.{suffix}")
+            if path.is_file()
+        ),
+        None,
+    )
+    if extension is None:
+        sys.exit(
+            f"FALHA: extensão nativa do pydantic_core ausente em {dist_dir} após "
+            "o PyInstaller. Confira a coleta de binários de `pydantic_core`."
+        )
+
+
 def _add_installed_test_runtime(dist_dir: Path) -> None:
     """Ship uv and the black-box suite; pytest itself stays opt-in/downloaded."""
     uv_binary = shutil.which("uv")
@@ -356,6 +376,7 @@ def main() -> None:
             "degradar pro fallback de PATH do sistema em produção."
         )
     _assert_backend_data_bundled(dist_dir)
+    _assert_pydantic_core_extension_bundled(dist_dir)
     _add_installed_test_runtime(dist_dir)
     total_mb = (
         sum(f.stat().st_size for f in dist_dir.rglob("*") if f.is_file()) / 1048576

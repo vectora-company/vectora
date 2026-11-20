@@ -171,11 +171,13 @@ if (angleOverride) {
   app.commandLine.appendSwitch("use-angle", "vulkan");
 }
 if (process.platform === "linux" && angleOverride !== "gl") {
-  // Sem esta feature o Chromium não habilita o Vulkan: com `use-angle=vulkan`
-  // o processo de GPU morria ("Requested GL implementation not found"), a
-  // interface caía em renderização por software e o Electron saía com SIGTRAP
-  // (código -5) ao encerrar. Com ela, o WebGL roda sobre o Vulkan da GPU.
-  app.commandLine.appendSwitch("enable-features", "Vulkan");
+  app.commandLine.appendSwitch("ignore-gpu-blocklist");
+  app.commandLine.appendSwitch("use-vulkan");
+  app.commandLine.appendSwitch(
+    "enable-features",
+    "Vulkan,VulkanFromANGLE,DefaultANGLEVulkan,VaapiVideoDecoder",
+  );
+  app.commandLine.appendSwitch("disable-features", "SkiaGraphite");
 }
 if (process.platform === "linux") {
   // Usa XWayland/X11 como protocolo de janela; Vulkan continua sendo o

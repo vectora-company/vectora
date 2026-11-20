@@ -624,8 +624,32 @@ def test_dotfiles_installs_flatpak_and_snap_tools_on_supported_distributions() -
     assert "snapcraft (snap install snapcraft --classic)" in dotfiles
     assert "cargo flatpak flatpak-builder fuse3" in dotfiles
     assert "https://dl.flathub.org/repo/flathub.flatpakrepo" in dotfiles
-    assert "flathub org.flatpak.Builder" in dotfiles
-    assert "flatpak info --user org.flatpak.Builder" in dotfiles
+    assert "flatpak_apps=(org.flatpak.Builder)" in dotfiles
+    assert 'flathub "${flatpak_apps[@]}"' in dotfiles
+    assert 'flatpak info --user "$app"' in dotfiles
+
+
+def test_dotfiles_installs_vulkan_runtime_and_optional_debug_tools() -> None:
+    dotfiles = (WORKFLOW.parent.parent.parent / "dotfiles.sh").read_text(
+        encoding="utf-8"
+    )
+
+    for package in (
+        "mesa-vulkan-drivers",
+        "libvulkan1",
+        "libvulkan-dev",
+        "vulkan-tools",
+        "libva-drm2",
+        "libva-wayland2",
+        "patchelf",
+        "binutils",
+    ):
+        assert package in dotfiles
+    assert "intel-media-va-driver-non-free" in dotfiles
+    assert "--gpu-tools" in dotfiles
+    assert "mangohud" in dotfiles
+    assert "vulkan-validationlayers" in dotfiles
+    assert "org.renderdoc.RenderDoc" in dotfiles
 
 
 def test_linux_release_validates_and_uploads_electron_builder_artifact_names() -> None:
