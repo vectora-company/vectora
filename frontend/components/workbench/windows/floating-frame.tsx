@@ -21,6 +21,7 @@ import {
 } from "react";
 import { Maximize2, Minimize2, Minus, X } from "lucide-react";
 
+import { WindowLayoutMenu } from "@/components/ui/window-layout-menu";
 import { RESIZE_HANDLES } from "@/lib/layout/window-handles";
 import { m } from "@/lib/paraglide/messages";
 import { cn } from "@/lib/utils";
@@ -28,6 +29,8 @@ import {
   fitRectToViewport,
   moveRect,
   resizeRect,
+  snapRect,
+  type LayoutTarget,
   type Rect,
   type ResizeDir,
 } from "@/lib/layout/window-geometry";
@@ -127,6 +130,13 @@ export function FloatingFrame({
     target.addEventListener("pointercancel", finish);
   };
 
+  const applyLayout = (target: LayoutTarget) => {
+    const next = snapRect(target, liveRef.current, MIN_SIZE, viewportSize());
+    setMaximized(false);
+    apply(next);
+    onBoundsChange(next);
+  };
+
   const startMove = (event: ReactPointerEvent<HTMLElement>) => {
     if ((event.target as HTMLElement).closest("button")) return;
     startGesture(event, (start, dx, dy) =>
@@ -178,6 +188,10 @@ export function FloatingFrame({
           >
             {title}
           </span>
+          <WindowLayoutMenu
+            onSelect={applyLayout}
+            className="rounded p-1 text-muted-foreground hover:bg-muted/60 hover:text-foreground [&_svg]:h-3.5 [&_svg]:w-3.5"
+          />
           <button
             type="button"
             onClick={onMinimize}

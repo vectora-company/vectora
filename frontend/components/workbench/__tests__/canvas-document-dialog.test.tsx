@@ -8,6 +8,7 @@ import { useDialogSizeStore } from "@/lib/stores/dialog-size-store";
 
 vi.mock("@/lib/paraglide/messages", () => ({
   m: {
+    window_layout: () => "Layout",
     dialog_close: () => "Fechar",
     dialog_resize: () => "Redimensionar diálogo",
     window_minimize: () => "Minimizar",

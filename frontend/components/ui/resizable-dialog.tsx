@@ -15,9 +15,12 @@ import { useDialogSizeStore } from "@/lib/stores/dialog-size-store";
 import {
   moveRect,
   resizeRect,
+  snapRect,
+  type LayoutTarget,
   type Rect,
   type ResizeDir,
 } from "@/lib/layout/window-geometry";
+import { WindowLayoutMenu } from "@/components/ui/window-layout-menu";
 import { RESIZE_HANDLES } from "@/lib/layout/window-handles";
 
 /** Margem mantida entre o diálogo e a borda da janela do app. */
@@ -213,6 +216,22 @@ export function ResizableDialogContent({
     });
   };
 
+  /** Encaixa a janela (metade, canto ou centro) pelo menu de layout. */
+  const applyLayout = (target: LayoutTarget) => {
+    const next = snapRect(
+      target,
+      liveRef.current,
+      { w: minWidth, h: minHeight },
+      viewport(),
+      { w: maxWidth, h: maxHeight },
+    );
+    setMaximized(false);
+    liveRef.current = next;
+    paint(next);
+    setRect(next);
+    if (storageKey) saveSize(storageKey, { w: next.w, h: next.h });
+  };
+
   /** Arrastar pelo cabeçalho (ou por qualquer `data-window-handle`) move a janela. */
   const onFramePointerDown = (event: React.PointerEvent<HTMLElement>) => {
     const target = event.target as Element;
@@ -313,6 +332,7 @@ export function ResizableDialogContent({
         {children}
 
         <div className="absolute top-4 right-4 flex items-center gap-1.5">
+          <WindowLayoutMenu onSelect={applyLayout} className={controlClass} />
           {onMinimize && (
             <button
               type="button"
