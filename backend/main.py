@@ -237,8 +237,16 @@ def _install_terminal_signals(server: Any, icon_ref: list[Any]) -> None:
 
 
 def _disable_uvicorn_signal_capture(server: Any) -> None:
-    """Keep the process-owner handlers active while Uvicorn serves."""
+    """Keep the process-owner handlers active while Uvicorn serves.
+
+    Versões novas do Uvicorn instalam os handlers em ``capture_signals`` (e
+    reexecutam o sinal só no fim do servidor); as antigas, em
+    ``install_signal_handlers``. Neutraliza as duas: com apenas a segunda, o
+    handler do processo só rodava depois do shutdown e o filtro de logs não
+    sabia que o encerramento era esperado.
+    """
     server.install_signal_handlers = lambda: None
+    server.capture_signals = contextlib.nullcontext
 
 
 # ---------------------------------------------------------------------------

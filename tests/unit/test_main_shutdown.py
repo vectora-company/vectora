@@ -53,6 +53,9 @@ class _FakeServer:
     def install_signal_handlers(self) -> None:
         pass
 
+    def capture_signals(self) -> Any:
+        return MagicMock()
+
 
 def _get_handler(signum: int) -> Any:
     return signal.getsignal(signum)
@@ -203,6 +206,21 @@ def test_uvicorn_does_not_replace_process_owner_signal_handler() -> None:
     server.install_signal_handlers()
 
     original.assert_not_called()
+
+
+def test_uvicorn_capture_signals_does_not_replace_process_handlers() -> None:
+    """Uvicorn novo usa `capture_signals`: ele não pode trocar os handlers do
+    processo nem adiar o sinal para depois do shutdown."""
+    from backend.main import _disable_uvicorn_signal_capture
+
+    server = _FakeServer()
+    original_handler = signal.getsignal(signal.SIGINT)
+
+    _disable_uvicorn_signal_capture(server)
+    with server.capture_signals():
+        assert signal.getsignal(signal.SIGINT) is original_handler
+
+    assert not isinstance(server.capture_signals, MagicMock)
 
 
 def test_tray_exposes_icon_via_icon_ref() -> None:
