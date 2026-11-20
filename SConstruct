@@ -630,7 +630,9 @@ def _action_package(target, source, env, platform=""):
         cmd.append(flag)
     output_arg = f"-c.directories.output={out_dir}"
 
-    build_env: dict[str, str] = {"VECTORA_UPDATE_CHANNEL": _resolve_update_channel()}
+    builder_env: dict[str, str] = {
+        "VECTORA_UPDATE_CHANNEL": _resolve_update_channel()
+    }
     has_signing_creds = any(
         os.environ.get(k)
         for k in ("CSC_LINK", "WIN_CSC_LINK", "CSC_KEY_PASSWORD", "MAC_CSC_LINK")
@@ -638,14 +640,14 @@ def _action_package(target, source, env, platform=""):
     if not has_signing_creds:
         dev_env = _get_dev_cert_env() if sys.platform == "win32" else None
         if dev_env:
-            build_env.update(dev_env)
+            builder_env.update(dev_env)
             backend_bin = os.path.join(ROOT, "dist", "vectora", "vectora.exe")
             if os.path.isfile(backend_bin):
                 print(">> assinando o binário do backend (extraResource) com dev-cert.pfx...")
                 _sign_binary(backend_bin)
             print(">> assinando instaladores com dev-cert.pfx")
         else:
-            build_env["CSC_IDENTITY_AUTO_DISCOVERY"] = "false"
+            builder_env["CSC_IDENTITY_AUTO_DISCOVERY"] = "false"
     if is_linux:
         # Snap pode alterar linux-unpacked enquanto o AppImage lê seus arquivos.
         # Gere os demais formatos primeiro e Snap em uma segunda passada.
@@ -660,11 +662,11 @@ def _action_package(target, source, env, platform=""):
                 "tar.gz",
                 output_arg,
             ],
-            env=build_env or None,
+            env=builder_env or None,
         )
-        _run([*cmd, "snap", output_arg], env=build_env or None)
+        _run([*cmd, "snap", output_arg], env=builder_env or None)
     else:
-        _run([*cmd, output_arg], env=build_env or None)
+        _run([*cmd, output_arg], env=builder_env or None)
 
     dest = os.path.join(VECTORA, "frontend", "dist-electron")
     os.makedirs(dest, exist_ok=True)

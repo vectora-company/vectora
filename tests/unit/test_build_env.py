@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import subprocess
+import symtable
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
@@ -25,6 +26,18 @@ OS_RELEASE = {
     "alpine": 'NAME="Alpine Linux"\nVERSION_ID=3.20.3\nID=alpine\n',
     "gentoo": 'NAME="Gentoo"\nID=gentoo\n',
 }
+
+
+def test_sconstruct_package_action_does_not_shadow_build_env_module() -> None:
+    source = (REPO / "SConstruct").read_text(encoding="utf-8")
+    module = symtable.symtable(source, "SConstruct", "exec")
+    action = next(
+        scope
+        for scope in module.get_children()
+        if scope.get_name() == "_action_package"
+    )
+
+    assert not action.lookup("build_env").is_local()
 
 
 def _reader(files: dict[str, str]) -> Callable[[str], str]:
@@ -383,7 +396,7 @@ class TestCanalDeAtualizacaoDoPacote:
         text = self._text()
         assert "def _resolve_update_channel()" in text
         assert (
-            'build_env: dict[str, str] = {"VECTORA_UPDATE_CHANNEL": _resolve_update_channel()}'
+            'builder_env: dict[str, str] = {\n        "VECTORA_UPDATE_CHANNEL": _resolve_update_channel()'
             in text
         )
 
