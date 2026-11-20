@@ -361,7 +361,10 @@ export function ChangesView({
     const requestedWorkspaceId = workspaceId;
     setGenerating(true);
     try {
-      const suggestion = await fetchGitCommitSuggestion(requestedWorkspaceId);
+      const suggestion = await fetchGitCommitSuggestion(
+        requestedWorkspaceId,
+        gitOps.selectedFiles,
+      );
       if (
         suggestion?.title &&
         requestedWorkspaceId === workspaceId &&

@@ -74,10 +74,19 @@ export interface GitCommitSuggestion {
   description: string;
 }
 
+/**
+ * Título e descrição sugeridos a partir do diff. Com `paths`, só os arquivos
+ * escolhidos entram na análise; sem eles, todas as alterações.
+ */
 export async function fetchGitCommitSuggestion(
   workspaceId: string,
+  paths: string[] = [],
 ): Promise<GitCommitSuggestion | null> {
-  const res = await fetch(`${base(workspaceId)}/git/commit/suggestion`);
+  const res = await fetch(`${base(workspaceId)}/git/commit/suggestion`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ paths }),
+  });
   if (!res.ok) return null;
   return (await res.json()) as GitCommitSuggestion;
 }

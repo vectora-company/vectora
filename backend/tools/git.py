@@ -871,9 +871,9 @@ async def git_commit_suggestion(
     wid = workspace_id or ctx.workspace_id
     if not wid:
         return json.dumps({"status": "error", "message": "workspace_id é obrigatório."})
-    from backend.api.handlers.workspaces import _git_commit_suggestion_sync
+    from backend.api.handlers.workspaces import suggest_commit_message
 
-    suggestion = await asyncio.to_thread(_git_commit_suggestion_sync, wid)
+    suggestion = await suggest_commit_message(wid)
     return json.dumps({"status": "ok", "suggestion": suggestion.model_dump()})
 
 

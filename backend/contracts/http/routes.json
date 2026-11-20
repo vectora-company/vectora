@@ -2535,7 +2535,8 @@
   },
   {
     "methods": [
-      "GET"
+      "GET",
+      "POST"
     ],
     "name": "git_commit_suggestion_workspaces__workspace_id__git_commit_suggestion_get",
     "path": "/workspaces/{workspace_id}/git/commit/suggestion"
