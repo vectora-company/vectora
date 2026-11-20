@@ -78,6 +78,8 @@ interface WindowsState {
   dockedActiveTab: string | null;
   canvasDocuments: CanvasDocumentDescriptor[];
   activeCanvasDocumentId: string | null;
+  /** Documentos em janela minimizados (continuam abertos, só escondidos na dock). */
+  minimizedCanvasDocumentIds: string[];
 
   /** Abre path na janela do workspace. Cria a janela se não existir, ou
    * adiciona uma aba se a janela já existir. */
@@ -112,6 +114,10 @@ interface WindowsState {
   closeCanvasDocument: (id: string) => void;
   closeCanvasDocumentAndDockedTab: (id: string) => void;
   closeCanvasDocumentModal: (id: string) => void;
+  /** Esconde a janela do documento na dock sem fechá-lo. */
+  minimizeCanvasDocument: (id: string) => void;
+  /** Tira o documento da dock e o traz de volta como janela ativa. */
+  restoreCanvasDocument: (id: string) => void;
   clearCanvasDocumentsForWorkspace: (workspaceId: string) => void;
 }
 
@@ -201,6 +207,36 @@ export const useWindowsStore = create<WindowsState>()(
       dockedActiveTab: null,
       canvasDocuments: [],
       activeCanvasDocumentId: null,
+      minimizedCanvasDocumentIds: [],
+
+      minimizeCanvasDocument: (id) =>
+        set((s) =>
+          s.canvasDocuments.some((document) => document.id === id) &&
+          !s.minimizedCanvasDocumentIds.includes(id)
+            ? {
+                minimizedCanvasDocumentIds: [
+                  ...s.minimizedCanvasDocumentIds,
+                  id,
+                ],
+                activeCanvasDocumentId:
+                  s.activeCanvasDocumentId === id
+                    ? null
+                    : s.activeCanvasDocumentId,
+              }
+            : s,
+        ),
+
+      restoreCanvasDocument: (id) =>
+        set((s) =>
+          s.canvasDocuments.some((document) => document.id === id)
+            ? {
+                minimizedCanvasDocumentIds: s.minimizedCanvasDocumentIds.filter(
+                  (item) => item !== id,
+                ),
+                activeCanvasDocumentId: id,
+              }
+            : s,
+        ),
 
       openCanvasDocument: (document) =>
         set((s) => {
@@ -215,6 +251,9 @@ export const useWindowsStore = create<WindowsState>()(
           return {
             canvasDocuments: documents,
             activeCanvasDocumentId: document.id,
+            minimizedCanvasDocumentIds: s.minimizedCanvasDocumentIds.filter(
+              (item) => item !== document.id,
+            ),
           };
         }),
 
@@ -233,7 +272,12 @@ export const useWindowsStore = create<WindowsState>()(
       activateCanvasDocument: (id) =>
         set((s) =>
           s.canvasDocuments.some((document) => document.id === id)
-            ? { activeCanvasDocumentId: id }
+            ? {
+                activeCanvasDocumentId: id,
+                minimizedCanvasDocumentIds: s.minimizedCanvasDocumentIds.filter(
+                  (item) => item !== id,
+                ),
+              }
             : s,
         ),
 
@@ -244,6 +288,9 @@ export const useWindowsStore = create<WindowsState>()(
           );
           return {
             canvasDocuments: documents,
+            minimizedCanvasDocumentIds: s.minimizedCanvasDocumentIds.filter(
+              (item) => item !== id,
+            ),
             activeCanvasDocumentId:
               s.activeCanvasDocumentId === id
                 ? (documents.at(-1)?.id ?? null)
@@ -294,6 +341,9 @@ export const useWindowsStore = create<WindowsState>()(
 
       closeCanvasDocumentModal: (id) =>
         set((s) => ({
+          minimizedCanvasDocumentIds: s.minimizedCanvasDocumentIds.filter(
+            (item) => item !== id,
+          ),
           canvasDocuments: s.canvasDocuments.filter(
             (document) => document.id !== id,
           ),
@@ -308,6 +358,9 @@ export const useWindowsStore = create<WindowsState>()(
           );
           return {
             canvasDocuments: documents,
+            minimizedCanvasDocumentIds: s.minimizedCanvasDocumentIds.filter(
+              (id) => documents.some((document) => document.id === id),
+            ),
             activeCanvasDocumentId: documents.some(
               (document) => document.id === s.activeCanvasDocumentId,
             )
@@ -459,6 +512,7 @@ export const useWindowsStore = create<WindowsState>()(
           dockedTabs: [],
           dockedActiveTab: null,
           canvasDocuments: [],
+          minimizedCanvasDocumentIds: [],
           activeCanvasDocumentId: null,
         }),
 

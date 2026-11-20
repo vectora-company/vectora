@@ -669,3 +669,86 @@ describe("windows-store — docked editor (IDE mode)", () => {
     expect(s().dockedTabs).toEqual(["b.ts"]);
   });
 });
+
+const minimizedDoc = (id: string) => ({
+  id,
+  kind: "file" as const,
+  workspaceId: "ws",
+  title: id,
+  path: `/p/${id}`,
+});
+
+describe("windows-store — documentos minimizados na dock", () => {
+  beforeEach(() => {
+    useWindowsStore.getState().closeAll();
+  });
+
+  it("minimizar tira o documento de ativo mas o mantém aberto", () => {
+    const store = useWindowsStore.getState();
+    store.openCanvasDocument(minimizedDoc("a"));
+    store.minimizeCanvasDocument("a");
+
+    const next = useWindowsStore.getState();
+    expect(next.minimizedCanvasDocumentIds).toEqual(["a"]);
+    expect(next.activeCanvasDocumentId).toBeNull();
+    expect(next.canvasDocuments.map((d) => d.id)).toEqual(["a"]);
+  });
+
+  it("minimizar duas vezes ou um id desconhecido não duplica nem quebra", () => {
+    const store = useWindowsStore.getState();
+    store.openCanvasDocument(minimizedDoc("a"));
+    store.minimizeCanvasDocument("a");
+    store.minimizeCanvasDocument("a");
+    store.minimizeCanvasDocument("nao-existe");
+
+    expect(useWindowsStore.getState().minimizedCanvasDocumentIds).toEqual([
+      "a",
+    ]);
+  });
+
+  it("restaurar remove da dock e torna o documento ativo", () => {
+    const store = useWindowsStore.getState();
+    store.openCanvasDocument(minimizedDoc("a"));
+    store.minimizeCanvasDocument("a");
+    store.restoreCanvasDocument("a");
+
+    const next = useWindowsStore.getState();
+    expect(next.minimizedCanvasDocumentIds).toEqual([]);
+    expect(next.activeCanvasDocumentId).toBe("a");
+  });
+
+  it("abrir ou ativar de novo um documento minimizado o traz de volta", () => {
+    const store = useWindowsStore.getState();
+    store.openCanvasDocument(minimizedDoc("a"));
+    store.minimizeCanvasDocument("a");
+    store.openCanvasDocument(minimizedDoc("a"));
+    expect(useWindowsStore.getState().minimizedCanvasDocumentIds).toEqual([]);
+
+    store.minimizeCanvasDocument("a");
+    store.activateCanvasDocument("a");
+    expect(useWindowsStore.getState().minimizedCanvasDocumentIds).toEqual([]);
+  });
+
+  it("fechar um documento minimizado o tira da dock", () => {
+    const store = useWindowsStore.getState();
+    store.openCanvasDocument(minimizedDoc("a"));
+    store.minimizeCanvasDocument("a");
+    store.closeCanvasDocumentModal("a");
+
+    expect(useWindowsStore.getState().minimizedCanvasDocumentIds).toEqual([]);
+
+    store.openCanvasDocument(minimizedDoc("b"));
+    store.minimizeCanvasDocument("b");
+    store.closeCanvasDocument("b");
+    expect(useWindowsStore.getState().minimizedCanvasDocumentIds).toEqual([]);
+  });
+
+  it("limpar o workspace remove da dock os documentos dele", () => {
+    const store = useWindowsStore.getState();
+    store.openCanvasDocument(minimizedDoc("a"));
+    store.minimizeCanvasDocument("a");
+    store.clearCanvasDocumentsForWorkspace("ws");
+
+    expect(useWindowsStore.getState().minimizedCanvasDocumentIds).toEqual([]);
+  });
+});

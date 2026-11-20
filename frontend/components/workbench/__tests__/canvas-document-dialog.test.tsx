@@ -57,21 +57,40 @@ describe("CanvasDocumentDialog", () => {
     });
   });
 
-  it("minimizar esconde a janela, mantém o conteúdo e o botão restaura", () => {
-    const onOpenChange = vi.fn();
+  it("minimizado, a janela some mas o conteúdo continua montado", () => {
     render(
-      <CanvasDocumentDialog open onOpenChange={onOpenChange} title="AGENTS.md">
+      <CanvasDocumentDialog
+        open
+        onOpenChange={vi.fn()}
+        title="AGENTS.md"
+        minimized
+        onMinimize={vi.fn()}
+      >
         <span>editor vivo</span>
+      </CanvasDocumentDialog>,
+    );
+
+    expect(screen.getByRole("dialog", { hidden: true }).style.display).toBe(
+      "none",
+    );
+    expect(screen.getByText("editor vivo")).toBeTruthy();
+  });
+
+  it("o botão de minimizar avisa quem controla o estado", () => {
+    const onMinimize = vi.fn();
+    render(
+      <CanvasDocumentDialog
+        open
+        onOpenChange={vi.fn()}
+        title="AGENTS.md"
+        onMinimize={onMinimize}
+      >
+        Conteúdo
       </CanvasDocumentDialog>,
     );
 
     fireEvent.click(screen.getByRole("button", { name: /minimiz/i }));
 
-    expect(screen.getByTestId("minimized-document")).toBeTruthy();
-    expect(screen.getByText("editor vivo")).toBeTruthy();
-    expect(onOpenChange).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByRole("button", { name: /restaur/i }));
-    expect(screen.queryByTestId("minimized-document")).toBeNull();
+    expect(onMinimize).toHaveBeenCalledOnce();
   });
 });
