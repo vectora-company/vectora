@@ -673,6 +673,20 @@ class EmbeddingQueue:
         except Exception:
             logger.exception("embedding_queue_reconcile_failed")
 
+    async def list_failures(self, limit: int = 20) -> list[dict[str, Any]]:
+        """Resume os itens failed/DLQ para o painel do administrador."""
+        records = await self.get_failed(limit)
+        return [
+            {
+                "queue_id": str(record.queue_id),
+                "collection": str(record.collection),
+                "status": str(record.status),
+                "attempt_count": int(str(record.attempt_count or 0)),
+                "error": str(record.error_message or record.dlq_reason or ""),
+            }
+            for record in records
+        ]
+
     async def cleanup_old_records(self, days: int = 30) -> int:
         """Remove registros antigos de DLQ e failed do banco de dados.
 
@@ -1157,6 +1171,61 @@ class PostgresQueueDB:
                 RETURNING queue.queue_id
                 """,
                 limit,
+            )
+        return len(rows)
+
+    async def list_failures(self, limit: int = 20) -> list[dict[str, Any]]:
+        """Resume os itens failed/DLQ para o painel do administrador."""
+        if limit < 1:
+            raise ValueError("O limite de falhas deve ser positivo")
+        from backend.storage.factory import get_pg_pool
+
+        pool = await get_pg_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT queue_id, status, task_json
+                FROM vectora_embedding_queue
+                WHERE status IN ('failed', 'dlq')
+                ORDER BY updated_at DESC LIMIT $1
+                """,
+                limit,
+            )
+        failures: list[dict[str, Any]] = []
+        for row in rows:
+            task = row["task_json"]
+            if isinstance(task, str):
+                task = json.loads(task)
+            task = task or {}
+            failures.append(
+                {
+                    "queue_id": str(row["queue_id"]),
+                    "collection": str(task.get("collection", "")),
+                    "status": str(row["status"]),
+                    "attempt_count": int(task.get("attempt_count") or 0),
+                    "error": str(
+                        task.get("error_message") or task.get("dlq_reason") or ""
+                    ),
+                }
+            )
+        return failures
+
+    async def cleanup_old_records(self, days: int = 30) -> int:
+        """Remove falhas failed/DLQ mais antigas que ``days`` dias."""
+        if days < 1:
+            raise ValueError("O prazo de limpeza deve ser de ao menos um dia")
+        from backend.storage.factory import get_pg_pool
+
+        pool = await get_pg_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                DELETE FROM vectora_embedding_queue
+                WHERE status IN ('failed', 'dlq')
+                  AND updated_at < now() - make_interval(days => $1)
+                RETURNING queue_id
+                """,
+                days,
             )
         return len(rows)
 

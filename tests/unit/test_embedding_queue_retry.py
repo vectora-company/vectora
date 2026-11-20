@@ -178,3 +178,28 @@ async def test_two_workers_cannot_claim_same_sqlite_item(tmp_path: Path) -> None
     finally:
         await first.close()
         await second.close()
+
+
+@pytest.mark.asyncio
+async def test_list_failures_summarizes_failed_and_dlq_items(tmp_path: Path) -> None:
+    queue = EmbeddingQueue(f"sqlite+aiosqlite:///{tmp_path / 'queue.db'}")
+    await queue.init()
+    try:
+        failed = await queue.enqueue("a", collection="docs")
+        dead = await queue.enqueue("b", collection="docs")
+        ok = await queue.enqueue("c", collection="docs")
+        await queue.mark_failed(failed, "falhou")
+        await queue.mark_dlq(dead, "sem provider")
+        await queue.mark_processing(ok)
+        await queue.mark_success(ok)
+
+        failures = await queue.list_failures(10)
+
+        assert {item["queue_id"] for item in failures} == {failed, dead}
+        by_id = {item["queue_id"]: item for item in failures}
+        assert by_id[failed]["error"] == "falhou"
+        assert by_id[dead]["error"] == "sem provider"
+        assert by_id[dead]["collection"] == "docs"
+        assert await queue.cleanup_old_records(days=1) == 0
+    finally:
+        await queue.close()

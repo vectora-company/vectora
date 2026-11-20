@@ -31,6 +31,34 @@
   },
   {
     "methods": [
+      "GET"
+    ],
+    "name": "get_embedding_queue_state_admin_embedding_queue_get",
+    "path": "/admin/embedding-queue"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "name": "cleanup_embedding_queue_admin_embedding_queue_cleanup_post",
+    "path": "/admin/embedding-queue/cleanup"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "name": "retry_embedding_queue_admin_embedding_queue_retry_post",
+    "path": "/admin/embedding-queue/retry"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "name": "discard_embedding_queue_item_admin_embedding_queue__queue_id__discard_post",
+    "path": "/admin/embedding-queue/{queue_id}/discard"
+  },
+  {
+    "methods": [
       "GET",
       "POST"
     ],

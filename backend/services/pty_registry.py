@@ -35,9 +35,6 @@ class PtyRegistry:
     def get(self, terminal_id: str) -> PtySession | None:
         return self._sessions.get(terminal_id)
 
-    def list_for_thread(self, thread_id: str) -> list[PtySession]:
-        return [s for s in self._sessions.values() if s.thread_id == thread_id]
-
     def resolve_for_context(
         self, terminal_id: str, *, user_id: str, thread_id: str, workspace_id: str
     ) -> PtySession | None:
