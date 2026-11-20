@@ -77,6 +77,15 @@ def test_macos_intel_is_not_a_target() -> None:
         assert "intel" not in channel["note"].lower()
 
 
+def test_flatpak_uses_the_current_supported_freedesktop_runtime() -> None:
+    flatpak = re.search(
+        r"^flatpak:\n(?P<body>(?:[ \t].*\n|\n)+)", BUILDER, re.MULTILINE
+    )
+    assert flatpak
+    assert "runtime: org.freedesktop.Platform" in flatpak["body"]
+    assert 'runtimeVersion: "26.08"' in flatpak["body"]
+
+
 def test_endpoint_requires_authentication_and_returns_the_manifest() -> None:
     anonymous = SimpleNamespace(state=SimpleNamespace(user=None))
     logged = SimpleNamespace(state=SimpleNamespace(user=SimpleNamespace(id="u1")))

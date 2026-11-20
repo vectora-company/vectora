@@ -59,17 +59,9 @@ def _enable_dark_mode_win32() -> None:
     """
     if sys.platform != "win32":
         return
-    try:
-        import ctypes
-        from typing import cast
+    from backend.services.tray_win32 import enable_dark_mode
 
-        uxtheme = cast("Any", ctypes.WinDLL("uxtheme"))
-        set_mode = uxtheme[135]  # SetPreferredAppMode — ordinal não documentado
-        set_mode.restype = ctypes.c_int
-        set_mode(2)  # PreferDark = 2
-        uxtheme[136]()  # FlushMenuThemes
-    except Exception as exc:
-        logger.debug("tray: dark mode win32 indisponível: %s", exc)
+    enable_dark_mode()
 
 
 def _build_icon_image() -> Any:

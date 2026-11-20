@@ -9,6 +9,8 @@ para o instalador, então o build recusa segredos no pacote e em `defaults.env`.
 Uso:  python build-hybrid.py
 """
 
+import importlib.machinery
+import importlib.util
 import os
 import shutil
 import subprocess  # nosec B404
@@ -48,6 +50,22 @@ COLLECT_ALL = [
 HIDDEN_IMPORTS = [
     "tiktoken_ext.openai_public",
 ]
+
+
+def _module_is_importable(module: str) -> bool:
+    """Verifica um módulo sem importar seu pacote pai."""
+    parent, separator, _child = module.rpartition(".")
+    if not separator:
+        return importlib.util.find_spec(module) is not None
+    parent_spec = importlib.util.find_spec(parent)
+    if parent_spec is None or parent_spec.submodule_search_locations is None:
+        return False
+    return (
+        importlib.machinery.PathFinder.find_spec(
+            module, parent_spec.submodule_search_locations
+        )
+        is not None
+    )
 
 
 def run(cmd: list, cwd: Path, desc: str, env: dict | None = None) -> None:
@@ -246,6 +264,20 @@ def main() -> None:
         "pysqlite2",  # dialeto opcional do SQLAlchemy
         "MySQLdb",  # dialeto opcional do SQLAlchemy
     ]
+    exclude_modules.extend(
+        mod
+        for mod in ("psycopg2", "psycopg_binary._uuid")
+        if not _module_is_importable(mod)
+    )
+    if sys.platform != "win32":
+        exclude_modules.extend(
+            [
+                "backend.services.ipc_pipe_win",
+                "backend.services.tray_win32",
+                "pystray._win32",
+                "pystray._util.win32",
+            ]
+        )
     excludes: list[str] = []
     for mod in exclude_modules:
         excludes += ["--exclude-module", mod]
@@ -269,7 +301,9 @@ def main() -> None:
             f"--distpath={ROOT / 'dist'}",
             f"--workpath={ROOT / 'build' / 'pyinstaller'}",
             f"--specpath={ROOT / 'build'}",
-            "--add-binary",
+            # nats-server é um executável Go estático, não uma biblioteca
+            # dinâmica; tratá-lo como binary faz o PyInstaller executar ldd.
+            "--add-data",
             f"{nats_binary}{SEP}nats",
             "--add-binary",
             f"{ffmpeg_binary}{SEP}ffmpeg",
@@ -287,7 +321,11 @@ def main() -> None:
         desc="PyInstaller -> dist/vectora",
         # Suprime SyntaxWarning do pacote `future` (escape sequences inválidas
         # em ficheiros de backports que o PyInstaller importa durante a análise).
-        env={"PYTHONWARNINGS": "ignore::SyntaxWarning"},
+        env={
+            "PYTHONWARNINGS": "ignore::SyntaxWarning",
+            "LC_ALL": "C",
+            "LANG": "C",
+        },
     )
     # --onedir gera a pasta dist/vectora/ com vectora[.exe] + _internal/.
     exe_name = "vectora.exe" if sys.platform == "win32" else "vectora"
@@ -299,11 +337,14 @@ def main() -> None:
     # Confere que o nats-server embutido sobreviveu ao empacotamento — sem
     # isso o build "passa" mas o sidecar de fila/KV degrada silenciosamente
     # pra memória em produção (ver nats_sidecar._frozen_bundle_bases).
-    if not any(dist_dir.rglob(f"nats/{nats_exe}")):
+    bundled_nats = next(dist_dir.rglob(f"nats/{nats_exe}"), None)
+    if bundled_nats is None:
         sys.exit(
             f"nats/{nats_exe} não apareceu em {dist_dir} após o PyInstaller "
             "— o sidecar de fila/KV vai degradar pra memória em produção."
         )
+    if sys.platform != "win32":
+        bundled_nats.chmod(bundled_nats.stat().st_mode | 0o111)
     if not any(dist_dir.rglob(f"ffmpeg/{ffmpeg_exe}")) or not any(
         dist_dir.rglob(f"ffmpeg/{ffprobe_exe}")
     ):

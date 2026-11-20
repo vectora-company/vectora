@@ -194,16 +194,22 @@ class TestEmpacotamentoLinux:
             "flatpak-builder",
             "bsdtar",
             "fusermount3",
+            "rpmbuild",
             "snap",
+            "snapcraft",
         ]
         assert command == (
-            "sudo apt-get install -y flatpak flatpak-builder fuse3 libarchive-tools snapd"
+            "sudo apt-get install -y flatpak flatpak-builder fuse3 libarchive-tools rpm snapd"
+            " && sudo snap install snapcraft --classic"
         )
         rhel_missing, dnf = build_env.packaging_hint("rhel", lambda _tool: None)
-        assert "snap" in rhel_missing
-        assert dnf.startswith("sudo dnf install -y ") and "snapd" in dnf
+        assert {"rpmbuild", "snap", "snapcraft"} <= set(rhel_missing)
+        assert dnf.startswith("sudo dnf install -y ")
+        assert {"rpm-build", "snapd"} <= set(dnf.split())
+        assert dnf.endswith("&& sudo snap install snapcraft --classic")
         _missing, pacman = build_env.packaging_hint("arch", lambda _tool: None)
-        assert pacman.startswith("sudo pacman -S --needed ") and "libarchive" in pacman
+        assert pacman.startswith("sudo pacman -S --needed ")
+        assert {"libarchive", "rpm-tools"} <= set(pacman.split())
         assert "snap" not in _missing
 
     def test_so_lista_o_que_falta(self) -> None:
@@ -211,8 +217,8 @@ class TestEmpacotamentoLinux:
         missing, command = build_env.packaging_hint(
             "suse", lambda tool: "/usr/bin/x" if tool in present else None
         )
-        assert missing == ["flatpak-builder", "fusermount3"]
-        assert command == "sudo zypper install -y flatpak-builder fuse3"
+        assert missing == ["flatpak-builder", "fusermount3", "rpmbuild"]
+        assert command == "sudo zypper install -y flatpak-builder fuse3 rpm-build"
 
     def test_familia_desconhecida_nao_sugere_comando(self) -> None:
         missing, command = build_env.packaging_hint("desconhecida", lambda _tool: None)

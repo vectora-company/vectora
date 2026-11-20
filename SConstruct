@@ -598,6 +598,18 @@ def _action_package(target, source, env, platform=""):
     quando escrito dentro da árvore observada. Buildar num diretório externo
     elimina a corrida; ao final copiamos só os instaladores de volta.
     """
+    is_linux = platform == "linux" or (not platform and sys.platform == "linux")
+    if is_linux:
+        host = build_env.detect_host()
+        family = host.distro.family if host.distro else build_env.UNKNOWN_FAMILY
+        missing, command = build_env.packaging_hint(family)
+        if missing:
+            install_hint = f" Instale com: {command}." if command else ""
+            raise SystemExit(
+                "FALHA: ferramentas obrigatórias para gerar os pacotes Linux "
+                f"ausentes: {', '.join(missing)}.{install_hint}"
+            )
+
     _free_desktop_dist()
     out_dir = os.path.join(
         os.environ.get("LOCALAPPDATA") or tempfile.gettempdir(),
@@ -607,7 +619,6 @@ def _action_package(target, source, env, platform=""):
     shutil.rmtree(out_dir, ignore_errors=True)
     os.makedirs(out_dir, exist_ok=True)
 
-    is_linux = platform == "linux" or (not platform and sys.platform == "linux")
     flag = {"win": "--win", "mac": "--mac", "linux": "--linux"}.get(platform)
     if is_linux and flag is None:
         flag = "--linux"

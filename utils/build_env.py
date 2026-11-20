@@ -99,7 +99,17 @@ PACKAGING_TOOLS: dict[str, dict[str, str]] = {
         "suse": "fuse3",
         "alpine": "fuse3",
     },
+    "rpmbuild": {
+        "debian": "rpm",
+        "rhel": "rpm-build",
+        "arch": "rpm-tools",
+        "suse": "rpm-build",
+    },
     "snap": {
+        "debian": "snapd",
+        "rhel": "snapd",
+    },
+    "snapcraft": {
         "debian": "snapd",
         "rhel": "snapd",
     },
@@ -340,7 +350,10 @@ def packaging_hint(
     if not missing:
         return [], ""
     packages = sorted({PACKAGING_TOOLS[tool][family] for tool in missing})
-    return missing, f"{command} {' '.join(packages)}"
+    install_command = f"{command} {' '.join(packages)}"
+    if "snapcraft" in missing:
+        install_command += " && sudo snap install snapcraft --classic"
+    return missing, install_command
 
 
 def describe_system(host: HostInfo) -> str:
