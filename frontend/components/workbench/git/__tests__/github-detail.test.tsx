@@ -2,7 +2,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 
-import { GithubIssueDetail, GithubPullDetail } from "../github-detail";
+import {
+  clearGithubDetailCache,
+  GithubIssueDetail,
+  GithubPullDetail,
+} from "../github-detail";
 
 vi.mock("@/lib/paraglide/messages", () => ({
   m: new Proxy(
@@ -82,6 +86,7 @@ beforeEach(() => {
   vi.stubGlobal("fetch", fetchMock);
 });
 afterEach(() => {
+  clearGithubDetailCache();
   cleanup();
   vi.unstubAllGlobals();
 });
@@ -276,5 +281,56 @@ describe("GithubIssueDetail", () => {
     expect(fetchMock.mock.calls.at(-1)![0]).toBe(
       "/github/issues/4?workspace_id=ws1",
     );
+  });
+});
+
+describe("cache de detalhes entre remontagens", () => {
+  it("reabre o PR já com o conteúdo anterior, sem voltar ao carregamento", async () => {
+    respond({ status: "ok", pull });
+    const first = render(<GithubPullDetail workspaceId="ws1" number={7} />);
+    await screen.findByText(/feat: algo/);
+    first.unmount();
+
+    render(<GithubPullDetail workspaceId="ws1" number={7} />);
+
+    // Na primeira pintura o título já está na tela.
+    expect(screen.getByText(/feat: algo/)).toBeTruthy();
+  });
+
+  it("revalida por baixo: a consulta é refeita mesmo com cache", async () => {
+    respond({ status: "ok", pull });
+    const first = render(<GithubPullDetail workspaceId="ws1" number={7} />);
+    await screen.findByText(/feat: algo/);
+    first.unmount();
+    fetchMock.mockClear();
+
+    render(<GithubPullDetail workspaceId="ws1" number={7} />);
+
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+  });
+
+  it("falha na revalidação não troca o conteúdo em cache por erro", async () => {
+    respond({ status: "ok", pull });
+    const first = render(<GithubPullDetail workspaceId="ws1" number={7} />);
+    await screen.findByText(/feat: algo/);
+    first.unmount();
+    respond({}, false);
+
+    render(<GithubPullDetail workspaceId="ws1" number={7} />);
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+
+    expect(screen.getByText(/feat: algo/)).toBeTruthy();
+  });
+
+  it("o cache é por workspace e por número", async () => {
+    respond({ status: "ok", pull });
+    const first = render(<GithubPullDetail workspaceId="ws1" number={7} />);
+    await screen.findByText(/feat: algo/);
+    first.unmount();
+    fetchMock.mockReturnValue(new Promise(() => {}));
+
+    render(<GithubPullDetail workspaceId="ws2" number={7} />);
+
+    expect(screen.queryByText(/feat: algo/)).toBeNull();
   });
 });

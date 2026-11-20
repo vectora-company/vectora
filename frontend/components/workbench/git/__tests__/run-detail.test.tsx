@@ -11,6 +11,7 @@ import {
 
 import { GithubRunDetail, RUN_POLL_MS } from "../run-detail";
 
+import { clearGithubDetailCache } from "../github-detail";
 vi.mock("@/lib/paraglide/messages", () => ({
   m: new Proxy(
     {},
@@ -91,6 +92,7 @@ beforeEach(() => {
   vi.stubGlobal("fetch", fetchMock);
 });
 afterEach(() => {
+  clearGithubDetailCache();
   cleanup();
   vi.unstubAllGlobals();
   vi.useRealTimers();

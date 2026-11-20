@@ -38,6 +38,7 @@ import {
 import { CanvasDocumentWindows } from "@/components/workbench/canvas-document-windows";
 import { useWindowsStore } from "@/lib/stores/windows-store";
 
+import { clearGithubDetailCache } from "../github-detail";
 vi.mock("@/lib/paraglide/messages", () => ({
   m: new Proxy(
     {},
@@ -114,6 +115,7 @@ beforeEach(() => {
   useWindowsStore.getState().closeAll();
 });
 afterEach(() => {
+  clearGithubDetailCache();
   cleanup();
   vi.unstubAllGlobals();
 });

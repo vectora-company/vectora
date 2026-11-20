@@ -8,6 +8,7 @@ import {
 } from "../github-documents";
 import type { CanvasDocumentDescriptor } from "@/lib/stores/windows-store";
 
+import { clearGithubDetailCache } from "../github-detail";
 vi.mock("@/lib/paraglide/messages", () => ({
   m: new Proxy({}, { get: (_t, prop) => () => String(prop) }),
 }));
@@ -24,6 +25,7 @@ beforeEach(() => {
   vi.stubGlobal("fetch", fetchMock);
 });
 afterEach(() => {
+  clearGithubDetailCache();
   cleanup();
   vi.unstubAllGlobals();
 });

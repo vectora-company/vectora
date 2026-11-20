@@ -74,6 +74,19 @@ export type Loaded<T> =
 const PAYLOAD_KEY = { pulls: "pull", issues: "issue", runs: "run" } as const;
 
 /**
+ * Últimos dados carregados por item. Trocar de aba ou de document remonta a
+ * tela; com isto ela abre já com o conteúdo anterior e só revalida por baixo,
+ * em vez de voltar ao carregamento e refazer a consulta inteira.
+ */
+const detailCache = new Map<string, unknown>();
+const DETAIL_CACHE_MAX = 50;
+
+/** Esvazia o cache de detalhes (usado nos testes). */
+export function clearGithubDetailCache(): void {
+  detailCache.clear();
+}
+
+/**
  * Carrega um PR (`pulls`), uma issue (`issues`) ou um run (`runs`) pelo
  * identificador. Com `pollMs`, relê sozinho enquanto a função devolver um
  * intervalo (ex.: run em andamento), mantendo o conteúdo anterior na tela: uma
@@ -85,7 +98,12 @@ export function useGithubDetail<T>(
   workspaceId: string,
   pollMs?: (data: T) => number | null,
 ): Loaded<T> {
-  const [loaded, setLoaded] = useState<Loaded<T>>({ status: "loading" });
+  const cacheKey = `${workspaceId}|${kind}|${id}`;
+  const [loaded, setLoaded] = useState<Loaded<T>>(() =>
+    detailCache.has(cacheKey)
+      ? { status: "ok", data: detailCache.get(cacheKey) as T }
+      : { status: "loading" },
+  );
   // Lido dentro do efeito sem reiniciar a busca quando só a função muda.
   const pollRef = useRef(pollMs);
   useEffect(() => {
@@ -95,9 +113,14 @@ export function useGithubDetail<T>(
   useEffect(() => {
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
-    // Troca de item volta ao carregamento.
+    // Troca de item mostra o que já se sabe dele ou volta ao carregamento.
+    const cached = detailCache.get(cacheKey) as T | undefined;
     // oxlint-disable-next-line react/set-state-in-effect
-    setLoaded({ status: "loading" });
+    setLoaded(
+      cached === undefined
+        ? { status: "loading" }
+        : { status: "ok", data: cached },
+    );
 
     const load = async (silent: boolean) => {
       try {
@@ -123,6 +146,13 @@ export function useGithubDetail<T>(
             });
           return;
         }
+        if (
+          detailCache.size >= DETAIL_CACHE_MAX &&
+          !detailCache.has(cacheKey)
+        ) {
+          detailCache.delete(detailCache.keys().next().value as string);
+        }
+        detailCache.set(cacheKey, data);
         setLoaded({ status: "ok", data });
         const next = pollRef.current?.(data);
         if (next && next > 0) timer = setTimeout(() => void load(true), next);
@@ -132,12 +162,13 @@ export function useGithubDetail<T>(
       }
     };
 
-    void load(false);
+    // Com dado em cache a releitura é silenciosa: não troca o conteúdo por erro.
+    void load(cached !== undefined);
     return () => {
       controller.abort();
       clearTimeout(timer);
     };
-  }, [kind, id, workspaceId]);
+  }, [kind, id, workspaceId, cacheKey]);
 
   return loaded;
 }

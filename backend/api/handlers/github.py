@@ -7,7 +7,9 @@ só leitura. Cada resposta traz um campo ``status`` para a interface mostrar
 
 from __future__ import annotations
 
+import asyncio
 import json
+import time
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException, Path, Query, Request
@@ -35,6 +37,55 @@ _ISSUE_DETAIL_FIELDS = (
 )
 _MAX_COMMENTS = 100
 _MAX_FILES = 300
+
+# Cache curto das leituras do `gh`: trocar de aba ou de document remonta a tela
+# e repetia a mesma consulta (a lista de PRs passa de 200 KB). Só respostas
+# bem-sucedidas entram; o TTL fica abaixo do menor intervalo de polling (8 s).
+_GH_CACHE_TTL_S = 4.0
+_GH_CACHE_MAX = 64
+_gh_cache: dict[tuple, tuple[float, dict]] = {}
+_gh_inflight: dict[tuple, asyncio.Future] = {}
+
+
+def clear_gh_cache() -> None:
+    """Esvazia o cache de leituras (usado nos testes)."""
+    _gh_cache.clear()
+    _gh_inflight.clear()
+
+
+async def _gh_read(
+    args: list[str], cwd: str | None = None, user_id: str | None = None
+) -> dict:
+    """`_gh_run` para leituras, com cache curto e junção de chamadas iguais.
+
+    A chave inclui usuário e diretório, então um usuário nunca recebe a
+    resposta de outro. Chamadas simultâneas idênticas esperam a mesma execução.
+    """
+    key = (user_id, cwd, tuple(args))
+    now = time.monotonic()
+    hit = _gh_cache.get(key)
+    if hit and now - hit[0] < _GH_CACHE_TTL_S:
+        return hit[1]
+    pending = _gh_inflight.get(key)
+    if pending is not None:
+        return await asyncio.shield(pending)
+    future: asyncio.Future = asyncio.get_running_loop().create_future()
+    _gh_inflight[key] = future
+    try:
+        result = await _gh_run(args, cwd=cwd, user_id=user_id)
+    except BaseException as exc:
+        future.set_exception(exc)
+        future.exception()  # evita o aviso de exceção nunca lida
+        raise
+    else:
+        future.set_result(result)
+    finally:
+        _gh_inflight.pop(key, None)
+    if result.get("status") == "ok":
+        if len(_gh_cache) >= _GH_CACHE_MAX:
+            _gh_cache.pop(next(iter(_gh_cache)))
+        _gh_cache[key] = (time.monotonic(), result)
+    return result
 
 
 class PullChecks(BaseModel):
@@ -226,7 +277,7 @@ async def list_pulls(
 ) -> PullListResponse:
     """Pull requests do repositório do workspace, com o resumo dos checks."""
     user_id = _require_user(request)
-    result = await _gh_run(
+    result = await _gh_read(
         [
             "pr",
             "list",
@@ -275,7 +326,7 @@ async def list_issues(
 ) -> IssueListResponse:
     """Issues do repositório do workspace."""
     user_id = _require_user(request)
-    result = await _gh_run(
+    result = await _gh_read(
         [
             "issue",
             "list",
@@ -409,7 +460,7 @@ async def get_pull(
 ) -> PullDetailResponse:
     """Um PR por inteiro: corpo, comentários, commits, arquivos e checks."""
     user_id = _require_user(request)
-    result = await _gh_run(
+    result = await _gh_read(
         ["pr", "view", str(number), "--json", _PR_DETAIL_FIELDS],
         cwd=_workspace_cwd(workspace_id),
         user_id=user_id,
@@ -434,7 +485,7 @@ async def get_issue(
 ) -> IssueDetailResponse:
     """Uma issue por inteiro: corpo, rótulos, responsáveis e comentários."""
     user_id = _require_user(request)
-    result = await _gh_run(
+    result = await _gh_read(
         ["issue", "view", str(number), "--json", _ISSUE_DETAIL_FIELDS],
         cwd=_workspace_cwd(workspace_id),
         user_id=user_id,
@@ -641,7 +692,7 @@ async def list_runs(
         args += ["--branch", branch]
     if workflow:
         args += ["--workflow", workflow]
-    result = await _gh_run(args, cwd=_workspace_cwd(workspace_id), user_id=user_id)
+    result = await _gh_read(args, cwd=_workspace_cwd(workspace_id), user_id=user_id)
     if result["status"] != "ok":
         failure, message = _failure(result)
         return RunListResponse(status=failure, message=message)
@@ -667,7 +718,7 @@ async def get_run(
 ) -> RunDetailResponse:
     """Um run por inteiro: metadados, jobs e passos."""
     user_id = _require_user(request)
-    result = await _gh_run(
+    result = await _gh_read(
         ["run", "view", str(run_id), "--json", _RUN_DETAIL_FIELDS],
         cwd=_workspace_cwd(workspace_id),
         user_id=user_id,
@@ -699,7 +750,7 @@ async def get_job_log(
 ) -> JobLogResponse:
     """Log de um job (só existe depois de o job terminar), limitado em tamanho."""
     user_id = _require_user(request)
-    result = await _gh_run(
+    result = await _gh_read(
         ["run", "view", str(run_id), "--job", str(job_id), "--log"],
         cwd=_workspace_cwd(workspace_id),
         user_id=user_id,
@@ -724,7 +775,7 @@ async def list_workflows(
 ) -> WorkflowListResponse:
     """Workflows do repositório, para o filtro da aba Actions."""
     user_id = _require_user(request)
-    result = await _gh_run(
+    result = await _gh_read(
         ["workflow", "list", "--json", "id,name,state"],
         cwd=_workspace_cwd(workspace_id),
         user_id=user_id,

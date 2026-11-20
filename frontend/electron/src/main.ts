@@ -157,7 +157,12 @@ if (process.platform === "win32") {
 } else if (process.platform === "darwin") {
   app.commandLine.appendSwitch("use-angle", "metal");
 } else {
-  app.commandLine.appendSwitch("use-angle", "vulkan");
+  // `VECTORA_ANGLE_BACKEND` (ex.: "gl" ou "default") troca o backend quando o
+  // Vulkan não inicializa na máquina ("No suitable EGL configs").
+  app.commandLine.appendSwitch(
+    "use-angle",
+    process.env.VECTORA_ANGLE_BACKEND?.trim() || "vulkan",
+  );
   if (process.platform === "linux") {
     // Usa XWayland/X11 como protocolo de janela; Vulkan continua sendo o
     // backend gráfico. Wayland não é um backend de renderização.
