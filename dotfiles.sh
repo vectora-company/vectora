@@ -101,18 +101,12 @@ if command_exists flatpak; then
     printf '  [pendente] remoto Flatpak do Flathub (usuário)\n'
     ((PENDING+=1))
   fi
-  flatpak_apps=(org.flatpak.Builder)
-  if [[ "$GPU_TOOLS" == 1 && "$(uname -m)" == x86_64 ]]; then
-    flatpak_apps+=(org.renderdoc.RenderDoc)
+  if flatpak info --user org.flatpak.Builder >/dev/null 2>&1; then
+    printf '  [ok]      org.flatpak.Builder (Flathub)\n'
+  else
+    printf '  [pendente] org.flatpak.Builder (Flathub)\n'
+    ((PENDING+=1))
   fi
-  for app in "${flatpak_apps[@]}"; do
-    if flatpak info --user "$app" >/dev/null 2>&1; then
-      printf '  [ok]      %s (Flathub)\n' "$app"
-    else
-      printf '  [pendente] %s (Flathub)\n' "$app"
-      ((PENDING+=1))
-    fi
-  done
 fi
 if [[ -s "$NVM_DIR/nvm.sh" ]]; then printf '  [ok]      nvm: %s\n' "$NVM_DIR/nvm.sh"
 else printf '  [pendente] nvm (gerenciador de Node.js)\n'; ((PENDING+=1)); fi
@@ -235,12 +229,8 @@ if [[ "$MODE" != check ]]; then
   if command_exists flatpak; then
     flatpak remote-add --if-not-exists --user flathub \
       https://dl.flathub.org/repo/flathub.flatpakrepo
-    flatpak_apps=(org.flatpak.Builder)
-    if [[ "$GPU_TOOLS" == 1 && "$(uname -m)" == x86_64 ]]; then
-      flatpak_apps+=(org.renderdoc.RenderDoc)
-    fi
     flatpak install --user --noninteractive --assumeyes --or-update \
-      flathub "${flatpak_apps[@]}"
+      flathub org.flatpak.Builder
   fi
 
   if [[ ! -s "$NVM_DIR/nvm.sh" ]]; then
