@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Final, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 #: Versão da API do host que as extensões declaram suportar.
 HOST_API_VERSION: Final = 1
@@ -16,6 +16,10 @@ _ID_PATTERN: Final = re.compile(r"^[a-z0-9][a-z0-9._-]{1,63}$")
 _VERSION_PATTERN: Final = re.compile(r"^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$")
 _CONTRIBUTION_ID_PATTERN: Final = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 _HOST_PATTERN: Final = re.compile(r"^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$")
+_ENTRY_PATTERN: Final = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]*\.html$")
+_KINDS_WITH_PAGE: Final = frozenset(
+    {"mode", "workbench_view", "settings_page", "header_action"}
+)
 
 #: Prefixo reservado aos controles do próprio Vectora: extensão nenhuma o usa.
 RESERVED_PREFIX: Final = "vectora"
@@ -46,8 +50,32 @@ class Contribution(BaseModel):
     id: str
     label: str = Field(min_length=1, max_length=80)
     icon: str | None = Field(default=None, max_length=64)
+    #: Página da extensão que a interface mostra, relativa a ``ui/`` no pacote.
+    #: Só vale para ``mode``, ``workbench_view``, ``settings_page`` e
+    #: ``header_action``; roda em iframe isolado, sem acesso ao app.
+    entry: str | None = Field(default=None, max_length=200)
     #: Para ``file_icon``: extensões de arquivo (sem ponto) que recebem o ícone.
     file_extensions: list[str] = Field(default_factory=list, max_length=32)
+
+    @field_validator("entry")
+    @classmethod
+    def _valid_entry(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if not _ENTRY_PATTERN.match(value) or ".." in value.split("/"):
+            raise ValueError("entry de contribuição inválido")
+        return value
+
+    @model_validator(mode="after")
+    def _entry_matches_kind(self) -> Contribution:
+        needs_entry = self.kind in _KINDS_WITH_PAGE
+        if needs_entry and self.entry is None:
+            raise ValueError(f"contribuição '{self.kind}' exige entry")
+        if not needs_entry and self.entry is not None:
+            raise ValueError(f"contribuição '{self.kind}' não aceita entry")
+        if self.kind == "file_icon" and not self.file_extensions:
+            raise ValueError("file_icon exige file_extensions")
+        return self
 
     @field_validator("id")
     @classmethod

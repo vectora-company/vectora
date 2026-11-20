@@ -11,6 +11,7 @@ import logging
 from typing import Annotated, Any, NoReturn
 
 from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from backend.api.handlers.admin import require_admin
@@ -125,6 +126,57 @@ async def extension_health(request: Request, extension_id: str) -> dict[str, Any
         return await get_extension_host().health(extension_id)
     except ExtensionError as exc:
         _fail(exc)
+
+
+#: Tipos que uma página de extensão pode carregar; qualquer outro é recusado.
+_UI_MEDIA_TYPES = {
+    ".html": "text/html; charset=utf-8",
+    ".js": "text/javascript; charset=utf-8",
+    ".mjs": "text/javascript; charset=utf-8",
+    ".css": "text/css; charset=utf-8",
+    ".json": "application/json",
+    ".svg": "image/svg+xml",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+    ".woff2": "font/woff2",
+}
+
+#: A página roda sem rede, sem frames e sem acesso a nada do app: o iframe
+#: também usa ``sandbox="allow-scripts"`` (origem opaca) e só conversa por
+#: mensagens que o host filtra.
+_UI_CSP = (
+    "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' data:; font-src 'self'; connect-src 'none'; "
+    "frame-src 'none'; base-uri 'none'; form-action 'none'; "
+    "frame-ancestors 'self'"
+)
+
+
+@router.get("/{extension_id}/ui/{path:path}")
+async def extension_ui_file(
+    request: Request, extension_id: str, path: str
+) -> FileResponse:
+    """Serve um arquivo da pasta ``ui/`` de uma extensão ativa."""
+    _actor(request)
+    try:
+        file = get_extension_host().ui_file(extension_id, path)
+    except ExtensionError as exc:
+        _fail(exc)
+    media_type = _UI_MEDIA_TYPES.get(file.suffix.lower())
+    if media_type is None:
+        raise HTTPException(status_code=415, detail="Tipo de arquivo não permitido.")
+    return FileResponse(
+        file,
+        media_type=media_type,
+        headers={
+            "Content-Security-Policy": _UI_CSP,
+            "X-Content-Type-Options": "nosniff",
+            "Cache-Control": "no-store",
+            "Referrer-Policy": "no-referrer",
+        },
+    )
 
 
 @router.get("/{extension_id}/audit")

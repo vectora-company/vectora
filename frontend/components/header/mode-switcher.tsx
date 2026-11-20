@@ -4,6 +4,7 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { Bot, Code2, KanbanSquare } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useSettingsStore } from "@/lib/stores/settings-store";
+import { useExtensionsStore } from "@/lib/stores/extensions-store";
 import { m } from "@/lib/paraglide/messages";
 import type { UiMode } from "@/lib/stores/settings-store";
 
@@ -117,6 +118,8 @@ function ModeButton({
 export function ModeSwitch({ show = false, width }: ModeSwitchProps) {
   const uiMode = useSettingsStore((s) => s.uiMode);
   const setUiMode = useSettingsStore((s) => s.setUiMode);
+  const extensionModeId = useExtensionsStore((s) => s.activeModeId);
+  const setExtensionMode = useExtensionsStore((s) => s.setActiveMode);
   const groupRef = useRef<HTMLDivElement>(null);
   const buttonRefs = useRef<Partial<Record<UiMode, HTMLButtonElement>>>({});
   const [indicator, setIndicator] = useState<{ left: number; width: number }>({
@@ -172,8 +175,9 @@ export function ModeSwitch({ show = false, width }: ModeSwitchProps) {
         <ModeButton
           key={mode}
           mode={mode}
-          active={uiMode === mode}
+          active={uiMode === mode && extensionModeId === null}
           onClick={() => {
+            setExtensionMode(null);
             if (uiMode !== mode) setUiMode(mode);
           }}
           Icon={Icon}
@@ -196,7 +200,11 @@ export function ModeSwitch({ show = false, width }: ModeSwitchProps) {
       <span
         aria-hidden="true"
         className={`pointer-events-none absolute bottom-0 h-0.5 rounded-full transition-all duration-200 ease-out ${MODE_ACCENT[uiMode].bar}`}
-        style={{ left: indicator.left, width: indicator.width }}
+        style={{
+          left: indicator.left,
+          width: indicator.width,
+          opacity: extensionModeId === null ? 1 : 0,
+        }}
       />
     </div>
   );

@@ -12,11 +12,13 @@
  * navega até ela), nunca reescreve a lógica de negócio de dentro.
  */
 
-import type { ComponentType } from "react";
+import { createElement, type ComponentType } from "react";
 
 import { lazyWithRetry } from "@/lib/lazy-with-retry";
 import { m } from "@/lib/paraglide/messages";
 import type { SettingsCategoryId } from "@/lib/stores/settings-overlay-store";
+import { ExtensionFrame } from "@/components/extensions/extension-frame";
+import type { ExtensionContribution } from "@/lib/extensions/registry";
 
 const GeralTab = lazyWithRetry(
   () =>
@@ -144,7 +146,8 @@ const StoragePanel = lazyWithRetry(
     })),
   "settings-admin-storage",
 );
-export type SettingsGroupId = "preferencias" | "ambiente" | "administracao";
+export type SettingsGroupId =
+  "preferencias" | "ambiente" | "administracao" | "extensoes";
 
 export interface SettingsCategory {
   id: SettingsCategoryId;
@@ -162,12 +165,36 @@ export interface SettingsCategoryGroup {
 interface BuildCategoriesArgs {
   connectEnabled: boolean;
   isAdmin: boolean;
+  /** Páginas de Configurações contribuídas por extensões ativas. */
+  extensionPages?: readonly ExtensionContribution[];
+}
+
+//: Um componente estável por contribuição: criar outro a cada render
+//: remontaria o iframe e perderia o estado da página da extensão.
+const extensionPageComponents = new Map<
+  string,
+  ComponentType<Record<string, never>>
+>();
+
+function extensionPageComponent(
+  contribution: ExtensionContribution,
+): ComponentType<Record<string, never>> {
+  const key = `${contribution.id}:${contribution.entry ?? ""}`;
+  let component = extensionPageComponents.get(key);
+  if (!component) {
+    component = function ExtensionSettingsPage() {
+      return createElement(ExtensionFrame, { contribution });
+    };
+    extensionPageComponents.set(key, component);
+  }
+  return component;
 }
 
 /** Monta as categorias visíveis, respeitando feature flag (Connect) e role. */
 export function buildSettingsCategoryGroups({
   connectEnabled,
   isAdmin,
+  extensionPages = [],
 }: BuildCategoriesArgs): SettingsCategoryGroup[] {
   const preferencias: SettingsCategory[] = [
     {
@@ -308,6 +335,18 @@ export function buildSettingsCategoryGroups({
       id: "administracao",
       label: m.settings_group_admin(),
       categories: administracao,
+    });
+  }
+  if (extensionPages.length > 0) {
+    groups.push({
+      id: "extensoes",
+      label: m.settings_group_extensions(),
+      categories: extensionPages.map((page) => ({
+        id: `ext:${page.id}` as SettingsCategoryId,
+        group: "extensoes" as const,
+        label: page.label,
+        Component: extensionPageComponent(page),
+      })),
     });
   }
 

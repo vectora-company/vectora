@@ -708,6 +708,13 @@
   },
   {
     "methods": [
+      "GET"
+    ],
+    "name": "extension_ui_file_extensions__extension_id__ui__path__get",
+    "path": "/extensions/{extension_id}/ui/{path}"
+  },
+  {
+    "methods": [
       "POST"
     ],
     "name": "submit_feedback_feedback_post",
