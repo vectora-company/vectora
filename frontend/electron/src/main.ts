@@ -166,11 +166,9 @@ if (angleOverride) {
 // "gl") derrubava o processo de GPU ("Requested GL implementation not found"),
 // deixava a interface em renderização por software e o Electron saía com
 // SIGTRAP (código -5) ao encerrar.
-if (process.platform === "linux") {
-  // Usa XWayland/X11 como protocolo de janela; Wayland não é um backend de
-  // renderização.
-  app.commandLine.appendSwitch("ozone-platform", "x11");
-}
+// A plataforma de janelas do Linux (Wayland ou X11) é escolhida antes deste
+// arquivo rodar, pela flag `--ozone-platform*` que o sidecar passa ao Electron
+// (ver backend/services/electron_sidecar.py).
 
 let electronCdpProxy: import("node:http").Server | null = null;
 if (!installedTestsMode) {
