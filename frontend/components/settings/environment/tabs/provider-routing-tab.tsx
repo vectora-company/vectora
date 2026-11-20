@@ -22,6 +22,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ProviderIcon } from "@/components/icons/provider-icons";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { m } from "@/lib/paraglide/messages";
@@ -492,7 +493,8 @@ async function fetchDmrModelJob(jobId: string): Promise<DmrJob> {
   const bridge = window.vectora?.dmr;
   if (bridge) {
     const operation = await bridge.getOperation(jobId);
-    if (!operation) throw new Error("operação DMR não encontrada");
+    if (!operation)
+      throw new Error(m.provider_routing_error_dmr_operation_missing());
     return dmrOperationToJob(operation);
   }
   const response = await fetch(`/provider-routing/dmr/models/jobs/${jobId}`);
@@ -527,7 +529,8 @@ async function cancelDmrModelJob(jobId: string): Promise<DmrJob> {
   if (bridge) {
     await bridge.cancel(jobId);
     const operation = await bridge.getOperation(jobId);
-    if (!operation) throw new Error("operação DMR não encontrada");
+    if (!operation)
+      throw new Error(m.provider_routing_error_dmr_operation_missing());
     return dmrOperationToJob(operation);
   }
   const response = await fetch(`/provider-routing/dmr/models/jobs/${jobId}`, {
@@ -575,7 +578,8 @@ async function waitForDmrOperation(
   while (operation.status === "queued" || operation.status === "running") {
     await new Promise((resolve) => window.setTimeout(resolve, 250));
     const next = await bridge.getOperation(operation.id);
-    if (!next) throw new Error("operação DMR não encontrada");
+    if (!next)
+      throw new Error(m.provider_routing_error_dmr_operation_missing());
     operation = next;
   }
   if (operation.status !== "completed") {
@@ -589,6 +593,7 @@ function DmrSection() {
   const [model, setModel] = useState("");
   const [contextSize, setContextSize] = useState("");
   const [busy, setBusy] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(false);
   const [error, setError] = useState("");
   const [job, setJob] = useState<DmrJob | null>(null);
   const [runtimeOperation, setRuntimeOperation] =
@@ -614,7 +619,7 @@ function DmrSection() {
       );
       setJob(active ?? null);
     } catch {
-      setError("Não foi possível consultar o Docker Model Runner.");
+      setError(m.provider_routing_error_dmr_query_failed());
     }
   }, []);
 
@@ -630,7 +635,7 @@ function DmrSection() {
     try {
       setStatus(await configureDmr(baseUrl, model));
     } catch {
-      setError("Não foi possível salvar o endpoint do Docker Model Runner.");
+      setError(m.provider_routing_error_dmr_save_endpoint_failed());
     } finally {
       setBusy(false);
     }
@@ -656,7 +661,7 @@ function DmrSection() {
       setError(
         testError instanceof Error
           ? testError.message
-          : "Falha ao verificar o endpoint.",
+          : m.provider_routing_error_endpoint_check_failed(),
       );
     } finally {
       setBusy(false);
@@ -672,7 +677,7 @@ function DmrSection() {
       setError(
         detectError instanceof Error
           ? detectError.message
-          : "Falha ao detectar modelos.",
+          : m.provider_routing_error_detect_models_failed(),
       );
     } finally {
       setDiscovering(false);
@@ -688,7 +693,7 @@ function DmrSection() {
         ? Number(contextSize)
         : undefined;
       if (parsedContext !== undefined && !Number.isInteger(parsedContext)) {
-        throw new Error("tamanho de contexto inválido");
+        throw new Error(m.provider_routing_error_dmr_invalid_context_size());
       }
       let current = await createDmrModelJob(
         model.trim(),
@@ -706,7 +711,7 @@ function DmrSection() {
       }
       setStatus(await fetchDmrStatus());
     } catch {
-      setError("Não foi possível preparar o modelo no Docker Model Runner.");
+      setError(m.provider_routing_error_dmr_prepare_failed());
     } finally {
       setBusy(false);
     }
@@ -723,7 +728,8 @@ function DmrSection() {
       while (operation.status === "queued" || operation.status === "running") {
         await new Promise((resolve) => window.setTimeout(resolve, 300));
         const next = await bridge.getOperation(operation.id);
-        if (!next) throw new Error("operação DMR não encontrada");
+        if (!next)
+          throw new Error(m.provider_routing_error_dmr_operation_missing());
         operation = next;
         setRuntimeOperation(operation);
       }
@@ -735,7 +741,7 @@ function DmrSection() {
       setError(
         installError instanceof Error
           ? installError.message
-          : "Não foi possível instalar ou ativar o Docker Model Runner.",
+          : m.provider_routing_error_dmr_install_failed(),
       );
     } finally {
       setRuntimeOperation(null);
@@ -760,7 +766,7 @@ function DmrSection() {
     try {
       setJob(await cancelDmrModelJob(job.id));
     } catch {
-      setError("Não foi possível cancelar a operação do Docker Model Runner.");
+      setError(m.provider_routing_error_dmr_cancel_failed());
     }
   }
 
@@ -781,7 +787,7 @@ function DmrSection() {
       }
       setStatus(await fetchDmrStatus());
     } catch {
-      setError("Não foi possível retomar a operação do Docker Model Runner.");
+      setError(m.provider_routing_error_dmr_resume_failed());
     } finally {
       setBusy(false);
     }
@@ -794,21 +800,21 @@ function DmrSection() {
     try {
       setStatus(await stopDmrModel(model.trim()));
     } catch {
-      setError("Não foi possível parar o modelo no Docker Model Runner.");
+      setError(m.provider_routing_error_dmr_stop_failed());
     } finally {
       setBusy(false);
     }
   }
 
-  async function remove() {
-    if (!model.trim() || !window.confirm("Remover este modelo do Docker?"))
-      return;
+  async function removeConfirmed() {
+    setConfirmRemove(false);
+    if (!model.trim()) return;
     setBusy(true);
     setError("");
     try {
       setStatus(await removeDmrModel(model.trim()));
     } catch {
-      setError("Não foi possível remover o modelo do Docker Model Runner.");
+      setError(m.provider_routing_error_dmr_remove_failed());
     } finally {
       setBusy(false);
     }
@@ -963,11 +969,20 @@ function DmrSection() {
             type="button"
             variant="ghost"
             disabled={busy || !model.trim()}
-            onClick={() => void remove()}
+            onClick={() => setConfirmRemove(true)}
           >
             {m.provider_routing_dmr_remove()}
           </Button>
         )}
+        <ConfirmDialog
+          open={confirmRemove}
+          title={m.provider_routing_dmr_remove_confirm_title()}
+          description={m.provider_routing_dmr_remove_confirm_description()}
+          confirmLabel={m.provider_routing_dmr_remove_confirm_action()}
+          variant="destructive"
+          onConfirm={() => void removeConfirmed()}
+          onCancel={() => setConfirmRemove(false)}
+        />
       </div>
       {runtimeOperation &&
         (runtimeOperation.status === "queued" ||
@@ -1118,7 +1133,7 @@ async function downloadHuggingFaceModel(
   const file = filename
     ? metadata.files?.find((item) => item.rfilename === filename)
     : metadata.files?.find((item) => item.format === "GGUF");
-  if (!file) throw new Error("Nenhum arquivo GGUF encontrado");
+  if (!file) throw new Error(m.provider_routing_error_no_gguf_found());
   const response = await fetch("/provider-routing/huggingface/download", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1301,7 +1316,7 @@ function HuggingFaceCatalogSection() {
     try {
       setModels(await searchHuggingFaceModels(query, provider));
     } catch {
-      setError("Erro ao consultar a Hugging Face");
+      setError(m.provider_routing_error_hf_query_failed());
     } finally {
       setLoading(false);
     }
@@ -1319,7 +1334,8 @@ function HuggingFaceCatalogSection() {
         return;
       }
       const gguf = (data.files ?? []).filter((item) => item.format === "GGUF");
-      if (!gguf.length) throw new Error("Nenhum arquivo GGUF encontrado");
+      if (!gguf.length)
+        throw new Error(m.provider_routing_error_no_gguf_found());
       setMetadata(data);
       setSelectedFile(gguf[0]?.rfilename ?? "");
       setSelectedMmproj(
@@ -2044,7 +2060,7 @@ function OllamaSection() {
       setError(
         installError instanceof Error
           ? installError.message
-          : "Não foi possível instalar o Ollama",
+          : m.provider_routing_error_ollama_install_failed(),
       );
       await loadRuntime();
     } finally {
@@ -2068,7 +2084,7 @@ function OllamaSection() {
       setError(
         stopError instanceof Error
           ? stopError.message
-          : "Não foi possível parar o Ollama.",
+          : m.provider_routing_error_ollama_stop_failed(),
       );
       await loadRuntime();
     }
@@ -2093,7 +2109,7 @@ function OllamaSection() {
       setError(
         startError instanceof Error
           ? startError.message
-          : "Não foi possível iniciar o Ollama.",
+          : m.provider_routing_error_ollama_start_failed(),
       );
       await loadRuntime();
     } finally {
@@ -3193,9 +3209,7 @@ function LlamaCppSection() {
         ?.flatMap((release) => release.assets ?? [])
         .find((candidate) => candidate.recommended && candidate.sha256);
       if (!asset)
-        throw new Error(
-          "Não há um runtime oficial compatível com este dispositivo.",
-        );
+        throw new Error(m.provider_routing_error_llamacpp_no_runtime());
       const response = await fetch("/provider-routing/llamacpp/install", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -3210,7 +3224,7 @@ function LlamaCppSection() {
       setError(
         installError instanceof Error
           ? installError.message
-          : "Falha ao instalar llama.cpp.",
+          : m.provider_routing_error_llamacpp_install_failed(),
       );
     } finally {
       setInstallingRuntime(false);
@@ -3234,7 +3248,7 @@ function LlamaCppSection() {
       setError(
         saveError instanceof Error
           ? saveError.message
-          : "Erro ao salvar a configuração do llama.cpp",
+          : m.provider_routing_error_llamacpp_save_failed(),
       );
     }
   }
@@ -3249,7 +3263,7 @@ function LlamaCppSection() {
     } catch {
       setReachable(false);
       setModels([]);
-      setError("Erro ao consultar o llama.cpp");
+      setError(m.provider_routing_error_llamacpp_query_failed());
     } finally {
       setLoading(false);
     }
@@ -3266,7 +3280,7 @@ function LlamaCppSection() {
         setError(`Status: ${result.status}`);
     } catch {
       setReachable(false);
-      setError("Erro ao testar o llama.cpp");
+      setError(m.provider_routing_error_llamacpp_test_failed());
     } finally {
       setLoading(false);
     }
@@ -3336,7 +3350,7 @@ function LlamaCppSection() {
       setError(
         actionError instanceof Error
           ? actionError.message
-          : "Não foi possível concluir a ação do runtime.",
+          : m.provider_routing_error_runtime_action_failed(),
       );
     } finally {
       setRuntimeBusy(false);
