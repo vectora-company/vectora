@@ -36,7 +36,7 @@ import {
 import { WorkbenchSettingsSurface } from "@/components/workbench/settings/workbench-settings-surface";
 import { memorySettings } from "@/components/workbench/settings/workbench-settings-registry";
 import { m } from "@/lib/paraglide/messages";
-import { WorkbenchEmpty } from "../primitives";
+import { WorkbenchEmpty, WorkbenchSection } from "../primitives";
 import { useConfirm } from "@/components/ui/use-confirm";
 
 interface RagBucketEntry {
@@ -279,67 +279,29 @@ function useJourney() {
   return { facts, skills };
 }
 
-/** "O que aprendi sobre você" — só leitura: editar/apagar memória já tem o
- *  fluxo próprio no painel de configurações, duplicar aqui daria dois lugares
- *  divergentes pra mesma ação. */
-/** Memórias que o agente salvou sobre a pessoa: listar, editar, apagar e
- * adicionar. Ficam aqui, junto do que foi recuperado por RAG e das
- * configurações de embedding, e não mais nas configurações do app. */
-function SavedMemoriesSection() {
-  return (
-    <section
-      aria-label={m.settings_category_memoria()}
-      data-testid="saved-memories"
-      className="space-y-1.5"
-    >
-      <h3 className="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
-        <Brain className="h-3 w-3" />
-        {m.settings_category_memoria()}
-      </h3>
-      <MemoriesPanel />
-    </section>
-  );
-}
-
-function JourneyPanel() {
+/** "O que aprendi sobre você": tudo o que o Vectora guardou sobre a pessoa num
+ * lugar só — as memórias salvas (que podem ser editadas, apagadas e
+ * adicionadas), os fatos aprendidos e as skills geradas pelo learning loop. */
+function LearnedSection() {
   const { facts, skills } = useJourney();
-
   return (
-    <section className="space-y-1.5">
-      <h3 className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-        <Sparkles className="h-3 w-3" />
-        {m.workbench_memory_journey_title()}
-      </h3>
-      {facts.length === 0 && skills.length === 0 ? (
-        <WorkbenchEmpty compact>
-          {m.workbench_memory_journey_empty()}
-        </WorkbenchEmpty>
-      ) : (
-        <>
-          {facts.map((fact) => (
-            <div
-              key={fact.key}
-              className="rounded-lg border border-border/60 bg-card/30 px-2.5 py-2"
-            >
-              <p className="text-xs text-foreground">{fact.content}</p>
-            </div>
-          ))}
-          {skills.map((skill) => (
-            <div
-              key={skill.id}
-              className="rounded-lg border border-border/60 bg-card/30 px-2.5 py-2"
-            >
-              <p className="truncate text-xs font-medium text-foreground">
-                {m.workbench_memory_journey_skill_label({ name: skill.name })}
-              </p>
-              <p className="truncate text-[10px] text-muted-foreground">
-                {skill.description}
-              </p>
-            </div>
-          ))}
-        </>
-      )}
-    </section>
+    <WorkbenchSection
+      icon={<Sparkles />}
+      title={m.workbench_memory_journey_title()}
+      testId="saved-memories"
+    >
+      <MemoriesPanel
+        compact
+        learned={{
+          facts: facts.map(({ key, content }) => ({ key, content })),
+          skills: skills.map(({ id, name, description }) => ({
+            id,
+            name,
+            description,
+          })),
+        }}
+      />
+    </WorkbenchSection>
   );
 }
 
@@ -764,8 +726,7 @@ export function MemoryTab({ threadId }: MemoryTabProps) {
         />
         <div className="flex-1 space-y-4 overflow-auto px-3 py-3">
           <BucketsPanel />
-          <JourneyPanel />
-          <SavedMemoriesSection />
+          <LearnedSection />
           {unifiedSection}
           {searchSection}
           {!searchSection && !unifiedSection && (
@@ -810,8 +771,7 @@ export function MemoryTab({ threadId }: MemoryTabProps) {
       />
       <div className="flex-1 space-y-4 overflow-auto px-3 pb-3 pt-3">
         <BucketsPanel />
-        <JourneyPanel />
-        <SavedMemoriesSection />
+        <LearnedSection />
         {unifiedSection}
         {searchSection}
         {hasActivity && (

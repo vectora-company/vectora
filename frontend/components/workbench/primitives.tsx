@@ -94,3 +94,44 @@ export function WorkbenchError({
     </div>
   );
 }
+
+/** Seção de uma aba: título pequeno em caixa alta, com ícone, e o conteúdo. */
+export function WorkbenchSection({
+  icon,
+  title,
+  testId,
+  children,
+}: {
+  icon?: ReactNode;
+  title: ReactNode;
+  testId?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="space-y-1.5" data-testid={testId}>
+      <h3 className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground [&_svg]:h-3 [&_svg]:w-3">
+        {icon}
+        {title}
+      </h3>
+      {children}
+    </section>
+  );
+}
+
+/**
+ * Linha de botões de ação, abaixo do texto a que se referem: ficam juntos, na
+ * mesma linha, e quebram para a seguinte só se faltar largura.
+ */
+export function WorkbenchActions({
+  children,
+  testId,
+}: {
+  children: ReactNode;
+  testId?: string;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5" data-testid={testId}>
+      {children}
+    </div>
+  );
+}

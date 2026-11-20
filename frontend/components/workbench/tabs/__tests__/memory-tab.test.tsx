@@ -165,6 +165,37 @@ describe("MemoryTab — memórias salvas", () => {
     expect(
       await within(section).findByText("Prefere respostas em português"),
     ).toBeInTheDocument();
+    // A memória mora dentro de "O que aprendi sobre você", não numa seção à parte.
+    expect(
+      within(section).getByRole("heading", {
+        name: "workbench_memory_journey_title",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "settings_category_memoria" }),
+    ).toBeNull();
+    expect(screen.getAllByTestId("saved-memories")).toHaveLength(1);
+  });
+
+  it("adicionar e limpar ficam juntos, numa linha abaixo do resumo", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        if (String(input).startsWith("/memory?"))
+          return new Response(
+            JSON.stringify({
+              total: 1,
+              memories: [{ key: "k", content: "c", updated_at: null }],
+            }),
+          );
+        return new Response(JSON.stringify({ collections: [] }));
+      }),
+    );
+
+    render(<MemoryTab threadId="t1" />);
+
+    const actions = await screen.findByTestId("memory-actions");
+    expect(actions.querySelectorAll("button")).toHaveLength(2);
   });
 });
 
