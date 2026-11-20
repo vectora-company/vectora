@@ -64,7 +64,6 @@ export function GitToolbar({
   const [creating, setCreating] = useState(false);
   const [newBranch, setNewBranch] = useState("");
   const [syncing, setSyncing] = useState(false);
-  const [syncMenuOpen, setSyncMenuOpen] = useState(false);
   const gitBypassEnabled = useSettingsStore((s) => s.gitBypassEnabled);
   const operationActive =
     operation?.state === "queued" || operation?.state === "running";
@@ -222,28 +221,27 @@ export function GitToolbar({
             </TooltipTrigger>
             <TooltipContent side="bottom">{primaryAction.label}</TooltipContent>
           </Tooltip>
-          <button
-            type="button"
-            aria-label={m.workbench_git_sync_menu()}
-            onClick={() => setSyncMenuOpen((v) => !v)}
-            disabled={syncing || operationActive}
-            className="flex h-8 w-7 items-center justify-center rounded-r-md border border-l-0 border-border/60 px-1.5 text-xs hover:bg-muted/50 disabled:opacity-50"
-          >
-            <ChevronDown className="h-3.5 w-3.5" />
-          </button>
-          {syncMenuOpen && (
-            <div
-              role="menu"
-              className="absolute right-0 top-full z-20 mt-1 w-56 rounded-md border border-border bg-popover p-1 shadow-lg"
-            >
+          {/* Em portal: não é cortado pelo painel nem fica sob as abas. */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
               <button
-                role="menuitem"
+                type="button"
+                aria-label={m.workbench_git_sync_menu()}
                 disabled={syncing || operationActive}
-                className="flex w-full items-start gap-2 rounded px-2 py-2 text-left text-xs hover:bg-muted"
-                onClick={() => {
-                  setSyncMenuOpen(false);
-                  void handleSync("fetch");
-                }}
+                className="flex h-8 w-7 items-center justify-center rounded-r-md border border-l-0 border-border/60 px-1.5 text-xs hover:bg-muted/50 disabled:opacity-50"
+              >
+                <ChevronDown className="h-3.5 w-3.5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              data-testid="git-sync-menu"
+              className="w-56"
+            >
+              <DropdownMenuItem
+                disabled={syncing || operationActive}
+                className="items-start gap-2 px-2 py-2 text-xs"
+                onSelect={() => void handleSync("fetch")}
               >
                 <RefreshCw className="mt-0.5 h-3.5 w-3.5" />
                 <span>
@@ -252,16 +250,12 @@ export function GitToolbar({
                     {m.workbench_git_sync_fetch_description()}
                   </small>
                 </span>
-              </button>
+              </DropdownMenuItem>
               {hasConflict && (
-                <button
-                  role="menuitem"
+                <DropdownMenuItem
                   disabled={syncing || operationActive}
-                  className="flex w-full items-start gap-2 rounded px-2 py-2 text-left text-xs hover:bg-muted"
-                  onClick={() => {
-                    setSyncMenuOpen(false);
-                    void handleSync("push", true);
-                  }}
+                  className="items-start gap-2 px-2 py-2 text-xs"
+                  onSelect={() => void handleSync("push", true)}
                 >
                   <ArrowUp className="mt-0.5 h-3.5 w-3.5" />
                   <span>
@@ -270,10 +264,10 @@ export function GitToolbar({
                       {m.workbench_git_force_push_warning()}
                     </small>
                   </span>
-                </button>
+                </DropdownMenuItem>
               )}
-            </div>
-          )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
         {/* PR */}

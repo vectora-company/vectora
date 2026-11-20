@@ -164,6 +164,36 @@ describe("GitToolbar", () => {
     await waitFor(() => expect(spy).toHaveBeenCalledWith("ws1", "fetch"));
   });
 
+  it("o menu de sincronização abre em portal, fora do painel (não é cortado nem fica sob as abas)", async () => {
+    const spy = vi.spyOn(api, "apiSync").mockResolvedValue({
+      status: "ok",
+      message: "",
+    });
+    const { container } = renderToolbar({
+      status: {
+        is_git_repo: true,
+        branch: "main",
+        clean: true,
+        ahead: 0,
+        behind: 0,
+      },
+      branches: null,
+    });
+
+    fireEvent.keyDown(screen.getByLabelText("workbench_git_sync_menu"), {
+      key: "Enter",
+    });
+    const menu = await screen.findByTestId("git-sync-menu");
+
+    expect(container.contains(menu)).toBe(false);
+    expect(document.body.contains(menu)).toBe(true);
+
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: /sync_fetch/ }),
+    );
+    await waitFor(() => expect(spy).toHaveBeenCalledWith("ws1", "fetch"));
+  });
+
   it("clicar no botão de PR chama onOpenPR com o branch atual", () => {
     const onOpenPR = vi.fn();
     renderToolbar({
