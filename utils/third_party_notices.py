@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Gera `THIRD_PARTY_NOTICES.md` a partir das licenças das dependências.
 
 Uso::
@@ -16,6 +15,7 @@ from __future__ import annotations
 
 import json
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 _TROVE: dict[str, str] = {
@@ -57,6 +57,50 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE."""
+
+_LICENSES_DIR = Path(__file__).parent / "third_party_licenses"
+
+
+# Obras que não são pacotes, mas inspiraram partes do produto. Cada uma traz o
+# autor, a licença, o endereço e os arquivos de texto (licença completa e,
+# quando existir, o NOTICE) guardados em `utils/third_party_licenses/`.
+@dataclass(frozen=True)
+class DerivedWork:
+    """Obra que inspirou parte do produto: crédito e textos de licença."""
+
+    name: str
+    author: str
+    year: str
+    license: str
+    url: str
+    used_in: str
+    # (rótulo, nome do arquivo em `_LICENSES_DIR`)
+    files: tuple[tuple[str, str], ...]
+
+
+_DERIVED_WORKS: tuple[DerivedWork, ...] = (
+    DerivedWork(
+        name="GitDesktop",
+        author="theBGuy",
+        year="2026",
+        license="Apache-2.0",
+        url="https://github.com/theBGuy/GitDesktop",
+        used_in="Git Workbench (layout e fluxo de PRs, issues e commits)",
+        files=(
+            ("Licença (Apache-2.0)", "GitDesktop-Apache-2.0.txt"),
+            ("NOTICE", "GitDesktop-NOTICE.txt"),
+        ),
+    ),
+    DerivedWork(
+        name="GitHub Desktop",
+        author="GitHub, Inc.",
+        year="",
+        license="MIT",
+        url="https://github.com/desktop/desktop",
+        used_in="Git Workbench (modelo de interação do cliente Git)",
+        files=(("Licença (MIT)", "GitHubDesktop-MIT.txt"),),
+    ),
+)
 
 _RANK = {"permissive": 0, "weak-copyleft": 1, "strong-copyleft": 2, "review": 3}
 _PERMISSIVE = (
@@ -173,6 +217,33 @@ def _rows(
     return sorted(rows, key=lambda r: (r[0], r[1].lower(), r[2]))
 
 
+def derived_works_section() -> list[str]:
+    """Seção "Obras que inspiraram o produto": créditos e textos de licença."""
+    lines = [
+        "",
+        "## Obras que inspiraram o Git Workbench",
+        "",
+        "O layout e o fluxo do Git Workbench (abas, PRs e issues como documents,",
+        "detalhes de commit) se inspiram nos projetos abaixo. Os nomes pertencem aos",
+        "respectivos autores; o Vectora não tem vínculo com eles.",
+    ]
+    for work in _DERIVED_WORKS:
+        owner = work.author + (f", {work.year}" if work.year else "")
+        lines += [
+            "",
+            f"### {work.name}",
+            "",
+            f"- Autor: {owner}",
+            f"- Licença: {work.license}",
+            f"- Origem: <{work.url}>",
+            f"- Usado em: {work.used_in}",
+        ]
+        for label, filename in work.files:
+            text = (_LICENSES_DIR / filename).read_text(encoding="utf-8").strip()
+            lines += ["", f"{label}:", "", "```text", text, "```"]
+    return lines
+
+
 def render(python: list[dict], npm: dict[str, list[dict]]) -> str:
     """Monta o markdown completo."""
     rows = _rows(python, npm)
@@ -236,6 +307,7 @@ def render(python: list[dict], npm: dict[str, list[dict]]) -> str:
         _LANGCHAIN_NOTICE,
         "```",
     ]
+    lines += derived_works_section()
 
     lines += ["", "## Permissivas", ""]
     lines += (

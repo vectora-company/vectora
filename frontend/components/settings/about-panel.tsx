@@ -21,6 +21,49 @@ import { settingsItemClass } from "@/components/settings/primitives";
 import { DistributionChannels } from "@/components/settings/distribution-channels";
 import { cn } from "@/lib/utils";
 
+/** Projetos que inspiraram o Git Workbench; as licenças completas ficam em THIRD_PARTY_NOTICES.md. */
+export const CREDITED_PROJECTS = [
+  {
+    id: "gitdesktop",
+    url: "https://github.com/theBGuy/GitDesktop",
+    label: () => m.about_credits_gitdesktop(),
+  },
+  {
+    id: "githubdesktop",
+    url: "https://github.com/desktop/desktop",
+    label: () => m.about_credits_githubdesktop(),
+  },
+] as const;
+
+function Credits() {
+  return (
+    <section className="space-y-1.5" data-testid="about-credits">
+      <h3 className="text-xs font-semibold">{m.about_credits_title()}</h3>
+      <p className="max-w-md text-2xs text-muted-foreground">
+        {m.about_credits_intro()}
+      </p>
+      <ul className="space-y-1">
+        {CREDITED_PROJECTS.map((project) => (
+          <li key={project.id}>
+            <a
+              href={project.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              data-testid={`about-credit-${project.id}`}
+              className="text-xs text-primary underline-offset-2 hover:underline"
+            >
+              {project.label()}
+            </a>
+          </li>
+        ))}
+      </ul>
+      <p className="text-2xs text-muted-foreground">
+        {m.about_credits_licenses_hint()}
+      </p>
+    </section>
+  );
+}
+
 export function AboutPanel() {
   const [version, setVersion] = useState<string | null>(null);
   const desktop = useIsDesktop();
@@ -72,6 +115,8 @@ export function AboutPanel() {
       </div>
 
       <DistributionChannels />
+
+      <Credits />
     </div>
   );
 }
