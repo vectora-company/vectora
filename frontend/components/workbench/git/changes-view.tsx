@@ -17,7 +17,6 @@ import {
   GitCommit,
   Loader2,
   Settings2,
-  UserPlus,
 } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 
@@ -36,6 +35,7 @@ import {
   fetchDiffFile,
 } from "./api";
 import { HunkView, statusTone } from "./shared";
+import { CoAuthorPicker } from "./coauthor-picker";
 import { useContextMenu, type ContextMenuItem } from "./git-context-menu";
 import { m } from "@/lib/paraglide/messages";
 import { useToastStore } from "@/lib/stores/toast-store";
@@ -192,11 +192,6 @@ export function ChangesView({
   const [amend, setAmend] = useState(false);
   const [committing, setCommitting] = useState(false);
   const [generating, setGenerating] = useState(false);
-  const [mentionOpen, setMentionOpen] = useState(false);
-  const [users, setUsers] = useState<
-    Array<{ id: string; username?: string; name?: string }>
-  >([]);
-  const [mentionError, setMentionError] = useState(false);
   const suggestionRequest = useRef(0);
 
   const handleRefresh = useCallback(() => {
@@ -378,26 +373,6 @@ export function ChangesView({
     }
   };
 
-  const loadMentionUsers = useCallback(async () => {
-    setMentionOpen(true);
-    if (users.length > 0) return;
-    setMentionError(false);
-    const response = await fetch(
-      `/workspaces/${encodeURIComponent(workspaceId)}/git/members`,
-      { credentials: "include" },
-    ).catch(() => null);
-    if (!response?.ok) {
-      setMentionError(true);
-      return;
-    }
-    const payload = await response.json().catch(() => []);
-    setUsers(
-      Array.isArray(payload)
-        ? payload
-        : ((payload as { users?: typeof users }).users ?? []),
-    );
-  }, [users.length, workspaceId]);
-
   const staged: DiffFile[] = [];
   const unstaged: DiffFile[] = [];
   const untracked: DiffFile[] = [];
@@ -538,21 +513,11 @@ export function ChangesView({
             data-testid="git-commit-body"
           />
           <div className="absolute bottom-1 left-2 flex items-center gap-1 text-muted-foreground">
-            <button
-              type="button"
-              title={m.workbench_git_mention_user()}
-              aria-label={m.workbench_git_mention_user()}
-              aria-haspopup="listbox"
-              aria-expanded={mentionOpen}
-              aria-controls="git-mention-users"
-              onClick={() => void loadMentionUsers()}
-              onKeyDown={(event) => {
-                if (event.key === "Escape") setMentionOpen(false);
-              }}
-              className="rounded p-1 hover:bg-muted/50"
-            >
-              <UserPlus className="h-3.5 w-3.5" />
-            </button>
+            <CoAuthorPicker
+              workspaceId={workspaceId}
+              body={commitBody}
+              onBodyChange={setCommitBody}
+            />
             <button
               type="button"
               title={m.workbench_git_generate()}
@@ -570,47 +535,6 @@ export function ChangesView({
                 />
               )}
             </button>
-            {mentionOpen && (
-              <div className="relative">
-                <div
-                  role="listbox"
-                  id="git-mention-users"
-                  aria-label={m.workbench_git_mention_user()}
-                  className="absolute bottom-7 left-0 z-20 min-w-44 rounded-md border border-border bg-popover p-1 shadow-lg"
-                >
-                  {mentionError ? (
-                    <span className="block px-2 py-1 text-[10px] text-destructive">
-                      {m.workbench_git_operation_failed()}
-                    </span>
-                  ) : users.length === 0 ? (
-                    <span className="block px-2 py-1 text-[10px] text-muted-foreground">
-                      {m.workbench_git_no_users()}
-                    </span>
-                  ) : (
-                    users.map((user) => {
-                      const handle = user.username ?? user.name ?? user.id;
-                      return (
-                        <button
-                          key={user.id}
-                          role="option"
-                          type="button"
-                          className="block w-full rounded px-2 py-1 text-left text-xs hover:bg-muted"
-                          onClick={() => {
-                            setCommitBody(
-                              (value) =>
-                                `${value}${value && !value.endsWith(" ") ? " " : ""}@${handle} `,
-                            );
-                            setMentionOpen(false);
-                          }}
-                        >
-                          {handle}
-                        </button>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-            )}
             <button
               type="button"
               title={m.workbench_git_settings()}

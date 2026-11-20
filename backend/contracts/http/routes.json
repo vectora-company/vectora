@@ -2566,6 +2566,13 @@
     "methods": [
       "GET"
     ],
+    "name": "git_contributors_workspaces__workspace_id__git_contributors_get",
+    "path": "/workspaces/{workspace_id}/git/contributors"
+  },
+  {
+    "methods": [
+      "GET"
+    ],
     "name": "workspace_git_diff_workspaces__workspace_id__git_diff_get",
     "path": "/workspaces/{workspace_id}/git/diff"
   },
