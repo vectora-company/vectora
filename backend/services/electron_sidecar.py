@@ -181,24 +181,6 @@ async def _watch_window_ready(
         os.kill(os.getpid(), signal.SIGTERM)
 
 
-_OZONE_PLATFORMS = ("x11", "wayland")
-
-
-def _linux_ozone_args() -> list[str]:
-    """Flag de plataforma de janelas do Electron no Linux.
-
-    Por padrão o Chromium escolhe sozinho (Wayland numa sessão Wayland, X11
-    nas demais). O Wayland nativo respeita a área útil do compositor; sob
-    XWayland a janela maximizada ia até a borda da tela e a doca cobria o
-    rodapé do composer. ``VECTORA_OZONE_PLATFORM=x11`` (ou ``wayland``) força
-    uma plataforma quando o compositor da máquina se comporta mal.
-    """
-    forced = os.environ.get("VECTORA_OZONE_PLATFORM", "").strip().lower()
-    if forced in _OZONE_PLATFORMS:
-        return [f"--ozone-platform={forced}"]
-    return ["--ozone-platform-hint=auto"]
-
-
 async def ensure_electron_sidecar() -> asyncio.subprocess.Process | None:
     """Sobe o Electron (dev) como sidecar, se ainda não estiver rodando.
 
@@ -220,10 +202,12 @@ async def ensure_electron_sidecar() -> asyncio.subprocess.Process | None:
             return None
         exe, exe_args = launch
         if sys.platform == "linux":
-            # Ozone escolhe o backend de janelas antes de executar o main.js;
-            # app.commandLine.appendSwitch() não o muda, então a flag vai antes
-            # do entrypoint.
-            exe_args = [*_linux_ozone_args(), *exe_args]
+            # Ozone escolhe o backend de janelas antes de executar o main.js.
+            # app.commandLine.appendSwitch() mantém a configuração dos
+            # renderers, mas não muda a plataforma já selecionada pelo
+            # processo principal; passe x11 antes do entrypoint para garantir
+            # XWayland também na BrowserWindow nativa.
+            exe_args = ["--ozone-platform=x11", *exe_args]
 
         cdp_port = _ensure_electron_cdp_port()
         cdp_proxy_port = _ensure_electron_cdp_proxy_port()

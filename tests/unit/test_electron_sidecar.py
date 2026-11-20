@@ -146,7 +146,7 @@ async def test_ensure_electron_sidecar_spawna_e_guarda_o_processo():
     spawn_mock.assert_called_once()
     call_args, call_kwargs = spawn_mock.call_args
     if sys.platform == "linux":
-        assert call_args == ("electron.exe", "--ozone-platform-hint=auto", "main.js")
+        assert call_args == ("electron.exe", "--ozone-platform=x11", "main.js")
     else:
         assert call_args == ("electron.exe", "main.js")
     assert call_kwargs["env"]["VECTORA_EXTERNAL_BACKEND"] == "1"
@@ -667,24 +667,3 @@ class TestWindowReadyWatchdog:
             assert electron_sidecar._window_timeout_s() == 120.0
         monkeypatch.setenv("VECTORA_ELECTRON_WINDOW_TIMEOUT_S", "30")
         assert electron_sidecar._window_timeout_s() == 30.0
-
-
-def test_ozone_padrao_deixa_o_chromium_escolher(monkeypatch):
-    monkeypatch.delenv("VECTORA_OZONE_PLATFORM", raising=False)
-
-    assert electron_sidecar._linux_ozone_args() == ["--ozone-platform-hint=auto"]
-
-
-@pytest.mark.parametrize("valor", ["x11", "wayland", " X11 "])
-def test_ozone_forcado_por_variavel_de_ambiente(monkeypatch, valor):
-    monkeypatch.setenv("VECTORA_OZONE_PLATFORM", valor)
-
-    assert electron_sidecar._linux_ozone_args() == [
-        f"--ozone-platform={valor.strip().lower()}"
-    ]
-
-
-def test_ozone_valor_desconhecido_volta_ao_automatico(monkeypatch):
-    monkeypatch.setenv("VECTORA_OZONE_PLATFORM", "mir")
-
-    assert electron_sidecar._linux_ozone_args() == ["--ozone-platform-hint=auto"]
