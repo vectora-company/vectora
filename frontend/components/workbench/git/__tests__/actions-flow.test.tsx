@@ -387,7 +387,10 @@ describe("fluxo — falhas", () => {
     fireEvent.click(screen.getByTestId(`actions-run-${RUN.id}`));
 
     expect(await screen.findByTestId("github-detail-unavailable")).toBeTruthy();
-    expect(screen.queryByTestId("github-run-detail")).toBeNull();
+    // O contêiner do document continua; o que some é o conteúdo do run.
+    expect(
+      screen.queryByTestId(`actions-log-toggle-${JOB_TO_FAIL.id}`),
+    ).toBeNull();
   });
 
   it("erro HTTP no detalhe mostra o erro dentro da janela, sem derrubá-la", async () => {
