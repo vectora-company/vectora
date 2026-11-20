@@ -15,6 +15,7 @@ import {
   within,
 } from "@testing-library/react";
 import { MemoryTab } from "../memory-tab";
+import { answerConfirm } from "@/components/ui/__tests__/answer-confirm";
 
 function bucketsFetchMock(
   buckets: {
@@ -435,7 +436,6 @@ describe("MemoryTab", () => {
         },
       ]);
       vi.stubGlobal("fetch", fetchMock);
-      const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
 
       render(<MemoryTab threadId="t1" />);
 
@@ -443,6 +443,7 @@ describe("MemoryTab", () => {
         expect(screen.getByText("Docs internos")).toBeInTheDocument(),
       );
       fireEvent.click(screen.getByLabelText("workbench_memory_buckets_remove"));
+      await answerConfirm(true);
 
       await waitFor(() => {
         const calls = fetchMock.mock.calls;
@@ -454,7 +455,6 @@ describe("MemoryTab", () => {
           ),
         ).toBe(true);
       });
-      confirmSpy.mockRestore();
     });
 
     it("erro/borda: cancelar a confirmação não chama DELETE", async () => {
@@ -469,7 +469,6 @@ describe("MemoryTab", () => {
         },
       ]);
       vi.stubGlobal("fetch", fetchMock);
-      const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
 
       render(<MemoryTab threadId="t1" />);
 
@@ -477,12 +476,12 @@ describe("MemoryTab", () => {
         expect(screen.getByText("Docs internos")).toBeInTheDocument(),
       );
       fireEvent.click(screen.getByLabelText("workbench_memory_buckets_remove"));
+      await answerConfirm(false);
 
       const calls = fetchMock.mock.calls;
       expect(
         calls.some((c) => (c[1] as RequestInit)?.method === "DELETE"),
       ).toBe(false);
-      confirmSpy.mockRestore();
     });
   });
 });

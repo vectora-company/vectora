@@ -40,6 +40,7 @@ import { useContextMenu, type ContextMenuItem } from "./git-context-menu";
 import { m } from "@/lib/paraglide/messages";
 import { useToastStore } from "@/lib/stores/toast-store";
 import { useSettingsStore } from "@/lib/stores/settings-store";
+import { useConfirm } from "@/components/ui/use-confirm";
 
 function FileRow({
   workspaceId,
@@ -166,6 +167,7 @@ export function ChangesView({
   summary: DiffSummary;
   onOpenSettings?: () => void;
 }) {
+  const { confirm, dialog } = useConfirm();
   const invalidateGit = useWorkbenchStore((s) => s.invalidateGit);
   const setGitFileSelection = useWorkbenchStore((s) => s.setGitFileSelection);
   const gitOps = useWorkbenchStore(
@@ -269,7 +271,10 @@ export function ChangesView({
     if (!commitMsg.trim()) return;
     if (
       gitBypassEnabled &&
-      !window.confirm(m.workbench_git_force_push_warning())
+      !(await confirm({
+        message: m.workbench_git_force_push_warning(),
+        variant: "destructive",
+      }))
     )
       return;
     setCommitting(true);
@@ -637,6 +642,7 @@ export function ChangesView({
           {m.workbench_diff_commit_amend_label()}
         </label>
       </div>
+      {dialog}
     </div>
   );
 }

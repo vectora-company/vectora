@@ -19,6 +19,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { m } from "@/lib/paraglide/messages";
 
 interface EditorTabProps {
@@ -44,6 +45,8 @@ export function EditorTab({
 }: EditorTabProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [closeDialogOpen, setCloseDialogOpen] = useState(false);
+  const [saveAsOpen, setSaveAsOpen] = useState(false);
+  const [saveAsPath, setSaveAsPath] = useState(path);
   const [working, setWorking] = useState(false);
 
   const requestClose = () => {
@@ -61,9 +64,15 @@ export function EditorTab({
     }
   };
 
+  const openSaveAs = () => {
+    setSaveAsPath(path);
+    setSaveAsOpen(true);
+  };
+
   const saveAs = async () => {
-    const target = window.prompt("Salvar como", path);
-    if (!target?.trim()) return;
+    const target = saveAsPath.trim();
+    if (!target) return;
+    setSaveAsOpen(false);
     setWorking(true);
     await onSaveAs(target);
     setWorking(false);
@@ -116,7 +125,7 @@ export function EditorTab({
               {m.workbench_files_save_shortcut()}
             </DropdownMenuShortcut>
           </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => void saveAs()}>
+          <DropdownMenuItem onSelect={openSaveAs}>
             {m.workbench_files_save_as()}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
@@ -125,6 +134,42 @@ export function EditorTab({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+
+      <Dialog open={saveAsOpen} onOpenChange={setSaveAsOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{m.workbench_files_save_as_title()}</DialogTitle>
+          </DialogHeader>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              void saveAs();
+            }}
+            className="space-y-3"
+          >
+            <label className="block space-y-1 text-xs text-muted-foreground">
+              {m.workbench_files_save_as_label()}
+              <Input
+                autoFocus
+                value={saveAsPath}
+                onChange={(event) => setSaveAsPath(event.target.value)}
+              />
+            </label>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setSaveAsOpen(false)}
+              >
+                {m.workbench_files_cancel()}
+              </Button>
+              <Button type="submit" disabled={working || !saveAsPath.trim()}>
+                {m.workbench_files_save_as_confirm()}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={closeDialogOpen} onOpenChange={setCloseDialogOpen}>
         <DialogContent className="max-w-sm">

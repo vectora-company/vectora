@@ -31,6 +31,7 @@ import {
   settingsTextareaClass,
 } from "@/components/settings/primitives";
 import { cn } from "@/lib/utils";
+import { useConfirm } from "@/components/ui/use-confirm";
 
 const LEVEL_LABEL: Record<IsolationLevel, () => string> = {
   effective: () => m.sandbox_level_effective(),
@@ -165,6 +166,7 @@ function DimensionRow({ dimension }: { dimension: IsolationDimension }) {
 }
 
 export function SandboxTab() {
+  const { confirm, dialog } = useConfirm();
   const workspace = useWorkspacesStore((state) =>
     state.workspaces.find((w) => w.id === state.active_id),
   );
@@ -629,7 +631,12 @@ export function SandboxTab() {
                 type="button"
                 disabled={!vaultPassword}
                 onClick={async () => {
-                  if (!window.confirm(m.sandbox_credential_remove_confirm()))
+                  if (
+                    !(await confirm({
+                      message: m.sandbox_credential_remove_confirm(),
+                      variant: "destructive",
+                    }))
+                  )
                     return;
                   try {
                     await deleteSandboxCredential(
@@ -715,6 +722,7 @@ export function SandboxTab() {
           </ul>
         )}
       </SettingsSection>
+      {dialog}
     </SettingsStack>
   );
 }

@@ -8,6 +8,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
+  waitFor,
   render,
   screen,
   fireEvent,
@@ -131,6 +132,7 @@ import {
   ContextGraphTab,
   graphStageColor,
 } from "@/components/workbench/tabs/context-graph-tab";
+import { answerConfirm } from "@/components/ui/__tests__/answer-confirm";
 
 // ── testes ───────────────────────────────────────────────────────────────────
 
@@ -148,7 +150,6 @@ describe("ContextGraphTab", () => {
           has_password: true,
         },
       });
-      const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
       render(<ContextGraphTab threadId="t1" />);
       fireEvent.click(
         screen.getByRole("button", { name: "graph_falkordb_title" }),
@@ -156,15 +157,14 @@ describe("ContextGraphTab", () => {
       fireEvent.click(
         screen.getByRole("button", { name: "graph_falkordb_send" }),
       );
-      await act(async () => Promise.resolve());
-      expect(confirm).toHaveBeenCalledWith(
+      expect(await screen.findByRole("alertdialog")).toHaveTextContent(
         "Confirmar graph.example.com:6380/project",
       );
-      expect(mockPushToFalkordb).toHaveBeenCalledOnce();
-      confirm.mockRestore();
+      await answerConfirm(true);
+      await waitFor(() => expect(mockPushToFalkordb).toHaveBeenCalledOnce());
     });
 
-    it("não envia quando a confirmação é recusada", () => {
+    it("não envia quando a confirmação é recusada", async () => {
       setup({
         status: { status: "done", node_count: 1, edge_count: 0 },
         falkordbConfig: {
@@ -176,7 +176,6 @@ describe("ContextGraphTab", () => {
           has_password: false,
         },
       });
-      vi.spyOn(window, "confirm").mockReturnValue(false);
       render(<ContextGraphTab threadId="t1" />);
       fireEvent.click(
         screen.getByRole("button", { name: "graph_falkordb_title" }),
@@ -184,6 +183,7 @@ describe("ContextGraphTab", () => {
       fireEvent.click(
         screen.getByRole("button", { name: "graph_falkordb_send" }),
       );
+      await answerConfirm(false);
       expect(mockPushToFalkordb).not.toHaveBeenCalled();
     });
 
@@ -204,7 +204,6 @@ describe("ContextGraphTab", () => {
           "Falha ao gravar no FalkorDB; verifique a conexão e as credenciais",
         ),
       );
-      vi.spyOn(window, "confirm").mockReturnValue(true);
       render(<ContextGraphTab threadId="t1" />);
       fireEvent.click(
         screen.getByRole("button", { name: "graph_falkordb_title" }),
@@ -212,6 +211,7 @@ describe("ContextGraphTab", () => {
       fireEvent.click(
         screen.getByRole("button", { name: "graph_falkordb_send" }),
       );
+      await answerConfirm(true);
 
       expect(await screen.findByRole("status")).toHaveTextContent(
         "Falha ao gravar no FalkorDB; verifique a conexão e as credenciais",

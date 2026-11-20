@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { m } from "@/lib/paraglide/messages";
 import { useLibraryStore, type CatalogSkill } from "@/lib/stores/library-store";
 import { LibraryCard, LibraryTag } from "./library-card";
+import { useConfirm } from "@/components/ui/use-confirm";
 
 const TRUST_STATE_LABEL = {
   vectora_verified: m.library_skills_trust_builtin,
@@ -24,6 +25,7 @@ const TRUST_STATE_LABEL = {
 type SkillTrustState = keyof typeof TRUST_STATE_LABEL | "community_listed";
 
 function CatalogCard({ skill }: { skill: CatalogSkill }) {
+  const { confirm, dialog } = useConfirm();
   const [busy, setBusy] = useState(false);
   const [installed, setInstalled] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -58,7 +60,7 @@ function CatalogCard({ skill }: { skill: CatalogSkill }) {
     }
     if (
       requiresConfirmation &&
-      !window.confirm(m.library_skills_trust_confirm())
+      !(await confirm({ message: m.library_skills_trust_confirm() }))
     )
       return;
     setBusy(true);
@@ -134,6 +136,7 @@ function CatalogCard({ skill }: { skill: CatalogSkill }) {
             </p>
           )}
           {error && <p className="text-xs text-destructive">{error}</p>}
+          {dialog}
         </>
       }
     />

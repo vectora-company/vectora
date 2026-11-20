@@ -24,6 +24,7 @@ import { useLibraryStore } from "@/lib/stores/library-store";
 import { useWindowsStore } from "@/lib/stores/windows-store";
 import { useWorkspacesStore } from "@/lib/stores/workspaces-store";
 import { useSettingsStore } from "@/lib/stores/settings-store";
+import { answerConfirm } from "@/components/ui/__tests__/answer-confirm";
 
 afterEach(cleanup);
 
@@ -240,7 +241,6 @@ describe("McpSection", () => {
   });
 
   it("não persiste env vars quando a confirmação de MCP não verificado é recusada", async () => {
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
     render(<McpSection query="" />);
     await waitFor(() => expect(screen.getByText("Brave Search")).toBeTruthy());
 
@@ -259,11 +259,10 @@ describe("McpSection", () => {
     });
     fireEvent.click(within(dialog).getByRole("button", { name: "Install" }));
 
-    await waitFor(() => expect(confirm).toHaveBeenCalledOnce());
+    await answerConfirm(false);
     const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls;
     expect(calls.some((c) => c[0] === "/auth/envs")).toBe(false);
     expect(calls.some((c) => c[0] === "/mcp/install")).toBe(false);
-    confirm.mockRestore();
   });
 
   it("erro/borda: instalar com status 'error' mostra mensagem sem quebrar a lista", async () => {
