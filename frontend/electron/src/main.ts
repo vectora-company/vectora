@@ -124,6 +124,7 @@ import {
 } from "./runtime-profile.js";
 import { DockerCliExecutor } from "./docker-cli-executor.js";
 import { DmrOperations } from "./dmr-operations.js";
+import { resolveGraphicsSwitches } from "./graphics-config.js";
 import {
   startElectronCdpProxy,
   waitForElectronCdpTarget,
@@ -152,34 +153,12 @@ if (!installedTestsMode) {
   app.commandLine.appendSwitch("remote-debugging-address", "127.0.0.1");
   app.commandLine.appendSwitch("remote-debugging-port", electronCdpPort);
 }
-// Seleciona o backend ANGLE nativo da plataforma. WebGL continua disponível
-// no renderer e é encaminhado pelo ANGLE para este backend.
-app.commandLine.appendSwitch("use-gl", "angle");
-// `VECTORA_ANGLE_BACKEND` troca o backend em qualquer plataforma (ex.: "gl" ou
-// "default"), para máquinas onde o padrão não inicializa.
 const angleOverride = process.env.VECTORA_ANGLE_BACKEND?.trim();
-if (angleOverride) {
-  app.commandLine.appendSwitch("use-angle", angleOverride);
-} else if (process.platform === "win32") {
-  // Usa DirectX 11 sobre DirectX 12, ambos no caminho gráfico.
-  app.commandLine.appendSwitch("use-angle", "d3d11on12");
-} else if (process.platform === "darwin") {
-  app.commandLine.appendSwitch("use-angle", "metal");
-} else {
-  app.commandLine.appendSwitch("use-angle", "vulkan");
-}
-if (process.platform === "linux" && angleOverride !== "gl") {
-  // Sem esta feature o Chromium não habilita o Vulkan: com `use-angle=vulkan`
-  // o processo de GPU morria ("Requested GL implementation not found"), a
-  // interface caía em renderização por software e o Electron saía com SIGTRAP
-  // (código -5) ao encerrar. Com ela, o WebGL roda sobre o Vulkan da GPU.
-  app.commandLine.appendSwitch("enable-features", "Vulkan");
-}
-if (process.platform === "linux") {
-  // Usa XWayland/X11 como protocolo de janela; Vulkan continua sendo o
-  // backend gráfico. Wayland não é um backend de renderização compatível com
-  // Vulkan no Chromium.
-  app.commandLine.appendSwitch("ozone-platform", "x11");
+for (const [name, value] of resolveGraphicsSwitches(
+  process.platform,
+  angleOverride,
+)) {
+  app.commandLine.appendSwitch(name, value);
 }
 
 let electronCdpProxy: import("node:http").Server | null = null;
