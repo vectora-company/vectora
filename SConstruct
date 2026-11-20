@@ -607,14 +607,17 @@ def _action_package(target, source, env, platform=""):
     shutil.rmtree(out_dir, ignore_errors=True)
     os.makedirs(out_dir, exist_ok=True)
 
+    is_linux = platform == "linux" or (not platform and sys.platform == "linux")
     flag = {"win": "--win", "mac": "--mac", "linux": "--linux"}.get(platform)
+    if is_linux and flag is None:
+        flag = "--linux"
     cmd = [
         PNPM, "--dir", "frontend", "exec", "electron-builder",
         "--config", "electron/electron-builder.yml",
     ]
     if flag:
         cmd.append(flag)
-    cmd.append(f"-c.directories.output={out_dir}")
+    output_arg = f"-c.directories.output={out_dir}"
 
     build_env: dict[str, str] = {"VECTORA_UPDATE_CHANNEL": _resolve_update_channel()}
     has_signing_creds = any(
@@ -632,12 +635,31 @@ def _action_package(target, source, env, platform=""):
             print(">> assinando instaladores com dev-cert.pfx")
         else:
             build_env["CSC_IDENTITY_AUTO_DISCOVERY"] = "false"
-    _run(cmd, env=build_env or None)
+    if is_linux:
+        # Snap pode alterar linux-unpacked enquanto o AppImage lê seus arquivos.
+        # Gere os demais formatos primeiro e Snap em uma segunda passada.
+        _run(
+            [
+                *cmd,
+                "AppImage",
+                "deb",
+                "rpm",
+                "pacman",
+                "flatpak",
+                "tar.gz",
+                output_arg,
+            ],
+            env=build_env or None,
+        )
+        _run([*cmd, "snap", output_arg], env=build_env or None)
+    else:
+        _run([*cmd, output_arg], env=build_env or None)
 
     dest = os.path.join(VECTORA, "frontend", "dist-electron")
     os.makedirs(dest, exist_ok=True)
     patterns = (
         "*.exe", "*.msi", "*.dmg", "*.AppImage", "*.deb", "*.rpm",
+        "*.snap", "*.pacman", "*.flatpak", "*.tar.gz", "*.zip",
         "latest*.yml", "*.blockmap",
     )
     copied: list[str] = []

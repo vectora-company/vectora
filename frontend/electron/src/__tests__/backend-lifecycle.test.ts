@@ -1,9 +1,11 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { spawn, ChildProcess } from "child_process";
 import * as path from "path";
+import { Writable } from "stream";
 import treeKill from "tree-kill";
 import {
   getFreePort,
+  ignoreBrokenPipe,
   IpcPipeParser,
   parseIpcPipeFromText,
   pingBackendHttp,
@@ -87,6 +89,27 @@ describe("isInstalledTestsMode", () => {
     expect(isInstalledTestsMode(["/app/Vectora", "--tests"])).toBe(true);
     expect(isInstalledTestsMode(["/app/Vectora", "--version"])).toBe(false);
     expect(isInstalledTestsMode(["/app/Vectora", "start"])).toBe(false);
+  });
+});
+
+describe("ignoreBrokenPipe", () => {
+  it("ignora EPIPE ao escrever e continua expondo outros erros", async () => {
+    const stream = new Writable({
+      write: (_chunk, _encoding, callback) =>
+        callback(Object.assign(new Error("pipe fechado"), { code: "EPIPE" })),
+    });
+    ignoreBrokenPipe(stream);
+    await new Promise<void>((resolve, reject) => {
+      stream.write("dados", (error) => {
+        if (error && (error as NodeJS.ErrnoException).code === "EPIPE")
+          resolve();
+        else reject(error ?? new Error("esperava EPIPE"));
+      });
+    });
+
+    const unexpected = new Error("falha inesperada de escrita");
+    expect(() => stream.emit("error", unexpected)).toThrow(unexpected);
+    stream.destroy();
   });
 });
 

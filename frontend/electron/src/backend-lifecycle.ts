@@ -12,6 +12,13 @@ import { spawn, spawnSync, ChildProcess } from "child_process";
 import * as http from "http";
 import * as net from "net";
 import * as path from "path";
+import type { Writable } from "stream";
+
+export function ignoreBrokenPipe(stream: Writable): void {
+  stream.on("error", (error: Error) => {
+    if ((error as NodeJS.ErrnoException).code !== "EPIPE") throw error;
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Porta livre

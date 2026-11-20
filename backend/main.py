@@ -94,16 +94,11 @@ def _should_install_terminal_signals(
     shutdown gracioso do uvicorn, que aciona o `finally` do lifespan e
     limpa sidecars como o NATS) deve ser instalado.
 
-    `VECTORA_DESKTOP=1` sozinho não diz quem é dono do processo: é setado
-    tanto quando o Electron spawna o backend (produção — o Electron já
-    mata a árvore inteira via `taskkill /T /F`, um handler custom aqui
-    disputaria esse shutdown) quanto quando é o PRÓPRIO backend quem se
-    autoelege primário e sobe o Electron como seu sidecar (`_run_start`,
-    modo backend-primário em dev) — nesse segundo caso não existe nenhum
-    Electron dono cuidando da limpeza do lado de fora, e sem handler o
-    processo nunca aciona o shutdown gracioso, deixando sidecars filhos
-    (nats-server) órfãos. `VECTORA_SPAWN_ELECTRON=1` só é setado nesse
-    segundo caso — é o sinal de "este processo é dono de si mesmo".
+    Todo backend desktop instala os handlers: o Electron envia SIGTERM ao
+    sair, e um Ctrl+C no terminal também chega ao processo filho. Assim,
+    ambos os caminhos acionam o shutdown gracioso do Uvicorn e do lifespan.
+    `VECTORA_SPAWN_ELECTRON=1` identifica o modo de desenvolvimento em que o
+    próprio backend sobe o Electron, inclusive quando stdin não é um TTY.
     """
     # ``vectora web`` is the process owner even when launched by a service
     # manager, CI runner, or detached VPS shell where stdin is not a TTY.
@@ -115,8 +110,11 @@ def _should_install_terminal_signals(
 
     desktop = bool(env.get("VECTORA_DESKTOP"))
     owns_itself = bool(env.get("VECTORA_SPAWN_ELECTRON"))
-    if desktop and not owns_itself:
-        return False
+    if desktop:
+        # Electron sends SIGTERM when quitting, and terminals deliver Ctrl+C
+        # to both Electron and its backend child. Handle both through the
+        # graceful shutdown path so Uvicorn can close its lifespan cleanly.
+        return True
     if owns_itself:
         # Backend-primário em dev: sempre instala, mesmo sem tty — é o único
         # dono do processo, e sys.stdin.isatty() pode vir False dependendo

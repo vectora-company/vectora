@@ -42,9 +42,9 @@ if (( EUID == 0 )); then
 fi
 
 case "$DISTRO" in
-  ubuntu|pop|debian) PACKAGE_MANAGER=apt ;;
+  ubuntu|linuxmint|pop|debian) PACKAGE_MANAGER=apt ;;
   fedora|fedora-asahi-remix) PACKAGE_MANAGER=dnf ;;
-  arch|omarchy) PACKAGE_MANAGER=pacman ;;
+  arch|archlinux|omarchy) PACKAGE_MANAGER=pacman ;;
   alpine) PACKAGE_MANAGER=apk ;;
   lfs|lebasix) PACKAGE_MANAGER=linuxbrew ;;
   *)
@@ -57,24 +57,36 @@ export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
 export BUN_INSTALL="${BUN_INSTALL:-$HOME/.bun}"
 export PNPM_HOME="${PNPM_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/pnpm}"
 export GOPATH="${GOPATH:-$HOME/go}"
-export PATH="$HOME/.local/bin:$HOME/.pyenv/bin:$HOME/.pyenv/shims:$BUN_INSTALL/bin:$PNPM_HOME:$HOME/.cargo/bin:$GOPATH/bin:$PATH"
+export PATH="$HOME/.local/bin:$BUN_INSTALL/bin:$PNPM_HOME:$HOME/.pyenv/bin:$HOME/.pyenv/shims:$HOME/.cargo/bin:$GOPATH/bin:$HOME/.local/share/go/bin:$PATH"
 for node_bin in "$NVM_DIR"/versions/node/v26*/bin; do
-  [[ -d "$node_bin" ]] && { PATH="$node_bin:$PATH"; break; }
+  [[ -d "$node_bin" ]] && { PATH="$HOME/.local/bin:$BUN_INSTALL/bin:$PNPM_HOME:$node_bin:$PATH"; break; }
 done
 export PATH
 
 command_exists() { command -v "$1" >/dev/null 2>&1; }
 has_pyenv() { command_exists pyenv || [[ -x "$HOME/.pyenv/bin/pyenv" ]]; }
-has_uv_tool() { uv tool list 2>/dev/null | awk '{print $1}' | grep -Fxq "$1"; }
+has_uv_tool() {
+  uv tool list 2>/dev/null |
+    awk -v tool="$1" '$1 == tool { found = 1 } END { exit !found }'
+}
+has_pyenv_version() {
+  pyenv prefix "$1" >/dev/null 2>&1
+}
 
 printf 'Vectora Linux bootstrap — distro=%s (%s), modo=%s\n' "$DISTRO" "$PACKAGE_MANAGER" "$MODE"
 printf '\nFerramentas detectadas:\n'
 PENDING=0
-for tool in git curl gcc make node pnpm bun pyenv python uv scons go rustup gitleaks prettier claude omniroute wrangler vercel; do
+for tool in git curl gcc make node pnpm bun pyenv python uv scons go rustup gitleaks prettier claude omniroute wrangler vercel flatpak flatpak-builder bsdtar fusermount3 rpmbuild; do
   if command_exists "$tool"; then printf '  [ok]      %s: %s\n' "$tool" "$(command -v "$tool")"
   else printf '  [pendente] %s\n' "$tool"; ((PENDING+=1))
   fi
 done
+if [[ "$PACKAGE_MANAGER" == apt || "$PACKAGE_MANAGER" == dnf ]]; then
+  if command_exists snap; then printf '  [ok]      snap: %s\n' "$(command -v snap)"
+  else printf '  [pendente] snap (pacote snapd)\n'; ((PENDING+=1)); fi
+  if command_exists snapcraft; then printf '  [ok]      snapcraft: %s\n' "$(command -v snapcraft)"
+  else printf '  [pendente] snapcraft (snap install snapcraft --classic)\n'; ((PENDING+=1)); fi
+fi
 if [[ -s "$NVM_DIR/nvm.sh" ]]; then printf '  [ok]      nvm: %s\n' "$NVM_DIR/nvm.sh"
 else printf '  [pendente] nvm (gerenciador de Node.js)\n'; ((PENDING+=1)); fi
 NODE_VERSION=$(node --version 2>/dev/null || true)
@@ -85,7 +97,7 @@ PNPM_VERSION=$(pnpm --version 2>/dev/null || true)
 if [[ "$PNPM_VERSION" == "$EXPECTED_PNPM" ]]; then printf '  [ok]      pnpm requerido pelo workspace: %s\n' "$PNPM_VERSION"
 else printf '  [pendente] pnpm %s (detectado: %s)\n' "$EXPECTED_PNPM" "${PNPM_VERSION:-ausente}"; ((PENDING+=1)); fi
 printf '  Python do projeto: %s\n' "$(cat "$ROOT_DIR/.python-version")"
-if has_pyenv && pyenv versions --bare | grep -Fxq "$(cat "$ROOT_DIR/.python-version")"; then
+if has_pyenv && has_pyenv_version "$(cat "$ROOT_DIR/.python-version")"; then
   printf '  [ok]      Python via pyenv: %s\n' "$(cat "$ROOT_DIR/.python-version")"
 else printf '  [pendente] Python %s via pyenv\n' "$(cat "$ROOT_DIR/.python-version")"; ((PENDING+=1)); fi
 for tool in pre-commit pyright mypy ruff ty deptry pip-check-reqs scons tavily-cli; do
@@ -120,20 +132,23 @@ install_packages() {
       local -a wanted=(build-essential curl ca-certificates git python3 pkg-config cmake \
         libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev libncursesw5-dev \
         xz-utils tk-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev libgdbm-dev \
-        libnss3-dev libpq-dev libatomic1 libayatana-appindicator3-dev)
+        libnss3-dev libpq-dev libatomic1 libayatana-appindicator3-dev flatpak \
+        flatpak-builder fuse3 libarchive-tools rpm snapd)
       for package in "${wanted[@]}"; do dpkg-query -W -f='${db:Status-Abbrev}' "$package" 2>/dev/null | grep -q '^ii' || packages+=("$package"); done
       if ((${#packages[@]})); then run_privileged apt-get update; run_privileged env DEBIAN_FRONTEND=noninteractive apt-get install -y "${packages[@]}"; fi
       ;;
     dnf)
       local -a wanted=(gcc gcc-c++ make curl git python3 pkgconf-pkg-config cmake openssl-devel \
         zlib-devel bzip2-devel readline-devel sqlite-devel ncurses-devel xz-devel tk-devel \
-        libffi-devel libxml2-devel libxslt-devel gdbm-devel libatomic libpq-devel)
+        libffi-devel libxml2-devel libxslt-devel gdbm-devel libatomic libpq-devel \
+        flatpak flatpak-builder fuse3 bsdtar rpm-build snapd)
       for package in "${wanted[@]}"; do rpm -q "$package" >/dev/null 2>&1 || packages+=("$package"); done
       if ((${#packages[@]})); then run_privileged dnf install -y "${packages[@]}"; fi
       ;;
     pacman)
       local -a wanted=(base-devel curl ca-certificates git python pkgconf cmake openssl zlib bzip2 \
-        readline sqlite ncurses xz tk libxml2 libffi gdbm postgresql-libs)
+        readline sqlite ncurses xz tk libxml2 libffi gdbm postgresql-libs \
+        flatpak flatpak-builder fuse3 libarchive rpm-tools)
       for package in "${wanted[@]}"; do pacman -Q "$package" >/dev/null 2>&1 || packages+=("$package"); done
       if ((${#packages[@]})); then run_privileged pacman -S --needed "${packages[@]}"; fi
       ;;
@@ -159,6 +174,17 @@ install_packages() {
 
 if [[ "$MODE" != check ]]; then
   install_packages
+  if [[ "$PACKAGE_MANAGER" == dnf ]] && command_exists systemctl; then
+    run_privileged systemctl enable --now snapd.socket
+    if [[ ! -e /snap && ! -L /snap ]]; then
+      run_privileged ln -s /var/lib/snapd/snap /snap
+    fi
+  fi
+  if [[ "$PACKAGE_MANAGER" == apt || "$PACKAGE_MANAGER" == dnf ]]; then
+    if ! command_exists snapcraft; then
+      run_privileged snap install snapcraft --classic
+    fi
+  fi
 
   if [[ ! -s "$NVM_DIR/nvm.sh" ]]; then
     mkdir -p "$NVM_DIR"
@@ -171,6 +197,8 @@ if [[ "$MODE" != check ]]; then
   NODE_MAJOR=$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || printf 0)
   if [[ "$NODE_MAJOR" != 26 ]]; then nvm install 26; fi
   nvm use 26 >/dev/null
+  NODE_BIN_DIR=$(dirname "$(command -v node)")
+  export PATH="$HOME/.local/bin:$BUN_INSTALL/bin:$PNPM_HOME:$NODE_BIN_DIR:$PATH"
   set -u
 
   if [[ ! -x "$BUN_INSTALL/bin/bun" ]]; then curl -fsSL https://bun.com/install | bash; fi
@@ -186,7 +214,9 @@ if [[ "$MODE" != check ]]; then
   export PATH="$HOME/.pyenv/bin:$HOME/.pyenv/shims:$PATH"
   eval "$(pyenv init - bash)"
   PYTHON_VERSION=$(cat "$ROOT_DIR/.python-version")
-  if ! pyenv versions --bare | grep -Fxq "$PYTHON_VERSION"; then pyenv install "$PYTHON_VERSION"; fi
+  if ! has_pyenv_version "$PYTHON_VERSION"; then
+    pyenv install --skip-existing "$PYTHON_VERSION"
+  fi
   export PYENV_VERSION="$PYTHON_VERSION"
 
   if ! command_exists uv; then curl -LsSf https://astral.sh/uv/install.sh | sh; fi

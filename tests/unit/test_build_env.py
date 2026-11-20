@@ -189,14 +189,22 @@ class TestFerramentas:
 class TestEmpacotamentoLinux:
     def test_sugere_o_comando_da_familia(self) -> None:
         missing, command = build_env.packaging_hint("debian", lambda _tool: None)
-        assert missing == ["flatpak", "flatpak-builder", "bsdtar", "fusermount3"]
+        assert missing == [
+            "flatpak",
+            "flatpak-builder",
+            "bsdtar",
+            "fusermount3",
+            "snap",
+        ]
         assert command == (
-            "sudo apt-get install -y flatpak flatpak-builder fuse3 libarchive-tools"
+            "sudo apt-get install -y flatpak flatpak-builder fuse3 libarchive-tools snapd"
         )
-        _missing, dnf = build_env.packaging_hint("rhel", lambda _tool: None)
-        assert dnf.startswith("sudo dnf install -y ") and "bsdtar" in dnf
+        rhel_missing, dnf = build_env.packaging_hint("rhel", lambda _tool: None)
+        assert "snap" in rhel_missing
+        assert dnf.startswith("sudo dnf install -y ") and "snapd" in dnf
         _missing, pacman = build_env.packaging_hint("arch", lambda _tool: None)
         assert pacman.startswith("sudo pacman -S --needed ") and "libarchive" in pacman
+        assert "snap" not in _missing
 
     def test_so_lista_o_que_falta(self) -> None:
         present = {"flatpak", "bsdtar"}

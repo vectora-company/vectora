@@ -61,6 +61,7 @@ import {
   backendPath,
   backendTransportOptions,
   isInstalledTestsMode,
+  ignoreBrokenPipe,
   natsBinaryPath,
   spawnBackendProcess,
   IpcPipeParser,
@@ -127,6 +128,9 @@ import {
   startElectronCdpProxy,
   waitForElectronCdpTarget,
 } from "./electron-cdp-proxy.js";
+
+ignoreBrokenPipe(process.stdout);
+ignoreBrokenPipe(process.stderr);
 
 // O backend conecta ao mesmo Chromium do Electron via CDP. O endpoint fica
 // restrito ao loopback e é herdado pelo processo backend supervisionado. Em
