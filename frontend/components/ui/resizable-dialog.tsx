@@ -2,12 +2,18 @@
 
 import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { XIcon } from "lucide-react";
+import {
+  Maximize2 as Maximize2Icon,
+  Minimize2 as Minimize2Icon,
+  Minus as MinusIcon,
+  XIcon,
+} from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { m } from "@/lib/paraglide/messages";
 import { useDialogSizeStore } from "@/lib/stores/dialog-size-store";
 import {
+  moveRect,
   resizeRect,
   type Rect,
   type ResizeDir,
@@ -34,6 +40,10 @@ interface ResizableDialogContentProps extends React.ComponentProps<
    * `defaultWidth` e altura pelo conteúdo, sem alças de redimensionar.
    */
   resizable?: boolean;
+  /** Mostra o botão de minimizar; quem usa decide o que "minimizado" significa. */
+  onMinimize?: () => void;
+  /** Escondido sem desmontar: o conteúdo e o estado dele continuam vivos. */
+  minimized?: boolean;
 }
 
 const viewport = () => ({ w: window.innerWidth, h: window.innerHeight });
@@ -79,6 +89,10 @@ export function ResizableDialogContent({
   showCloseButton = true,
   storageKey,
   resizable = true,
+  onMinimize,
+  minimized = false,
+  onEscapeKeyDown,
+  onInteractOutside,
   style,
   ...props
 }: ResizableDialogContentProps) {
@@ -100,6 +114,7 @@ export function ResizableDialogContent({
     ),
   );
   const [gesturing, setGesturing] = React.useState(false);
+  const [maximized, setMaximized] = React.useState(false);
   const frameRef = React.useRef<HTMLDivElement>(null);
   const liveRef = React.useRef<Rect>(rect);
   const frameIdRef = React.useRef(0);
@@ -115,47 +130,26 @@ export function ResizableDialogContent({
     el.style.height = `${next.h}px`;
   };
 
-  const startResize = (
+  /** Mover/redimensionar: um gesto com ponteiro capturado, quadro a quadro. */
+  const beginGesture = (
     event: React.PointerEvent<HTMLElement>,
-    dir: ResizeDir,
+    compute: (start: Rect, dx: number, dy: number) => Rect,
   ) => {
-    if (event.button !== 0) return;
+    if (maximized || event.button !== 0) return;
     event.preventDefault();
     const target = event.currentTarget;
     target.setPointerCapture(event.pointerId);
     const start = { ...liveRef.current };
     const originX = event.clientX;
     const originY = event.clientY;
-    const view = viewport();
-    // O limite visual é a janela do app com margem; os máximos do chamador
-    // continuam valendo para não estourar um tamanho razoável.
-    const bound = {
-      w: Math.min(view.w - VIEWPORT_MARGIN, start.x + maxWidth),
-      h: Math.min(view.h - VIEWPORT_MARGIN, start.y + maxHeight),
-    };
     setGesturing(true);
 
-    const compute = (dx: number, dy: number) => {
-      const next = resizeRect(
-        start,
-        dir,
-        dx,
-        dy,
-        { w: minWidth, h: minHeight },
-        {
-          w: Math.max(bound.w, start.x + minWidth),
-          h: Math.max(bound.h, start.y + minHeight),
-        },
-      );
-      return {
-        ...next,
-        w: Math.min(next.w, maxWidth),
-        h: Math.min(next.h, maxHeight),
-      };
-    };
-
     const onMove = (move: PointerEvent) => {
-      const next = compute(move.clientX - originX, move.clientY - originY);
+      const next = compute(
+        start,
+        move.clientX - originX,
+        move.clientY - originY,
+      );
       liveRef.current = next;
       cancelAnimationFrame(frameIdRef.current);
       frameIdRef.current = requestAnimationFrame(() => paint(next));
@@ -176,6 +170,60 @@ export function ResizableDialogContent({
     target.addEventListener("pointermove", onMove);
     target.addEventListener("pointerup", finish);
     target.addEventListener("pointercancel", finish);
+  };
+
+  const startResize = (
+    event: React.PointerEvent<HTMLElement>,
+    dir: ResizeDir,
+  ) => {
+    const view = viewport();
+    // O limite visual é a janela do app com margem; os máximos do chamador
+    // continuam valendo para não estourar um tamanho razoável.
+    beginGesture(event, (start, dx, dy) => {
+      const next = resizeRect(
+        start,
+        dir,
+        dx,
+        dy,
+        { w: minWidth, h: minHeight },
+        {
+          w: Math.max(
+            Math.min(view.w - VIEWPORT_MARGIN, start.x + maxWidth),
+            start.x + minWidth,
+          ),
+          h: Math.max(
+            Math.min(view.h - VIEWPORT_MARGIN, start.y + maxHeight),
+            start.y + minHeight,
+          ),
+        },
+      );
+      return {
+        ...next,
+        w: Math.min(next.w, maxWidth),
+        h: Math.min(next.h, maxHeight),
+      };
+    });
+  };
+
+  /** Arrastar pelo cabeçalho (ou por qualquer `data-window-handle`) move a janela. */
+  const onFramePointerDown = (event: React.PointerEvent<HTMLElement>) => {
+    const target = event.target as Element;
+    const handle = target.closest(
+      '[data-slot="dialog-header"], [data-window-handle]',
+    );
+    if (!handle || !event.currentTarget.contains(handle)) return;
+    if (target.closest("button, a, input, textarea, select, [role='tab']"))
+      return;
+    beginGesture(event, (start, dx, dy) => moveRect(start, dx, dy, viewport()));
+  };
+
+  const onHeaderDoubleClick = (event: React.MouseEvent<HTMLElement>) => {
+    const target = event.target as Element;
+    if (
+      target.closest('[data-slot="dialog-header"], [data-window-handle]') &&
+      !target.closest("button, a, input, textarea, select")
+    )
+      setMaximized((value) => !value);
   };
 
   if (!resizable) {
@@ -208,35 +256,82 @@ export function ResizableDialogContent({
     );
   }
 
+  const controlClass =
+    "rounded-xs p-0.5 opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:outline-hidden [&_svg]:size-4";
+
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay className="data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/50" />
+      {!minimized && (
+        <DialogPrimitive.Overlay className="data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/50" />
+      )}
       <DialogPrimitive.Content
         data-slot="dialog-content"
+        data-maximized={maximized}
         className={cn(
           "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
           "fixed z-50",
-          "flex flex-col rounded-lg border shadow-lg duration-150 overflow-hidden",
+          "flex flex-col border shadow-lg duration-150 overflow-hidden",
+          maximized ? "rounded-none" : "rounded-lg",
+          "[&_[data-slot=dialog-header]]:select-none",
+          !maximized && "[&_[data-slot=dialog-header]]:cursor-move",
           className,
         )}
         style={{
-          left: rect.x,
-          top: rect.y,
-          width: rect.w,
-          height: rect.h,
+          ...(maximized
+            ? { left: 0, top: 0, width: "100vw", height: "100vh" }
+            : { left: rect.x, top: rect.y, width: rect.w, height: rect.h }),
+          ...(minimized ? { display: "none" } : null),
           ...style,
         }}
+        // Minimizado, o diálogo deixa de ser modal: clique fora e Esc não o fecham.
+        onEscapeKeyDown={(event) => {
+          if (minimized) event.preventDefault();
+          onEscapeKeyDown?.(event);
+        }}
+        onInteractOutside={(event) => {
+          if (minimized) event.preventDefault();
+          onInteractOutside?.(event);
+        }}
+        onPointerDown={onFramePointerDown}
+        onDoubleClick={onHeaderDoubleClick}
         {...props}
         ref={frameRef}
       >
         {children}
 
-        {showCloseButton && (
-          <DialogPrimitive.Close className="ring-offset-background focus:ring-ring data-[state=open]:bg-accent data-[state=open]:text-muted-foreground absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4">
-            <XIcon />
-            <span className="sr-only">{m.dialog_close()}</span>
-          </DialogPrimitive.Close>
-        )}
+        <div className="absolute top-4 right-4 flex items-center gap-1.5">
+          {onMinimize && (
+            <button
+              type="button"
+              onClick={onMinimize}
+              className={controlClass}
+              aria-label={m.window_minimize()}
+              title={m.window_minimize()}
+            >
+              <MinusIcon />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setMaximized((value) => !value)}
+            className={controlClass}
+            aria-label={maximized ? m.window_restore() : m.window_maximize()}
+            title={maximized ? m.window_restore() : m.window_maximize()}
+          >
+            {maximized ? <Minimize2Icon /> : <Maximize2Icon />}
+          </button>
+          {showCloseButton && (
+            <DialogPrimitive.Close
+              className={cn(
+                controlClass,
+                "ring-offset-background focus:ring-ring",
+              )}
+            >
+              <XIcon />
+              <span className="sr-only">{m.dialog_close()}</span>
+            </DialogPrimitive.Close>
+          )}
+        </div>
 
         {gesturing && (
           <div
@@ -245,18 +340,27 @@ export function ResizableDialogContent({
           />
         )}
 
-        {RESIZE_HANDLES.map(({ dir, className: handleClass }) => (
-          <div
-            key={dir}
-            role="separator"
-            aria-label={
-              dir === "se" ? m.dialog_resize() : `${m.dialog_resize()} (${dir})`
-            }
-            data-testid={`dialog-resize-${dir}`}
-            onPointerDown={(event) => startResize(event, dir)}
-            className={cn("absolute z-20 touch-none select-none", handleClass)}
-          />
-        ))}
+        {!maximized &&
+          RESIZE_HANDLES.map(({ dir, className: handleClass }) => (
+            <div
+              key={dir}
+              role="separator"
+              aria-label={
+                dir === "se"
+                  ? m.dialog_resize()
+                  : `${m.dialog_resize()} (${dir})`
+              }
+              data-testid={`dialog-resize-${dir}`}
+              onPointerDown={(event) => {
+                event.stopPropagation();
+                startResize(event, dir);
+              }}
+              className={cn(
+                "absolute z-20 touch-none select-none",
+                handleClass,
+              )}
+            />
+          ))}
       </DialogPrimitive.Content>
     </DialogPrimitive.Portal>
   );

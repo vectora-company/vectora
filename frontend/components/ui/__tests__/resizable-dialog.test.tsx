@@ -3,7 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 
-import { Dialog, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ResizableDialogContent } from "../resizable-dialog";
 import { useDialogSizeStore } from "@/lib/stores/dialog-size-store";
 
@@ -11,6 +11,9 @@ vi.mock("@/lib/paraglide/messages", () => ({
   m: {
     dialog_close: () => "Fechar",
     dialog_resize: () => "Redimensionar diálogo",
+    window_minimize: () => "Minimizar",
+    window_maximize: () => "Maximizar",
+    window_restore: () => "Restaurar",
   },
 }));
 
@@ -209,5 +212,77 @@ describe("ResizableDialogContent", () => {
       pointerId: 1,
     });
     expect(screen.queryByTestId("dialog-gesture-shield")).toBeNull();
+  });
+
+  it("arrastar o cabeçalho move a janela sem mudar o tamanho", () => {
+    render(
+      <Dialog open>
+        <ResizableDialogContent
+          defaultWidth={500}
+          defaultHeight={400}
+          aria-describedby={undefined}
+        >
+          <DialogHeader>
+            <DialogTitle>Título</DialogTitle>
+          </DialogHeader>
+        </ResizableDialogContent>
+      </Dialog>,
+    );
+    const left = parseFloat(content().style.left);
+    const top = parseFloat(content().style.top);
+    const header = content().querySelector('[data-slot="dialog-header"]')!;
+    Object.assign(header, {
+      setPointerCapture: vi.fn(),
+      releasePointerCapture: vi.fn(),
+    });
+
+    fireEvent.pointerDown(header, { clientX: 200, clientY: 200, pointerId: 1 });
+    fireEvent.pointerMove(header, { clientX: 230, clientY: 215, pointerId: 1 });
+    fireEvent.pointerUp(header, { pointerId: 1 });
+
+    expect(content().style.left).toBe(`${left + 30}px`);
+    expect(content().style.top).toBe(`${top + 15}px`);
+    expect(content().style.width).toBe("500px");
+  });
+
+  it("maximizar ocupa a tela e restaurar devolve o tamanho", () => {
+    renderDialog();
+
+    fireEvent.click(screen.getByRole("button", { name: "Maximizar" }));
+    expect(content().dataset.maximized).toBe("true");
+    expect(content().style.width).toBe("100vw");
+    expect(screen.queryByTestId("dialog-resize-se")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Restaurar" }));
+    expect(content().style.width).toBe("500px");
+    expect(screen.getByTestId("dialog-resize-se")).toBeTruthy();
+  });
+
+  it("minimizado, some mas continua montado e ignora o Esc", () => {
+    const onOpenChange = vi.fn();
+    render(
+      <Dialog open onOpenChange={onOpenChange}>
+        <ResizableDialogContent
+          minimized
+          onMinimize={vi.fn()}
+          aria-describedby={undefined}
+        >
+          <DialogTitle>Título</DialogTitle>
+          <span>conteúdo vivo</span>
+        </ResizableDialogContent>
+      </Dialog>,
+    );
+
+    expect(screen.getByRole("dialog", { hidden: true }).style.display).toBe(
+      "none",
+    );
+    expect(screen.getByText("conteúdo vivo")).toBeTruthy();
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(onOpenChange).not.toHaveBeenCalled();
+  });
+
+  it("só mostra o botão de minimizar quando quem usa o pede", () => {
+    renderDialog();
+    expect(screen.queryByRole("button", { name: "Minimizar" })).toBeNull();
   });
 });
