@@ -305,7 +305,7 @@ class TestOrphanPidFile:
         self, tmp_path, monkeypatch
     ):
         monkeypatch.setattr(nats_sidecar.settings, "vectora_home", tmp_path)
-        monkeypatch.setenv("FLATPAK_ID", "company.vectora.desktop")
+        monkeypatch.setenv("FLATPAK_ID", "company.vectora.vectora")
         store_dir = tmp_path / "nats"
         store_dir.mkdir(parents=True)
         registered_url = "nats://127.0.0.1:4222"
@@ -334,7 +334,7 @@ class TestOrphanPidFile:
         self, tmp_path, monkeypatch
     ):
         monkeypatch.setattr(nats_sidecar.settings, "vectora_home", tmp_path)
-        monkeypatch.setenv("FLATPAK_ID", "company.vectora.desktop")
+        monkeypatch.setenv("FLATPAK_ID", "company.vectora.vectora")
         store_dir = tmp_path / "nats"
         store_dir.mkdir(parents=True)
         nats_sidecar._write_pid_list(store_dir, [9999], url="nats://127.0.0.1:4222")

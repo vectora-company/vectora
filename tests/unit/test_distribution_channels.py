@@ -84,7 +84,8 @@ def test_flatpak_uses_the_current_supported_freedesktop_runtime() -> None:
     assert flatpak
     assert "runtime: org.freedesktop.Platform" in flatpak["body"]
     assert 'runtimeVersion: "26.08"' in flatpak["body"]
-    assert "Icon: company.vectora.desktop" in flatpak["body"]
+    assert "appId: company.vectora.vectora" in BUILDER
+    assert "Icon: company.vectora.vectora" in flatpak["body"]
 
 
 def test_endpoint_requires_authentication_and_returns_the_manifest() -> None:
