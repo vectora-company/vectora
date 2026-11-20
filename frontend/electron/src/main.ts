@@ -19,6 +19,7 @@
 import { ChildProcess } from "child_process";
 import {
   DEVELOPMENT_DESKTOP_NAME,
+  registerAppImageCommand,
   registerDevelopmentDesktop,
 } from "./linux-desktop.js";
 import * as fs from "fs";
@@ -242,6 +243,19 @@ if (process.platform === "linux") {
   app.setDesktopName(
     app.isPackaged ? "vectora.desktop" : DEVELOPMENT_DESKTOP_NAME,
   );
+  if (app.isPackaged && process.env.APPIMAGE) {
+    try {
+      registerAppImageCommand({
+        home: os.homedir(),
+        appImage: process.env.APPIMAGE,
+      });
+      console.info(
+        "[appimage] Registered the terminal command at ~/.local/bin/vectora",
+      );
+    } catch (error) {
+      console.warn("[appimage] Could not register the terminal command", error);
+    }
+  }
   if (!app.isPackaged) {
     try {
       const configuredDataHome = process.env.XDG_DATA_HOME;

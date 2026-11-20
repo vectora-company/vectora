@@ -43,3 +43,37 @@ export function registerDevelopmentDesktop(options: {
   fs.mkdirSync(applications, { recursive: true });
   fs.writeFileSync(path.join(applications, DEVELOPMENT_DESKTOP_NAME), content);
 }
+
+/** Registra o AppImage em ~/.local/bin sem substituir um comando existente. */
+export function registerAppImageCommand(options: {
+  home: string;
+  appImage: string;
+}): void {
+  if (!path.isAbsolute(options.home) || !path.isAbsolute(options.appImage)) {
+    throw new Error("AppImage command paths must be absolute");
+  }
+
+  const appImage = path.resolve(options.appImage);
+  if (!fs.statSync(appImage).isFile()) {
+    throw new Error("AppImage command target must be a regular file");
+  }
+  fs.accessSync(appImage, fs.constants.X_OK);
+
+  const binDirectory = path.join(options.home, ".local", "bin");
+  const commandPath = path.join(binDirectory, "vectora");
+  fs.mkdirSync(binDirectory, { recursive: true });
+
+  if (fs.existsSync(commandPath)) {
+    const existing = fs.lstatSync(commandPath);
+    if (
+      existing.isSymbolicLink() &&
+      path.resolve(path.dirname(commandPath), fs.readlinkSync(commandPath)) ===
+        appImage
+    ) {
+      return;
+    }
+    throw new Error("A different vectora command already exists");
+  }
+
+  fs.symlinkSync(appImage, commandPath);
+}
