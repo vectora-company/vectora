@@ -151,8 +151,8 @@ if (!installedTestsMode) {
 // Seleciona o backend ANGLE nativo da plataforma. WebGL continua disponível
 // no renderer e é encaminhado pelo ANGLE para este backend.
 app.commandLine.appendSwitch("use-gl", "angle");
-// `VECTORA_ANGLE_BACKEND` troca o backend em qualquer plataforma (ex.: "gl",
-// "vulkan" ou "default"), para máquinas onde o padrão não inicializa.
+// `VECTORA_ANGLE_BACKEND` troca o backend em qualquer plataforma (ex.: "gl" ou
+// "default"), para máquinas onde o padrão não inicializa.
 const angleOverride = process.env.VECTORA_ANGLE_BACKEND?.trim();
 if (angleOverride) {
   app.commandLine.appendSwitch("use-angle", angleOverride);
@@ -161,14 +161,20 @@ if (angleOverride) {
   app.commandLine.appendSwitch("use-angle", "d3d11on12");
 } else if (process.platform === "darwin") {
   app.commandLine.appendSwitch("use-angle", "metal");
+} else {
+  app.commandLine.appendSwitch("use-angle", "vulkan");
 }
-// No Linux o backend do ANGLE fica a cargo do Chromium: forçar "vulkan" (ou
-// "gl") derrubava o processo de GPU ("Requested GL implementation not found"),
-// deixava a interface em renderização por software e o Electron saía com
-// SIGTRAP (código -5) ao encerrar.
+if (process.platform === "linux" && angleOverride !== "gl") {
+  // Sem esta feature o Chromium não habilita o Vulkan: com `use-angle=vulkan`
+  // o processo de GPU morria ("Requested GL implementation not found"), a
+  // interface caía em renderização por software e o Electron saía com SIGTRAP
+  // (código -5) ao encerrar. Com ela, o WebGL roda sobre o Vulkan da GPU.
+  app.commandLine.appendSwitch("enable-features", "Vulkan");
+}
 if (process.platform === "linux") {
-  // Usa XWayland/X11 como protocolo de janela; Wayland não é um backend de
-  // renderização.
+  // Usa XWayland/X11 como protocolo de janela; Vulkan continua sendo o
+  // backend gráfico. Wayland não é um backend de renderização compatível com
+  // Vulkan no Chromium.
   app.commandLine.appendSwitch("ozone-platform", "x11");
 }
 
