@@ -18,6 +18,7 @@ import { Loader2 } from "lucide-react";
 import { useIsDesktop } from "@/lib/hooks/use-is-desktop";
 import { m } from "@/lib/paraglide/messages";
 import { settingsItemClass } from "@/components/settings/primitives";
+import { DistributionChannels } from "@/components/settings/distribution-channels";
 import { cn } from "@/lib/utils";
 
 export function AboutPanel() {
@@ -69,6 +70,8 @@ export function AboutPanel() {
           </p>
         </div>
       </div>
+
+      <DistributionChannels />
     </div>
   );
 }

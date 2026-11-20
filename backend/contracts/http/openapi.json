@@ -1288,6 +1288,60 @@
         "title": "ChangePasswordRequest",
         "type": "object"
       },
+      "Channel": {
+        "properties": {
+          "formats": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Formats",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "install_validated": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Install Validated",
+            "type": "array"
+          },
+          "integrity": {
+            "title": "Integrity",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "available",
+              "build_only",
+              "planned"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "status",
+          "formats",
+          "install_validated",
+          "integrity",
+          "note"
+        ],
+        "title": "Channel",
+        "type": "object"
+      },
       "ChatConfig": {
         "properties": {
           "chat_mode": {
@@ -17455,6 +17509,32 @@
         "summary": "Set Platform Enabled",
         "tags": [
           "connect"
+        ]
+      }
+    },
+    "/distribution/channels": {
+      "get": {
+        "description": "Canais de distribuição, com o estado real de cada um.",
+        "operationId": "list_channels_distribution_channels_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Channel"
+                  },
+                  "title": "Response List Channels Distribution Channels Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Channels",
+        "tags": [
+          "distribution"
         ]
       }
     },

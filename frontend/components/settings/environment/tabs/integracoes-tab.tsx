@@ -85,6 +85,8 @@ interface Integration {
    * OAuth local explicitamente habilitado tem CLIENT_ID + CLIENT_SECRET;
    * a interface usa o valor para habilitar "Conectar via OAuth". */
   oauth_configured: boolean;
+  /** true só quando o fluxo OAuth foi validado em produção para o provider. */
+  oauth_validated?: boolean;
 }
 
 type VerifyState = "idle" | "loading" | "ok" | "error";
@@ -494,6 +496,14 @@ function IntegrationCard({
                 {m.integrations_connect_oauth()}
               </Button>
             </div>
+          )}
+          {!integ.oauth_validated && (
+            <p
+              data-testid="oauth-unvalidated"
+              className="text-2xs text-muted-foreground"
+            >
+              {m.integrations_oauth_unvalidated()}
+            </p>
           )}
         </div>
       )}

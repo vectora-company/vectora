@@ -51,6 +51,7 @@ from backend.api.handlers.chat import router as chat_router
 from backend.api.handlers.connect import router as connect_router
 from backend.api.handlers.context_graph import router as graph_router
 from backend.api.handlers.dag import router as dag_router
+from backend.api.handlers.distribution import router as distribution_router
 from backend.api.handlers.extensions import router as extensions_router
 from backend.api.handlers.feedback import router as feedback_router
 from backend.api.handlers.flags import router as flags_router
@@ -889,6 +890,7 @@ def create_app(serve_static: bool = True) -> FastAPI:
     app.include_router(webhooks_router)
     app.include_router(admin_router)
     app.include_router(extensions_router)
+    app.include_router(distribution_router)
     app.include_router(backup_router)
     app.include_router(usage_router)
     app.include_router(github_router)
