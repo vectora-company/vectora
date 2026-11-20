@@ -1,5 +1,6 @@
 import {
   cloneElement,
+  type ReactNode,
   useState,
   useCallback,
   useEffect,
@@ -163,6 +164,19 @@ export const Route = createFileRoute("/session/$threadId")({
 
 // Largura da sidebar colapsada — bate com o w-16 do <CollapsedSidebar>.
 const SIDEBAR_COLLAPSED_WIDTH = 64;
+
+function railSlotContent(rails: ReactNode[]): ReactNode {
+  return rails.length > 0 ? <div className="flex h-full">{rails}</div> : null;
+}
+
+function railColumn(label: string, rails: ReactNode[]) {
+  return {
+    label,
+    visibility: "visible" as const,
+    width: WORKBENCH_RAIL_WIDTH * rails.length,
+    minWidth: WORKBENCH_RAIL_WIDTH * rails.length,
+  };
+}
 
 function SessionPage() {
   const { threadId: routeParam } = Route.useParams() as { threadId: string };
@@ -1098,8 +1112,44 @@ function SessionPage() {
     ],
   );
 
+  // Faixas do layout compacto: são colunas do shell, nunca parte do conteúdo
+  // central, para o header ficar só sobre a coluna do centro em qualquer
+  // largura. `slotOf` converte o lado físico no slot do shell (que inverte com
+  // `direction="rtl"`).
+  const slotOf = (physical: "left" | "right"): "left" | "right" =>
+    sidebarOnRight ? (physical === "left" ? "right" : "left") : physical;
+  const compactSessionsRail = (side: "left" | "right") => (
+    <CompactSessionsRail
+      key={`sessions-${side}`}
+      side={side}
+      open={isMobileSidebarOpen}
+      onToggle={openCompactSessions}
+      onNewChat={handleNewChat}
+    />
+  );
+  const physicalRails: Record<"left" | "right", ReactNode[]> = {
+    left: [],
+    right: [],
+  };
+  if (compactRails) {
+    if (!sidebarOnRight) physicalRails.left.push(compactSessionsRail("left"));
+    if (assistantWorkbenchSide === "left") {
+      physicalRails.left.push(
+        <WorkbenchNavBar key="nav-left" threadId={threadId} side="left" />,
+      );
+    } else {
+      physicalRails.right.push(
+        <WorkbenchNavBar key="nav-right" threadId={threadId} side="right" />,
+      );
+    }
+    if (sidebarOnRight) physicalRails.right.push(compactSessionsRail("right"));
+  }
+  const railSlots = {
+    left: physicalRails[sidebarOnRight ? "right" : "left"],
+    right: physicalRails[sidebarOnRight ? "left" : "right"],
+  };
   const assistantWorkbenchPanel = (
-    <div className="flex h-full min-w-0">
+    <div className="flex h-full w-full min-w-0">
       {!compactRails && assistantWorkbenchSide === "left" && (
         <WorkbenchNavBar threadId={threadId} side={assistantWorkbenchSide} />
       )}
@@ -1130,7 +1180,6 @@ function SessionPage() {
       <LicenseBanner fullWidth onBlockingChange={setInputLocked} />
 
       <div className="relative flex flex-1 min-h-0 overflow-hidden">
-        <ExtensionModeSurface />
         <Sheet open={isMobileSidebarOpen} onOpenChange={setIsMobileSidebarOpen}>
           <SheetContent
             side={sidebarOnRight ? "right" : "left"}
@@ -1166,39 +1215,37 @@ function SessionPage() {
             >
               <ThreeColumnShell
                 centerHeader={headerEl}
-                left={showSidebarPanel ? sidebarPanel : null}
+                centerOverlay={<ExtensionModeSurface />}
+                left={
+                  showSidebarPanel
+                    ? sidebarPanel
+                    : kanbanRail
+                      ? compactSessionsRail(sidebarOnRight ? "right" : "left")
+                      : null
+                }
                 center={
                   <div className="flex w-full min-w-0 flex-1 min-h-0 overflow-hidden">
-                    {kanbanRail && !sidebarOnRight && (
-                      <CompactSessionsRail
-                        side="left"
-                        open={isMobileSidebarOpen}
-                        onToggle={openCompactSessions}
-                        onNewChat={handleNewChat}
-                      />
-                    )}
                     <div className="flex min-w-0 flex-1 min-h-0 overflow-hidden">
                       <KanbanBoard threadId={threadId} />
                     </div>
-                    {kanbanRail && sidebarOnRight && (
-                      <CompactSessionsRail
-                        side="right"
-                        open={isMobileSidebarOpen}
-                        onToggle={openCompactSessions}
-                        onNewChat={handleNewChat}
-                      />
-                    )}
                   </div>
                 }
                 right={null}
                 columns={{
                   left: {
                     label: "Sessões",
-                    visibility: showSidebarPanel ? "visible" : "hidden",
-                    width: showSidebarPanel ? sessionSidebarWidth : undefined,
+                    visibility:
+                      showSidebarPanel || kanbanRail ? "visible" : "hidden",
+                    width: showSidebarPanel
+                      ? sessionSidebarWidth
+                      : kanbanRail
+                        ? WORKBENCH_RAIL_WIDTH
+                        : undefined,
                     minWidth: showSidebarPanel
                       ? sessionSidebarWidth
-                      : undefined,
+                      : kanbanRail
+                        ? WORKBENCH_RAIL_WIDTH
+                        : undefined,
                     resize:
                       showSidebarPanel && !isSidebarCollapsed
                         ? {
@@ -1313,6 +1360,7 @@ function SessionPage() {
                 showChat={chatSidebarOpen}
                 onOpenChat={() => setChatSidebarOpen(true)}
                 header={headerEl}
+                centerOverlay={<ExtensionModeSurface />}
                 navBar={
                   <WorkbenchNavBar
                     threadId={threadId}
@@ -1391,20 +1439,14 @@ function SessionPage() {
             >
               <ThreeColumnShell
                 centerHeader={headerEl}
-                left={showSidebarPanel ? sidebarPanel : null}
+                centerOverlay={<ExtensionModeSurface />}
+                left={
+                  showSidebarPanel
+                    ? sidebarPanel
+                    : railSlotContent(railSlots.left)
+                }
                 center={
                   <div className="flex flex-1 min-w-0 min-h-0 overflow-hidden">
-                    {compactRails && sidebarOnRight === false && (
-                      <CompactSessionsRail
-                        side="left"
-                        open={isMobileSidebarOpen}
-                        onToggle={openCompactSessions}
-                        onNewChat={handleNewChat}
-                      />
-                    )}
-                    {compactRails && assistantWorkbenchSide === "left" && (
-                      <WorkbenchNavBar threadId={threadId} side="left" />
-                    )}
                     <div className="relative flex flex-1 min-w-0 min-h-0 overflow-hidden">
                       <div
                         aria-hidden={
@@ -1447,58 +1489,64 @@ function SessionPage() {
                         </>
                       )}
                     </div>
-                    {compactRails && assistantWorkbenchSide === "right" && (
-                      <WorkbenchNavBar threadId={threadId} side="right" />
-                    )}
-                    {compactRails && sidebarOnRight && (
-                      <CompactSessionsRail
-                        side="right"
-                        open={isMobileSidebarOpen}
-                        onToggle={openCompactSessions}
-                        onNewChat={handleNewChat}
-                      />
-                    )}
                   </div>
                 }
                 right={
-                  <div
-                    className={`relative flex h-full min-w-0 min-h-0 flex-1 flex-row overflow-hidden border-border/60 ${assistantWorkbenchSide === "right" ? "border-l" : "border-r"}`}
-                  >
-                    {assistantWorkbenchSide === "left" && (
-                      <WorkbenchNavBar
-                        threadId={threadId}
-                        side={assistantWorkbenchSide}
-                      />
-                    )}
-                    {assistantWorkbenchVisible && (
-                      <WorkbenchContent
-                        threadId={threadId}
-                        side={assistantWorkbenchSide}
-                        visible
-                        onOpenCommitDetails={openGitCommitDetails}
-                        onOpenPlanDocument={openPlanDocument}
-                        onAddToContext={pushMention}
-                        onSendPrompt={pushDraft}
-                      />
-                    )}
-                    {assistantWorkbenchSide === "right" && (
-                      <WorkbenchNavBar
-                        threadId={threadId}
-                        side={assistantWorkbenchSide}
-                      />
-                    )}
-                  </div>
+                  compactRails ? (
+                    railSlotContent(railSlots.right)
+                  ) : (
+                    <div
+                      className={`relative flex h-full min-w-0 min-h-0 flex-1 flex-row overflow-hidden border-border/60 ${assistantWorkbenchSide === "right" ? "border-l" : "border-r"}`}
+                    >
+                      {assistantWorkbenchSide === "left" && (
+                        <WorkbenchNavBar
+                          threadId={threadId}
+                          side={assistantWorkbenchSide}
+                        />
+                      )}
+                      {assistantWorkbenchVisible && (
+                        <WorkbenchContent
+                          threadId={threadId}
+                          side={assistantWorkbenchSide}
+                          visible
+                          onOpenCommitDetails={openGitCommitDetails}
+                          onOpenPlanDocument={openPlanDocument}
+                          onAddToContext={pushMention}
+                          onSendPrompt={pushDraft}
+                        />
+                      )}
+                      {assistantWorkbenchSide === "right" && (
+                        <WorkbenchNavBar
+                          threadId={threadId}
+                          side={assistantWorkbenchSide}
+                        />
+                      )}
+                    </div>
+                  )
                 }
-                showRight={hydrated && !chatMode && !isCompactSession}
+                showRight={
+                  hydrated &&
+                  !chatMode &&
+                  (!isCompactSession || railSlots.right.length > 0)
+                }
                 direction={sidebarOnRight ? "rtl" : "ltr"}
                 columns={{
                   left: {
                     label: "Sessões",
-                    visibility: showSidebarPanel ? "visible" : "hidden",
-                    width: showSidebarPanel ? sessionSidebarWidth : undefined,
+                    visibility:
+                      showSidebarPanel || railSlots.left.length > 0
+                        ? "visible"
+                        : "hidden",
+                    width: showSidebarPanel
+                      ? sessionSidebarWidth
+                      : railSlots.left.length > 0
+                        ? WORKBENCH_RAIL_WIDTH * railSlots.left.length
+                        : undefined,
                     minWidth: showSidebarPanel
                       ? sessionSidebarWidth
-                      : undefined,
+                      : railSlots.left.length > 0
+                        ? WORKBENCH_RAIL_WIDTH * railSlots.left.length
+                        : undefined,
                     resize:
                       showSidebarPanel && !isSidebarCollapsed
                         ? {
@@ -1535,33 +1583,35 @@ function SessionPage() {
                         : undefined,
                   },
                   center: { label: "Chat" },
-                  right: {
-                    kind: "workbench",
-                    label: m.layout_workbench_column(),
-                    visibility: "visible",
-                    width: workbenchOpen
-                      ? splitSize + WORKBENCH_RAIL_WIDTH
-                      : WORKBENCH_RAIL_WIDTH,
-                    minWidth: workbenchOpen
-                      ? WORKBENCH_CONTENT_MIN_WIDTH + WORKBENCH_RAIL_WIDTH
-                      : WORKBENCH_RAIL_WIDTH,
-                    maxWidth: workbenchOpen
-                      ? WORKBENCH_CONTENT_MAX_WIDTH + WORKBENCH_RAIL_WIDTH
-                      : WORKBENCH_RAIL_WIDTH,
-                    resize: workbenchOpen
-                      ? {
-                          ariaLabel: m.resize_workbench(),
-                          value: splitSize,
-                          min: WORKBENCH_CONTENT_MIN_WIDTH,
-                          max: WORKBENCH_CONTENT_MAX_WIDTH,
-                          onKeyDown: onWorkbenchResizeKeyDown,
-                          onPointerDown: onWorkbenchResizeDown,
-                          onPointerMove: onWorkbenchResizeMove,
-                          onPointerUp: onWorkbenchResizeUp,
-                          onPointerCancel: onWorkbenchResizeUp,
-                        }
-                      : undefined,
-                  },
+                  right: compactRails
+                    ? railColumn("Workbench", railSlots.right)
+                    : {
+                        kind: "workbench",
+                        label: m.layout_workbench_column(),
+                        visibility: "visible",
+                        width: workbenchOpen
+                          ? splitSize + WORKBENCH_RAIL_WIDTH
+                          : WORKBENCH_RAIL_WIDTH,
+                        minWidth: workbenchOpen
+                          ? WORKBENCH_CONTENT_MIN_WIDTH + WORKBENCH_RAIL_WIDTH
+                          : WORKBENCH_RAIL_WIDTH,
+                        maxWidth: workbenchOpen
+                          ? WORKBENCH_CONTENT_MAX_WIDTH + WORKBENCH_RAIL_WIDTH
+                          : WORKBENCH_RAIL_WIDTH,
+                        resize: workbenchOpen
+                          ? {
+                              ariaLabel: m.resize_workbench(),
+                              value: splitSize,
+                              min: WORKBENCH_CONTENT_MIN_WIDTH,
+                              max: WORKBENCH_CONTENT_MAX_WIDTH,
+                              onKeyDown: onWorkbenchResizeKeyDown,
+                              onPointerDown: onWorkbenchResizeDown,
+                              onPointerMove: onWorkbenchResizeMove,
+                              onPointerUp: onWorkbenchResizeUp,
+                              onPointerCancel: onWorkbenchResizeUp,
+                            }
+                          : undefined,
+                      },
                 }}
               />
 

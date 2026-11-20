@@ -15,14 +15,18 @@
  * ao nível dos três painéis de topo (Chat/Workbench/Editor).
  */
 
-import { useEffect, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { MessageSquare, PanelsTopLeft, Code2 } from "lucide-react";
 import { useReducedMotion } from "motion/react";
 import { mDyn } from "@/lib/i18n-dyn";
 import { m } from "@/lib/paraglide/messages";
 import { ModeColumnLayout } from "@/components/layout/mode-column-layout";
 import { WorkbenchHost } from "@/components/layout/workbench-host";
-import type { ShellColumnResize } from "@/components/layout/three-column-shell";
+import {
+  ThreeColumnShell,
+  type ShellColumnResize,
+} from "@/components/layout/three-column-shell";
+import { WORKBENCH_RAIL_WIDTH } from "@/lib/layout/workbench-geometry";
 import type { IdeLayoutState } from "@/lib/hooks/use-media-query";
 
 export type IdeMobilePanel = "chat" | "workbench" | "editor";
@@ -44,6 +48,8 @@ interface IdeModeLayoutProps {
   /** Header do app — vive na coluna central (navBar+workbenchContent+editor),
    * nunca em cima do `chat` (que no modo IDE é a coluna lateral direita). */
   header: ReactNode;
+  /** Cobre só o corpo da coluna central (por exemplo, um modo de extensão). */
+  centerOverlay?: ReactNode;
   /** Faixa de ícones das sub-abas do workbench (Arquivos/Diff/Plano/etc). */
   navBar: ReactNode;
   /** Conteúdo da sub-aba ativa do workbench, ou `null` quando o painel está fechado. */
@@ -78,6 +84,7 @@ export function IdeModeLayout({
   layoutState,
   isNarrow = false,
   header,
+  centerOverlay,
   navBar,
   workbenchContent,
   editor,
@@ -147,15 +154,57 @@ export function IdeModeLayout({
       onCloseWorkbench?.();
     };
     const workbenchOnLeft = workbenchSide === "left";
-    return (
-      <div
-        className="flex flex-col flex-1 min-w-0 min-h-0 overflow-hidden"
-        data-testid="ide-tablet-layout"
+    const chatRail = (
+      <nav
+        key="chat-rail"
+        data-testid="ide-tablet-chat-rail"
+        aria-label={m.mobile_shell_controls()}
+        className="flex h-full w-12 shrink-0 flex-col items-center bg-sidebar pb-[max(0.5rem,env(safe-area-inset-bottom))] border-l border-border/60"
       >
-        {header}
-        <div className="flex flex-1 min-h-0 min-w-0 overflow-hidden">
-          {workbenchOnLeft && navBar}
-          <div className="relative flex-1 min-w-0 min-h-0 overflow-hidden">
+        {/* Coluna do shell: o topo tem a altura do header, que só cobre o centro. */}
+        <div className="flex h-[var(--app-header-height)] w-full shrink-0 items-center justify-center border-b border-border/60">
+          <button
+            type="button"
+            data-testid="ide-tablet-chat-toggle"
+            aria-label={m.layout_open_chat()}
+            title={m.layout_open_chat()}
+            aria-pressed={tabletChatOpen}
+            onClick={() => {
+              if (tabletChatOpen) {
+                setTabletChatOpen(false);
+                return;
+              }
+              setTabletChatMounted(true);
+              onCloseWorkbench?.();
+              setTabletChatOpen(true);
+            }}
+            className={`flex h-7 w-7 pointer-coarse:h-10 pointer-coarse:w-10 items-center justify-center rounded-md transition-colors hover:bg-muted/50 hover:text-foreground ${
+              tabletChatOpen
+                ? "bg-muted text-foreground"
+                : "text-muted-foreground"
+            }`}
+          >
+            <MessageSquare className="size-4" aria-hidden="true" />
+          </button>
+        </div>
+      </nav>
+    );
+    const rightRails = workbenchOnLeft
+      ? [chatRail]
+      : [<Fragment key="workbench-rail">{navBar}</Fragment>, chatRail];
+    return (
+      <ThreeColumnShell
+        centerHeader={header}
+        centerOverlay={centerOverlay}
+        direction="ltr"
+        left={
+          workbenchOnLeft ? <div className="flex h-full">{navBar}</div> : null
+        }
+        center={
+          <div
+            data-testid="ide-tablet-layout"
+            className="relative flex-1 min-w-0 min-h-0 overflow-hidden"
+          >
             <div className="absolute inset-0 min-w-0 overflow-hidden">
               {editor}
             </div>
@@ -187,38 +236,24 @@ export function IdeModeLayout({
               </div>
             )}
           </div>
-          {!workbenchOnLeft && navBar}
-          <nav
-            data-testid="ide-tablet-chat-rail"
-            aria-label={m.mobile_shell_controls()}
-            className="flex w-12 shrink-0 flex-col items-center gap-1 border-l border-border/60 bg-sidebar py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]"
-          >
-            <button
-              type="button"
-              data-testid="ide-tablet-chat-toggle"
-              aria-label={m.layout_open_chat()}
-              title={m.layout_open_chat()}
-              aria-pressed={tabletChatOpen}
-              onClick={() => {
-                if (tabletChatOpen) {
-                  setTabletChatOpen(false);
-                  return;
-                }
-                setTabletChatMounted(true);
-                onCloseWorkbench?.();
-                setTabletChatOpen(true);
-              }}
-              className={`flex h-7 w-7 pointer-coarse:h-10 pointer-coarse:w-10 items-center justify-center rounded-md transition-colors hover:bg-muted/50 hover:text-foreground ${
-                tabletChatOpen
-                  ? "bg-muted text-foreground"
-                  : "text-muted-foreground"
-              }`}
-            >
-              <MessageSquare className="size-4" aria-hidden="true" />
-            </button>
-          </nav>
-        </div>
-      </div>
+        }
+        right={<div className="flex h-full">{rightRails}</div>}
+        columns={{
+          left: {
+            label: m.layout_workbench_column(),
+            visibility: workbenchOnLeft ? "visible" : "hidden",
+            width: WORKBENCH_RAIL_WIDTH,
+            minWidth: WORKBENCH_RAIL_WIDTH,
+          },
+          center: { label: "Conteúdo principal" },
+          right: {
+            label: "Chat",
+            visibility: "visible",
+            width: WORKBENCH_RAIL_WIDTH * rightRails.length,
+            minWidth: WORKBENCH_RAIL_WIDTH * rightRails.length,
+          },
+        }}
+      />
     );
   }
 
@@ -226,6 +261,7 @@ export function IdeModeLayout({
     return (
       <ModeColumnLayout
         header={header}
+        centerOverlay={centerOverlay}
         left={
           <WorkbenchHost
             rail={navBar}
@@ -323,6 +359,7 @@ export function IdeModeLayout({
             {editor}
           </div>
         )}
+        {centerOverlay}
       </div>
     </div>
   );

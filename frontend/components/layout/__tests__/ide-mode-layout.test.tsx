@@ -318,3 +318,67 @@ describe("IdeModeLayout — tablet", () => {
     expect(onCloseWorkbench).toHaveBeenCalled();
   });
 });
+
+function renderGeometry(layoutState: "wide" | "tablet", extra = {}) {
+  return render(
+    <IdeModeLayout
+      layoutState={layoutState}
+      header={<div data-testid="panel-header">Header</div>}
+      navBar={<div data-testid="panel-navbar">NavBar</div>}
+      workbenchContent={<div data-testid="panel-workbench">Workbench</div>}
+      editor={<div data-testid="panel-editor">Editor</div>}
+      chat={<div data-testid="panel-chat">Chat</div>}
+      {...extra}
+    />,
+  );
+}
+
+describe("IdeModeLayout — o Header só cobre a coluna central", () => {
+  it.each(["wide", "tablet"] as const)(
+    "%s: o Header fica no slot da coluna central, nunca dentro de uma coluna lateral",
+    (state) => {
+      renderGeometry(state);
+
+      const header = screen.getByTestId("panel-header");
+      const center = screen.getByTestId("shell-header-slot").closest("main");
+      expect(center).toContainElement(header);
+      for (const aside of screen.getAllByRole("complementary")) {
+        expect(aside).not.toContainElement(header);
+      }
+    },
+  );
+
+  it("tablet: as faixas do workbench e do chat são colunas do shell, fora da central", () => {
+    renderGeometry("tablet", { workbenchSide: "left" });
+
+    const center = screen.getByTestId("shell-header-slot").closest("main");
+    expect(screen.getByTestId("panel-navbar").closest("aside")).not.toBeNull();
+    expect(
+      screen.getByTestId("ide-tablet-chat-rail").closest("aside"),
+    ).not.toBeNull();
+    expect(center).not.toContainElement(screen.getByTestId("panel-navbar"));
+    expect(center).not.toContainElement(
+      screen.getByTestId("ide-tablet-chat-rail"),
+    );
+  });
+
+  it("tablet com o workbench à direita: as duas faixas ficam na coluna da direita", () => {
+    renderGeometry("tablet", { workbenchSide: "right" });
+
+    const rail = screen.getByTestId("ide-tablet-chat-rail");
+    const navbar = screen.getByTestId("panel-navbar");
+    expect(rail.closest("aside")).toBe(navbar.closest("aside"));
+  });
+
+  it("o overlay de um modo contribuído cobre só o corpo central, não o Header", () => {
+    renderGeometry("tablet", {
+      centerOverlay: <div data-testid="overlay">Modo da extensão</div>,
+    });
+
+    const center = screen.getByTestId("shell-header-slot").closest("main");
+    expect(center).toContainElement(screen.getByTestId("overlay"));
+    expect(screen.getByTestId("shell-header-slot")).not.toContainElement(
+      screen.getByTestId("overlay"),
+    );
+  });
+});
