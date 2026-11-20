@@ -1790,6 +1790,59 @@
         "title": "ConnectBody",
         "type": "object"
       },
+      "Contribution": {
+        "description": "Contribuição de interface declarada por uma extensão.\n\nA declaração só descreve o que a extensão quer mostrar; o host decide se\naceita, ordena e ativa. Nenhuma contribuição carrega código para dentro do\nprocesso da aplicação.",
+        "properties": {
+          "file_extensions": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "File Extensions",
+            "type": "array"
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "mode",
+              "workbench_view",
+              "settings_page",
+              "header_action",
+              "file_icon"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "label"
+        ],
+        "title": "Contribution",
+        "type": "object"
+      },
       "ConversationBranch": {
         "properties": {
           "active": {
@@ -3387,6 +3440,152 @@
         "title": "ExplainRequest",
         "type": "object"
       },
+      "ExtensionRelease": {
+        "description": "Uma versão instalada: o que é preciso para ativá-la e para voltar a ela.",
+        "properties": {
+          "args": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 64,
+            "title": "Args",
+            "type": "array"
+          },
+          "command": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Command",
+            "type": "string"
+          },
+          "contributions": {
+            "items": {
+              "$ref": "#/components/schemas/Contribution"
+            },
+            "maxItems": 64,
+            "title": "Contributions",
+            "type": "array"
+          },
+          "declared_tools": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 128,
+            "title": "Declared Tools",
+            "type": "array"
+          },
+          "digest": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Digest",
+            "type": "string"
+          },
+          "host_api": {
+            "default": 1,
+            "title": "Host Api",
+            "type": "integer"
+          },
+          "install_path": {
+            "title": "Install Path",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "digest",
+          "install_path",
+          "command"
+        ],
+        "title": "ExtensionRelease",
+        "type": "object"
+      },
+      "ExtensionSummary": {
+        "properties": {
+          "allow_hosts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allow Hosts",
+            "type": "array"
+          },
+          "contributions": {
+            "title": "Contributions",
+            "type": "integer"
+          },
+          "digest": {
+            "title": "Digest",
+            "type": "string"
+          },
+          "granted_tools": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Granted Tools",
+            "type": "array"
+          },
+          "has_previous": {
+            "title": "Has Previous",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "publisher": {
+            "title": "Publisher",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "state_reason": {
+            "title": "State Reason",
+            "type": "string"
+          },
+          "tools": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tools",
+            "type": "array"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          },
+          "workspaces": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Workspaces",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "publisher",
+          "version",
+          "digest",
+          "state",
+          "state_reason",
+          "has_previous",
+          "tools",
+          "granted_tools",
+          "allow_hosts",
+          "workspaces",
+          "contributions"
+        ],
+        "title": "ExtensionSummary",
+        "type": "object"
+      },
       "FalkorDBConfigRequest": {
         "properties": {
           "graph_name": {
@@ -4492,6 +4691,33 @@
           "lines"
         ],
         "title": "GitignoreUpdateRequest",
+        "type": "object"
+      },
+      "GrantsUpdate": {
+        "properties": {
+          "allow_hosts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allow Hosts",
+            "type": "array"
+          },
+          "tools": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tools",
+            "type": "array"
+          },
+          "workspaces": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Workspaces",
+            "type": "array"
+          }
+        },
+        "title": "GrantsUpdate",
         "type": "object"
       },
       "GraphCommunity": {
@@ -8598,6 +8824,18 @@
           "sha"
         ],
         "title": "RevertCommitRequest",
+        "type": "object"
+      },
+      "RevokeBody": {
+        "properties": {
+          "reason": {
+            "default": "",
+            "maxLength": 300,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "title": "RevokeBody",
         "type": "object"
       },
       "RevokeInviteResponse": {
@@ -12888,6 +13126,34 @@
         },
         "title": "DiffHunk",
         "type": "object"
+      },
+      "backend__extensions__host__InstallRequest": {
+        "description": "O que o host precisa para instalar uma versão já verificada pelo Vext.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "publisher": {
+            "title": "Publisher",
+            "type": "string"
+          },
+          "release": {
+            "$ref": "#/components/schemas/ExtensionRelease"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "publisher",
+          "release"
+        ],
+        "title": "InstallRequest",
+        "type": "object"
       }
     }
   },
@@ -17177,6 +17443,516 @@
         "summary": "Set Platform Enabled",
         "tags": [
           "connect"
+        ]
+      }
+    },
+    "/extensions": {
+      "get": {
+        "operationId": "list_extensions_extensions_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ExtensionSummary"
+                  },
+                  "title": "Response List Extensions Extensions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Extensions",
+        "tags": [
+          "extensions"
+        ]
+      },
+      "post": {
+        "operationId": "install_extension_extensions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/backend__extensions__host__InstallRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Install Extension",
+        "tags": [
+          "extensions"
+        ]
+      }
+    },
+    "/extensions/contributions": {
+      "get": {
+        "description": "Contribuições de interface das extensões ativas.",
+        "operationId": "list_contributions_extensions_contributions_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response List Contributions Extensions Contributions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Contributions",
+        "tags": [
+          "extensions"
+        ]
+      }
+    },
+    "/extensions/{extension_id}": {
+      "delete": {
+        "operationId": "remove_extension_extensions__extension_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "extension_id",
+            "required": true,
+            "schema": {
+              "title": "Extension Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Remove Extension Extensions  Extension Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Extension",
+        "tags": [
+          "extensions"
+        ]
+      },
+      "get": {
+        "operationId": "get_extension_extensions__extension_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "extension_id",
+            "required": true,
+            "schema": {
+              "title": "Extension Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Extension",
+        "tags": [
+          "extensions"
+        ]
+      }
+    },
+    "/extensions/{extension_id}/activate": {
+      "post": {
+        "operationId": "activate_extension_extensions__extension_id__activate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "extension_id",
+            "required": true,
+            "schema": {
+              "title": "Extension Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Activate Extension",
+        "tags": [
+          "extensions"
+        ]
+      }
+    },
+    "/extensions/{extension_id}/audit": {
+      "get": {
+        "operationId": "extension_audit_extensions__extension_id__audit_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "extension_id",
+            "required": true,
+            "schema": {
+              "title": "Extension Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response Extension Audit Extensions  Extension Id  Audit Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Extension Audit",
+        "tags": [
+          "extensions"
+        ]
+      }
+    },
+    "/extensions/{extension_id}/deactivate": {
+      "post": {
+        "operationId": "deactivate_extension_extensions__extension_id__deactivate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "extension_id",
+            "required": true,
+            "schema": {
+              "title": "Extension Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Deactivate Extension",
+        "tags": [
+          "extensions"
+        ]
+      }
+    },
+    "/extensions/{extension_id}/grants": {
+      "put": {
+        "operationId": "set_extension_grants_extensions__extension_id__grants_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "extension_id",
+            "required": true,
+            "schema": {
+              "title": "Extension Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GrantsUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Extension Grants",
+        "tags": [
+          "extensions"
+        ]
+      }
+    },
+    "/extensions/{extension_id}/health": {
+      "get": {
+        "operationId": "extension_health_extensions__extension_id__health_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "extension_id",
+            "required": true,
+            "schema": {
+              "title": "Extension Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Extension Health Extensions  Extension Id  Health Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Extension Health",
+        "tags": [
+          "extensions"
+        ]
+      }
+    },
+    "/extensions/{extension_id}/revoke": {
+      "post": {
+        "operationId": "revoke_extension_extensions__extension_id__revoke_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "extension_id",
+            "required": true,
+            "schema": {
+              "title": "Extension Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevokeBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke Extension",
+        "tags": [
+          "extensions"
+        ]
+      }
+    },
+    "/extensions/{extension_id}/rollback": {
+      "post": {
+        "operationId": "rollback_extension_extensions__extension_id__rollback_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "extension_id",
+            "required": true,
+            "schema": {
+              "title": "Extension Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rollback Extension",
+        "tags": [
+          "extensions"
         ]
       }
     },

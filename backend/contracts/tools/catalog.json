@@ -1292,6 +1292,39 @@
   },
   {
     "category": "mcp",
+    "description": "Invoca uma tool oferecida por uma extensão Vext instalada e ativa.",
+    "destructive": false,
+    "name": "call_extension_tool",
+    "render_hint": "json",
+    "schema": {
+      "properties": {
+        "arguments": {
+          "description": "Argumentos em formato JSON string (ex: '{\"query\": \"x\"}')",
+          "title": "Arguments",
+          "type": "string"
+        },
+        "extension_id": {
+          "description": "Identificador da extensão",
+          "title": "Extension Id",
+          "type": "string"
+        },
+        "tool_name": {
+          "description": "Nome da tool oferecida pela extensão",
+          "title": "Tool Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "extension_id",
+        "tool_name",
+        "arguments"
+      ],
+      "title": "call_extension_toolArgs",
+      "type": "object"
+    }
+  },
+  {
+    "category": "mcp",
     "description": "Invoca uma ferramenta de outro servidor MCP via Model Context Protocol.",
     "destructive": false,
     "name": "call_mcp_tool",

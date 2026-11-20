@@ -28,6 +28,9 @@ from backend.tools import (
     context_graph as _context_graph_module,
 )
 from backend.tools import (
+    extensions as _extensions_module,
+)
+from backend.tools import (
     fs as _fs_module,
 )
 from backend.tools import (
@@ -178,6 +181,7 @@ git_stage = _bridge("git_stage")
 git_unstage = _bridge("git_unstage")
 git_discard = _bridge("git_discard")
 call_mcp_tool = _bridge("call_mcp_tool")
+call_extension_tool = _bridge("call_extension_tool")
 kanban_list = _bridge("kanban_list")
 kanban_create = _bridge("kanban_create")
 kanban_update_status = _bridge("kanban_update_status")
@@ -429,6 +433,7 @@ MEMORY_TOOLS: list[ToolSpec] = [
 #: MCP externo já conectado
 LIBRARY_TOOLS: list[ToolSpec] = [
     call_mcp_tool,
+    call_extension_tool,
     list_mcp_catalog,
     list_skills_catalog,
     list_memory_bucket_catalog,
@@ -620,6 +625,7 @@ for _t in [
     save_learned_fact,
     apply_memory_consolidation,
     call_mcp_tool,
+    call_extension_tool,
     list_mcp_catalog,
     list_skills_catalog,
     list_memory_bucket_catalog,
