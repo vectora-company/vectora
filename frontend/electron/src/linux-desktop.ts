@@ -3,6 +3,16 @@ import * as path from "node:path";
 
 export const DEVELOPMENT_DESKTOP_NAME = "company.vectora.desktop.dev.desktop";
 
+export function appImageRelaunchOptions(
+  appImage: string | undefined,
+): { execPath: string } | undefined {
+  if (!appImage) return undefined;
+  if (!path.isAbsolute(appImage)) {
+    throw new Error("AppImage relaunch path must be absolute");
+  }
+  return { execPath: appImage };
+}
+
 function desktopString(value: string): string {
   if (/[\r\n\0]/.test(value)) throw new Error("Invalid desktop entry path");
   return value.replaceAll("\\", "\\\\");

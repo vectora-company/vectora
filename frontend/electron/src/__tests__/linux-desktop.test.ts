@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   DEVELOPMENT_DESKTOP_NAME,
+  appImageRelaunchOptions,
   registerAppImageCommand,
   registerDevelopmentDesktop,
 } from "../linux-desktop";
@@ -62,6 +63,16 @@ describe("Linux development desktop identity", () => {
 });
 
 describe("AppImage command registration", () => {
+  it("relaunches through the outer AppImage executable", () => {
+    expect(appImageRelaunchOptions("/opt/Vectora.AppImage")).toEqual({
+      execPath: "/opt/Vectora.AppImage",
+    });
+    expect(appImageRelaunchOptions(undefined)).toBeUndefined();
+    expect(() => appImageRelaunchOptions("Vectora.AppImage")).toThrow(
+      "AppImage relaunch path must be absolute",
+    );
+  });
+
   it("adds an idempotent command symlink under the user's local bin", () => {
     const home = mkdtempSync(join(tmpdir(), "vectora-appimage-"));
     directories.push(home);

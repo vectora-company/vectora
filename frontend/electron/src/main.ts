@@ -19,6 +19,7 @@
 import { ChildProcess } from "child_process";
 import {
   DEVELOPMENT_DESKTOP_NAME,
+  appImageRelaunchOptions,
   registerAppImageCommand,
   registerDevelopmentDesktop,
 } from "./linux-desktop.js";
@@ -216,7 +217,12 @@ function requestElectronRestart(): void {
     app.exit(ELECTRON_RESTART_EXIT_CODE);
     return;
   }
-  app.relaunch();
+  const relaunchOptions =
+    process.platform === "linux" && app.isPackaged
+      ? appImageRelaunchOptions(process.env.APPIMAGE)
+      : undefined;
+  if (relaunchOptions) app.relaunch(relaunchOptions);
+  else app.relaunch();
   app.exit(ELECTRON_RESTART_EXIT_CODE);
 }
 
