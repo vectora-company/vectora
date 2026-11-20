@@ -864,6 +864,11 @@ def _run_start(args: argparse.Namespace, *, force_web: bool = False) -> None:
         def _shutdown_from_electron() -> None:
             """Executa a operação shutdown from electron."""
             logger.info("Vectora: Electron encerrou — iniciando shutdown coordenado")
+            # Sem a marca, o filtro de logs trata o CancelledError das respostas
+            # streaming cortadas como erro real e imprime o traceback.
+            from backend.services.log_setup import mark_shutdown_requested
+
+            mark_shutdown_requested()
             server.should_exit = True
             shutdown_event = _SHUTDOWN_EVENTS.get(id(server))
             if shutdown_event is not None:

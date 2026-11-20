@@ -21,7 +21,7 @@ router = APIRouter(prefix="/github", tags=["github"])
 
 _PR_FIELDS = (
     "number,title,state,isDraft,author,headRefName,baseRefName,updatedAt,url,"
-    "reviewDecision,statusCheckRollup"
+    "reviewDecision"
 )
 _ISSUE_FIELDS = "number,title,state,author,labels,updatedAt,url,comments"
 _LIST_LIMIT = 30
@@ -275,7 +275,11 @@ async def list_pulls(
     state: Annotated[Literal["open", "closed", "merged", "all"], Query()] = "open",
     workspace_id: str | None = None,
 ) -> PullListResponse:
-    """Pull requests do repositório do workspace, com o resumo dos checks."""
+    """Pull requests do repositório do workspace.
+
+    Os checks não vêm na lista: `statusCheckRollup` passava de 200 KB por
+    consulta. O resumo continua no detalhe de cada PR.
+    """
     user_id = _require_user(request)
     result = await _gh_read(
         [
@@ -310,7 +314,6 @@ async def list_pulls(
             updated_at=str(item.get("updatedAt", "")),
             url=str(item.get("url", "")),
             review_decision=str(item.get("reviewDecision") or ""),
-            checks=_checks_summary(item.get("statusCheckRollup")),
         )
         for item in raw
         if isinstance(item, dict) and "number" in item

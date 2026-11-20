@@ -19124,7 +19124,7 @@
     },
     "/github/pulls": {
       "get": {
-        "description": "Pull requests do repositório do workspace, com o resumo dos checks.",
+        "description": "Pull requests do repositório do workspace.\n\nOs checks não vêm na lista: `statusCheckRollup` passava de 200 KB por\nconsulta. O resumo continua no detalhe de cada PR.",
         "operationId": "list_pulls_github_pulls_get",
         "parameters": [
           {

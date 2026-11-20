@@ -44,7 +44,9 @@ def test_checks_summary_counts_each_outcome() -> None:
     assert github._checks_summary(None).passed == 0
 
 
-async def test_pulls_are_listed_with_checks_and_review(monkeypatch) -> None:
+async def test_pulls_are_listed_with_review_and_without_checks_payload(
+    monkeypatch,
+) -> None:
     payload = [
         {
             "number": 7,
@@ -70,7 +72,9 @@ async def test_pulls_are_listed_with_checks_and_review(monkeypatch) -> None:
     pull = response.pulls[0]
     assert (pull.number, pull.author, pull.is_draft) == (7, "ana", True)
     assert pull.review_decision == "APPROVED"
-    assert pull.checks.passed == 1
+    assert pull.checks.passed == 0
+    # A lista não pede o rollup de checks (payload pesado); só o detalhe pede.
+    assert "statusCheckRollup" not in calls[0][0][calls[0][0].index("--json") + 1]
     assert calls[0][0][:4] == ["pr", "list", "--state", "all"]
     assert calls[0][1] == "alice"
 

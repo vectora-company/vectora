@@ -20,6 +20,8 @@ import webbrowser
 from pathlib import Path
 from typing import Any, Protocol
 
+from backend.services.log_setup import mark_shutdown_requested
+
 
 class _ServerLike(Protocol):
     should_exit: bool
@@ -151,6 +153,7 @@ def run_server_with_tray(
         webbrowser.open(url)
 
     def _quit(icon: Any, _item: object = None) -> None:
+        mark_shutdown_requested()
         server.should_exit = True
         icon.stop()
 
@@ -177,5 +180,6 @@ def run_server_with_tray(
     )
     # Bloqueia na main thread até "Sair"; ao sair, encerra o servidor.
     icon.run()
+    mark_shutdown_requested()
     server.should_exit = True
     server_thread.join(timeout=10)

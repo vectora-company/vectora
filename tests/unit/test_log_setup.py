@@ -85,3 +85,15 @@ def test_shutdown_filter_preserva_excecao_real(monkeypatch) -> None:
 
     monkeypatch.setattr(log_setup, "_shutdown_requested", True)
     assert filtro.filter(record) is True
+
+
+def test_todo_caminho_de_shutdown_marca_o_encerramento() -> None:
+    """Sem a marca o filtro imprime o traceback de CancelledError no shutdown."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2] / "backend"
+    for rel in ("main.py", "services/tray.py"):
+        text = (root / rel).read_text(encoding="utf-8")
+        assert text.count("mark_shutdown_requested()") >= text.count(
+            "server.should_exit = True"
+        ), rel
