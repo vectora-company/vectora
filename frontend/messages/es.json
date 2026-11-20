@@ -1921,7 +1921,6 @@
   "workbench_diff_check_hooks": "Verificar hooks",
   "workbench_diff_clean": "Sin cambios pendientes.",
   "workbench_diff_clean_hint": "Ejecuta \"git log\" para ver commits recientes.",
-  "workbench_diff_commit_amend_label": "Enmendar el último commit",
   "workbench_diff_commit_body_placeholder": "Descripción (opcional)",
   "workbench_diff_commit_button": "Commit",
   "workbench_diff_commit_placeholder": "Mensaje de commit (Ctrl+Enter)",

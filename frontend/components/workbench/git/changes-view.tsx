@@ -36,6 +36,7 @@ import {
 } from "./api";
 import { HunkView, statusTone } from "./shared";
 import { CoAuthorPicker } from "./coauthor-picker";
+import { CommitBodyField } from "./commit-body-field";
 import { useContextMenu, type ContextMenuItem } from "./git-context-menu";
 import { m } from "@/lib/paraglide/messages";
 import { useToastStore } from "@/lib/stores/toast-store";
@@ -189,7 +190,6 @@ export function ChangesView({
   const menu = useContextMenu();
   const [commitMsg, setCommitMsg] = useState("");
   const [commitBody, setCommitBody] = useState("");
-  const [amend, setAmend] = useState(false);
   const [committing, setCommitting] = useState(false);
   const [generating, setGenerating] = useState(false);
   const suggestionRequest = useRef(0);
@@ -274,7 +274,7 @@ export function ChangesView({
       return;
     setCommitting(true);
     try {
-      const result = await apiGitCommit(workspaceId, commitMsg.trim(), amend, {
+      const result = await apiGitCommit(workspaceId, commitMsg.trim(), false, {
         body: commitBody.trim(),
         ...(gitHooksEnabled && !gitBypassEnabled ? { runHooks: true } : {}),
         ...(gitSignoffEnabled ? { signoff: true } : {}),
@@ -283,7 +283,6 @@ export function ChangesView({
       if (result.status === "ok") {
         setCommitMsg("");
         setCommitBody("");
-        setAmend(false);
         handleRefresh();
       } else {
         showError(result.message || m.workbench_git_commit_failed());
@@ -498,54 +497,48 @@ export function ChangesView({
           }}
           data-testid="git-commit-message"
         />
-        <div className="relative">
-          <textarea
-            value={commitBody}
-            onChange={(e) => setCommitBody(e.target.value)}
-            placeholder={m.workbench_diff_commit_body_placeholder()}
-            rows={2}
-            className="w-full resize-none rounded-md border border-border/60 bg-background px-3 py-2 pb-8 text-xs font-mono placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-ring"
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-                void handleCommit();
-              }
-            }}
-            data-testid="git-commit-body"
-          />
-          <div className="absolute bottom-1 left-2 flex items-center gap-1 text-muted-foreground">
-            <CoAuthorPicker
-              workspaceId={workspaceId}
-              body={commitBody}
-              onBodyChange={setCommitBody}
-            />
-            <button
-              type="button"
-              title={m.workbench_git_generate()}
-              aria-label={m.workbench_git_generate()}
-              onClick={() => void generateSuggestion()}
-              disabled={generating}
-              className="rounded p-1 hover:bg-muted/50 disabled:opacity-50"
-            >
-              {generating ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <span
-                  aria-hidden="true"
-                  className="inline-block h-3.5 w-3.5 bg-muted-foreground [mask-image:url('/icon.svg')] [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain]"
-                />
-              )}
-            </button>
-            <button
-              type="button"
-              title={m.workbench_git_settings()}
-              aria-label={m.workbench_git_settings()}
-              onClick={() => onOpenSettings?.()}
-              className="rounded p-1 hover:bg-muted/50"
-            >
-              <Settings2 className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        </div>
+        <CommitBodyField
+          value={commitBody}
+          onChange={setCommitBody}
+          placeholder={m.workbench_diff_commit_body_placeholder()}
+          onSubmit={() => void handleCommit()}
+          testId="git-commit-body"
+          actions={
+            <>
+              <CoAuthorPicker
+                workspaceId={workspaceId}
+                body={commitBody}
+                onBodyChange={setCommitBody}
+              />
+              <button
+                type="button"
+                title={m.workbench_git_generate()}
+                aria-label={m.workbench_git_generate()}
+                onClick={() => void generateSuggestion()}
+                disabled={generating}
+                className="rounded p-1 hover:bg-muted/50 disabled:opacity-50"
+              >
+                {generating ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <span
+                    aria-hidden="true"
+                    className="inline-block h-3.5 w-3.5 bg-muted-foreground [mask-image:url('/icon.svg')] [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain]"
+                  />
+                )}
+              </button>
+              <button
+                type="button"
+                title={m.workbench_git_settings()}
+                aria-label={m.workbench_git_settings()}
+                onClick={() => onOpenSettings?.()}
+                className="rounded p-1 hover:bg-muted/50"
+              >
+                <Settings2 className="h-3.5 w-3.5" />
+              </button>
+            </>
+          }
+        />
         <button
           onClick={() => void handleCommit()}
           disabled={!commitMsg.trim() || staged.length === 0 || committing}
@@ -559,15 +552,6 @@ export function ChangesView({
           )}
           {m.workbench_diff_commit_button()}
         </button>
-        <label className="flex items-center gap-2 text-xs text-muted-foreground">
-          <input
-            type="checkbox"
-            checked={amend}
-            onChange={(event) => setAmend(event.target.checked)}
-            data-testid="git-commit-amend"
-          />
-          {m.workbench_diff_commit_amend_label()}
-        </label>
       </div>
       {dialog}
     </div>
