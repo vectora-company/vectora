@@ -688,12 +688,13 @@ def test_scons_builds_snap_after_other_linux_formats() -> None:
     sconstruct = (WORKFLOW.parent.parent.parent / "SConstruct").read_text(
         encoding="utf-8"
     )
+    snap_command = '_run([*cmd, "snap", output_arg], env=builder_env or None)'
 
     assert '"tar.gz",\n                output_arg,' in sconstruct
-    assert '_run([*cmd, "snap", output_arg], env=build_env or None)' in sconstruct
+    assert snap_command in sconstruct
     assert sconstruct.index(
         '"tar.gz",\n                output_arg,'
-    ) < sconstruct.index('_run([*cmd, "snap", output_arg], env=build_env or None)')
+    ) < sconstruct.index(snap_command)
 
 
 def test_nats_release_download_retries_transient_network_failures() -> None:
