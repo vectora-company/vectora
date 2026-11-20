@@ -122,6 +122,30 @@ class TestAdminStoragePatch:
         assert resp.status_code in (200, 401, 403, 422)
 
     @pytest.mark.asyncio
+    async def test_patch_storage_mode_nao_grava_no_event_loop(
+        self, admin_client, monkeypatch
+    ):
+        """A gravação no SQLite fica fora do event loop: o `busy_timeout` dela
+        travava o loop inteiro quando outra tarefa segurava o lock."""
+        import threading
+
+        from backend.workspace.runtime_settings import RuntimeSettings
+
+        loop_thread = threading.get_ident()
+        writers: list[int] = []
+
+        def fake_set(self, key, value):
+            writers.append(threading.get_ident())
+
+        monkeypatch.setattr(RuntimeSettings, "set", fake_set)
+
+        resp = await admin_client.patch("/admin/storage", json={"storage_mode": "lite"})
+
+        assert resp.status_code == 200
+        assert writers
+        assert loop_thread not in writers
+
+    @pytest.mark.asyncio
     async def test_patch_invalid_mode(self, admin_client):
         """Modo inválido deve retornar erro ou ser aceito com validação."""
         resp = await admin_client.patch(
