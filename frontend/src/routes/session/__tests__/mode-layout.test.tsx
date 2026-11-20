@@ -209,7 +209,11 @@ vi.mock("@/components/layout/ide-mode-layout", () => ({
     workbenchOpen?: boolean;
     onOpenWorkbench?: () => void;
   }) => (
-    <div data-testid="ide-layout" data-layout-state={layoutState}>
+    <div
+      data-testid="ide-layout"
+      data-layout-state={layoutState}
+      data-workbench-open={workbenchOpen ? "true" : "false"}
+    >
       {layoutState === "mobile" && (
         <button
           type="button"
@@ -270,6 +274,7 @@ vi.mock("../../../router", () => ({
 }));
 
 import { useSettingsStore } from "@/lib/stores/settings-store";
+import { useWindowsStore } from "@/lib/stores/windows-store";
 import { useWorkbenchStore } from "@/lib/stores/workbench-store";
 import { Route } from "../$threadId";
 
@@ -543,12 +548,6 @@ describe("SessionPage — chat compacto no IDE", () => {
 
     fireEvent.click(toggleWorkbench);
     expect(await screen.findByTestId("workbench-content")).toBeInTheDocument();
-    expect(
-      screen.getByTestId("chat").parentElement?.parentElement?.parentElement,
-    ).toHaveStyle({ opacity: "0", pointerEvents: "none" });
-    expect(
-      screen.getByTestId("chat").parentElement?.parentElement?.parentElement,
-    ).toHaveAttribute("inert");
     expect(screen.getByTestId("stream-response")).toHaveTextContent(
       "Resposta parcial",
     );
@@ -559,9 +558,7 @@ describe("SessionPage — chat compacto no IDE", () => {
 
     fireEvent.click(toggleWorkbench);
     await waitFor(() =>
-      expect(
-        screen.getByTestId("chat").parentElement?.parentElement?.parentElement,
-      ).toHaveStyle({ opacity: "1", pointerEvents: "auto" }),
+      expect(screen.queryByTestId("compact-workbench-overlay")).toBeNull(),
     );
     expect(screen.getByTestId("stream-response")).toHaveTextContent(
       "Resposta parcial atualizada",
@@ -655,9 +652,7 @@ describe("SessionPage — chat compacto no IDE", () => {
     );
     expect(screen.queryByTestId("stream-stop")).not.toBeInTheDocument();
     expect(screen.getByTestId("stream-response")).toBeEmptyDOMElement();
-    expect(
-      screen.getByTestId("chat").parentElement?.parentElement?.parentElement,
-    ).toHaveStyle({ opacity: "0", pointerEvents: "none" });
+    expect(screen.getByTestId("chat")).toBeInTheDocument();
   });
 
   it("mantém o chat central ao abrir a Workbench no layout largo", async () => {
@@ -672,9 +667,7 @@ describe("SessionPage — chat compacto no IDE", () => {
 
     expect(await screen.findByTestId("workbench-content")).toBeInTheDocument();
     expect(await screen.findByTestId("chat")).toBeInTheDocument();
-    expect(
-      screen.getByTestId("chat").parentElement?.parentElement?.parentElement,
-    ).toHaveStyle({ opacity: "1", pointerEvents: "auto" });
+    expect(screen.queryByTestId("compact-workbench-overlay")).toBeNull();
   });
 });
 
@@ -780,9 +773,11 @@ describe("SessionPage — tablet com faixas nas bordas", () => {
     expect(
       await screen.findByTestId("compact-workbench-overlay"),
     ).toBeInTheDocument();
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    // Clicar na área escurecida fecha a gaveta.
-    fireEvent.click(screen.getByTestId("compact-workbench-backdrop"));
+    await waitFor(() => expect(screen.queryByTestId("sidebar")).toBeNull());
+    // Esc fecha a gaveta, como na de sessões.
+    fireEvent.keyDown(screen.getByTestId("compact-workbench-overlay"), {
+      key: "Escape",
+    });
     await waitFor(() =>
       expect(screen.queryByTestId("compact-workbench-overlay")).toBeNull(),
     );
@@ -797,11 +792,14 @@ describe("SessionPage — tablet com faixas nas bordas", () => {
     });
 
     render(<SessionPage />);
+    act(() => useWorkbenchStore.getState().setPanelOpen("t1", true));
     expect(
       await screen.findByTestId("compact-workbench-overlay"),
     ).toBeInTheDocument();
 
-    fireEvent.keyDown(window, { key: "Escape" });
+    fireEvent.keyDown(screen.getByTestId("compact-workbench-overlay"), {
+      key: "Escape",
+    });
 
     await waitFor(() =>
       expect(screen.queryByTestId("compact-workbench-overlay")).toBeNull(),
@@ -809,10 +807,53 @@ describe("SessionPage — tablet com faixas nas bordas", () => {
   });
 });
 
-describe("SessionPage — gaveta do workbench no layout compacto", () => {
-  it("o painel do workbench preenche a gaveta inteira, não só a largura do conteúdo", async () => {
-    setMode("assistant");
-    useWorkbenchStore.setState({ panelOpen: { t1: true } });
+async function openWorkbenchDrawer() {
+  setMode("assistant");
+  useWorkbenchStore.setState({ panelOpen: { t1: false } });
+  Object.defineProperty(window, "innerWidth", {
+    configurable: true,
+    value: 818,
+  });
+  render(<SessionPage />);
+  act(() => useWorkbenchStore.getState().setPanelOpen("t1", true));
+  return screen.findByTestId("compact-workbench-overlay");
+}
+
+describe("SessionPage — gavetas compactas padronizadas", () => {
+  it("a gaveta do workbench é um diálogo com nome, igual à de sessões", async () => {
+    const drawer = await openWorkbenchDrawer();
+
+    expect(drawer).toHaveAttribute("role", "dialog");
+    expect(drawer).toHaveAccessibleName();
+    expect(drawer).toHaveAttribute("data-slot", "sheet-content");
+  });
+
+  it("o fundo escuro é o mesmo para workbench e sessões, e cobre a janela toda", async () => {
+    await openWorkbenchDrawer();
+
+    const overlay = document.querySelector("[data-slot='sheet-overlay']");
+    expect(overlay).toHaveClass("fixed", "inset-0", "bg-black/50");
+  });
+
+  it("a gaveta mostra a coluna inteira do workbench (faixa e painel) e preenche a largura", async () => {
+    const drawer = await openWorkbenchDrawer();
+
+    expect(
+      drawer.querySelector("[data-testid='workbench-navbar']"),
+    ).not.toBeNull();
+    expect(drawer).toContainElement(screen.getByTestId("workbench-content"));
+    const slot = drawer.querySelector(":scope > div:not(.sr-only)");
+    expect(slot).toHaveClass("flex-1", "[&>*]:w-full", "[&>*]:flex-1");
+  });
+
+  it("o chat continua montado e visível por baixo da gaveta", async () => {
+    await openWorkbenchDrawer();
+
+    expect(screen.getByTestId("chat")).toBeInTheDocument();
+  });
+
+  it("no modo IDE o header não oferece sessões", async () => {
+    setMode("ide");
     Object.defineProperty(window, "innerWidth", {
       configurable: true,
       value: 818,
@@ -820,13 +861,200 @@ describe("SessionPage — gaveta do workbench no layout compacto", () => {
 
     render(<SessionPage />);
 
-    const overlay = await screen.findByTestId("compact-workbench-overlay");
-    const panel = overlay.firstElementChild;
-    expect(panel).not.toBeNull();
-    // Sem `w-full` o painel encolhe até o conteúdo e a gaveta fica com uma
-    // faixa vazia ao lado (o bug visto no modo compacto).
-    expect(panel).toHaveClass("w-full");
-    expect(panel).toHaveClass("h-full");
+    await screen.findByTestId("header");
+    expect(screen.queryByTestId("compact-open-sessions")).toBeNull();
+  });
+});
+
+function setWidth(value: number) {
+  Object.defineProperty(window, "innerWidth", {
+    configurable: true,
+    value,
+  });
+}
+
+describe("SessionPage — as laterais fecham ao ir para o compacto", () => {
+  it("laterais abertas no layout largo começam fechadas quando a janela fica compacta", async () => {
+    setMode("assistant");
+    useWorkbenchStore.setState({ panelOpen: { t1: true } });
+    setWidth(1400);
+    render(<SessionPage />);
+    expect(useWorkbenchStore.getState().panelOpen.t1).toBe(true);
+
+    act(() => {
+      setWidth(818);
+      window.dispatchEvent(new Event("resize"));
+    });
+
+    await waitFor(() =>
+      expect(useWorkbenchStore.getState().panelOpen.t1).toBe(false),
+    );
+    expect(screen.queryByTestId("compact-workbench-overlay")).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("abrir já compacto com o workbench aberto da sessão anterior não abre gaveta nenhuma", async () => {
+    setMode("assistant");
+    useWorkbenchStore.setState({ panelOpen: { t1: true } });
+    setWidth(818);
+
+    render(<SessionPage />);
+
+    await waitFor(() =>
+      expect(useWorkbenchStore.getState().panelOpen.t1).toBe(false),
+    );
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("voltar ao layout largo não reabre nem fecha nada à força", async () => {
+    setMode("assistant");
+    useWorkbenchStore.setState({ panelOpen: { t1: false } });
+    setWidth(818);
+    render(<SessionPage />);
+    act(() => useWorkbenchStore.getState().setPanelOpen("t1", true));
+
+    act(() => {
+      setWidth(1400);
+      window.dispatchEvent(new Event("resize"));
+    });
+
+    await waitFor(() =>
+      expect(screen.queryByTestId("compact-workbench-overlay")).toBeNull(),
+    );
+    expect(useWorkbenchStore.getState().panelOpen.t1).toBe(true);
+  });
+});
+
+describe("SessionPage — no IDE compacto só existem as gavetas do IDE", () => {
+  it("abrir o workbench abre uma gaveta só, a do IDE, e nunca a do Assistente", async () => {
+    setMode("ide");
+    useWorkbenchStore.setState({ panelOpen: { t1: false } });
+    setWidth(818);
+    render(<SessionPage />);
+
+    act(() => useWorkbenchStore.getState().setPanelOpen("t1", true));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("ide-layout")).toHaveAttribute(
+        "data-workbench-open",
+        "true",
+      ),
+    );
+    // O IDE tem a própria gaveta (IdeModeLayout); a do Assistente não abre.
+    expect(screen.queryByTestId("compact-workbench-overlay")).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("a gaveta de sessões nunca abre no IDE", async () => {
+    setMode("ide");
+    setWidth(818);
+    render(<SessionPage />);
+
+    expect(screen.queryByTestId("compact-open-sessions")).toBeNull();
+    expect(screen.queryByTestId("sidebar")).toBeNull();
+  });
+
+  it("no Kanban o workbench não abre gaveta", async () => {
+    setMode("kanban");
+    useWorkbenchStore.setState({ panelOpen: { t1: false } });
+    setWidth(818);
+    render(<SessionPage />);
+
+    act(() => useWorkbenchStore.getState().setPanelOpen("t1", true));
+
+    expect(screen.queryByTestId("compact-workbench-overlay")).toBeNull();
+  });
+});
+
+describe("SessionPage — abrir um arquivo fecha a gaveta do workbench", () => {
+  it("no Assistente compacto, abrir um arquivo na janela leva o foco para ele", async () => {
+    const drawer = await openWorkbenchDrawer();
+    expect(drawer).toBeInTheDocument();
+
+    act(() => useWindowsStore.getState().open("ws-1", "src/main.py"));
+
+    await waitFor(() =>
+      expect(screen.queryByTestId("compact-workbench-overlay")).toBeNull(),
+    );
+  });
+
+  it("no IDE compacto, abrir um arquivo no editor fecha a gaveta", async () => {
+    setMode("ide");
+    useWorkbenchStore.setState({ panelOpen: { t1: false } });
+    setWidth(818);
+    render(<SessionPage />);
+    act(() => useWorkbenchStore.getState().setPanelOpen("t1", true));
+    await waitFor(() =>
+      expect(screen.getByTestId("ide-layout")).toHaveAttribute(
+        "data-workbench-open",
+        "true",
+      ),
+    );
+
+    act(() => useWindowsStore.getState().openDocked("ws-1", "src/main.py"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("ide-layout")).toHaveAttribute(
+        "data-workbench-open",
+        "false",
+      ),
+    );
+  });
+
+  it("abrir um documento no canvas (diff, commit) também fecha a gaveta", async () => {
+    setMode("ide");
+    useWorkbenchStore.setState({ panelOpen: { t1: false } });
+    setWidth(818);
+    render(<SessionPage />);
+    act(() => useWorkbenchStore.getState().setPanelOpen("t1", true));
+    await waitFor(() =>
+      expect(screen.getByTestId("ide-layout")).toHaveAttribute(
+        "data-workbench-open",
+        "true",
+      ),
+    );
+
+    act(() =>
+      useWindowsStore.getState().openCanvasDocument({
+        id: "file:ws-1:a.py",
+        kind: "file",
+        workspaceId: "ws-1",
+        title: "a.py",
+        path: "a.py",
+      }),
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("ide-layout")).toHaveAttribute(
+        "data-workbench-open",
+        "false",
+      ),
+    );
+  });
+
+  it("no layout largo abrir um arquivo não mexe no workbench", async () => {
+    setMode("assistant");
+    useWorkbenchStore.setState({ panelOpen: { t1: true } });
+    setWidth(1400);
+    render(<SessionPage />);
+
+    act(() => useWindowsStore.getState().open("ws-1", "src/main.py"));
+
+    expect(useWorkbenchStore.getState().panelOpen.t1).toBe(true);
+  });
+
+  it("fechar uma aba de arquivo não fecha a gaveta que o usuário abriu", async () => {
+    setMode("assistant");
+    useWorkbenchStore.setState({ panelOpen: { t1: false } });
+    setWidth(818);
+    render(<SessionPage />);
+    act(() => useWindowsStore.getState().open("ws-1", "a.py"));
+    act(() => useWorkbenchStore.getState().setPanelOpen("t1", true));
+    await screen.findByTestId("compact-workbench-overlay");
+
+    act(() => useWindowsStore.getState().closeTab("ws-1", "a.py"));
+
+    expect(screen.getByTestId("compact-workbench-overlay")).toBeInTheDocument();
   });
 });
 
@@ -854,10 +1082,11 @@ describe("SessionPage — laterais compactas", () => {
     ).toBeInTheDocument();
     expect(screen.getByTestId("compact-workbench-overlay")).toHaveClass(
       "right-0",
-      "sm:w-[min(32rem,85%)]",
-      "z-40",
+      "z-50",
     );
-    fireEvent.click(screen.getByTestId("compact-workbench-backdrop"));
+    fireEvent.keyDown(screen.getByTestId("compact-workbench-overlay"), {
+      key: "Escape",
+    });
     await waitFor(() =>
       expect(screen.queryByTestId("compact-workbench-overlay")).toBeNull(),
     );
@@ -866,14 +1095,14 @@ describe("SessionPage — laterais compactas", () => {
     expect(
       await screen.findByTestId("compact-workbench-overlay"),
     ).toBeInTheDocument();
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() => expect(screen.queryByTestId("sidebar")).toBeNull());
 
     fireEvent.click(screen.getByTestId("compact-open-sessions"));
-    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(await screen.findByTestId("sidebar")).toBeInTheDocument();
     expect(screen.queryByTestId("compact-workbench-overlay")).toBeNull();
 
     fireEvent.click(screen.getByTestId("compact-open-sessions"));
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() => expect(screen.queryByTestId("sidebar")).toBeNull());
   });
 
   it("mantém o Kanban dentro da largura de um smartphone estreito", () => {
@@ -915,13 +1144,11 @@ describe("SessionPage — workbench do Assistente estreito", () => {
     }));
 
     render(<SessionPage />);
+    act(() => useWorkbenchStore.getState().setPanelOpen("t1", true));
 
     expect(await screen.findByTestId("workbench-navbar")).toBeInTheDocument();
     expect(await screen.findByTestId("workbench-content")).toBeInTheDocument();
-    expect(
-      (await screen.findByTestId("chat")).parentElement?.parentElement
-        ?.parentElement,
-    ).toHaveStyle({ opacity: "0", pointerEvents: "none" });
+    expect(await screen.findByTestId("chat")).toBeInTheDocument();
     Object.defineProperty(window, "outerWidth", {
       configurable: true,
       value: 1024,

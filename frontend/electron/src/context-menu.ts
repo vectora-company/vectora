@@ -38,12 +38,18 @@ export interface ContextMenuLabels {
   copyLink: string;
   addToDictionary: string;
   noSuggestions: string;
+  reload: string;
+  inspect: string;
 }
 
 export interface ContextMenuActions {
   replaceMisspelling: (suggestion: string) => void;
   addToDictionary: (word: string) => void;
   copyText: (text: string) => void;
+  /** Recarrega a página. */
+  reload?: () => void;
+  /** Abre o DevTools no ponto clicado (só fora do pacote instalado). */
+  inspect?: () => void;
 }
 
 const LABELS: Record<string, ContextMenuLabels> = {
@@ -57,6 +63,8 @@ const LABELS: Record<string, ContextMenuLabels> = {
     copyLink: "Copiar endereço do link",
     addToDictionary: "Adicionar ao dicionário",
     noSuggestions: "Sem sugestões",
+    reload: "Recarregar",
+    inspect: "Inspecionar elemento",
   },
   en: {
     undo: "Undo",
@@ -68,6 +76,8 @@ const LABELS: Record<string, ContextMenuLabels> = {
     copyLink: "Copy link address",
     addToDictionary: "Add to dictionary",
     noSuggestions: "No suggestions",
+    reload: "Reload",
+    inspect: "Inspect element",
   },
   es: {
     undo: "Deshacer",
@@ -79,6 +89,8 @@ const LABELS: Record<string, ContextMenuLabels> = {
     copyLink: "Copiar dirección del enlace",
     addToDictionary: "Añadir al diccionario",
     noSuggestions: "Sin sugerencias",
+    reload: "Recargar",
+    inspect: "Inspeccionar elemento",
   },
 };
 
@@ -159,5 +171,69 @@ export function buildContextMenuTemplate(
     });
   }
 
+  // Clique direito em qualquer lugar nunca fica mudo: sem nada para copiar,
+  // colar ou abrir, sobra o que o menu padrão do Chromium oferece.
+  if (items.length === 0) {
+    if (actions.reload) {
+      items.push({ label: labels.reload, click: actions.reload });
+    }
+    if (actions.inspect) {
+      items.push({ label: labels.inspect, click: actions.inspect });
+    }
+  }
+
   return items;
+}
+
+/** Item de menu enviado pela interface para ser desenhado pelo Electron. */
+export interface PopupMenuItem {
+  id: string;
+  label: string;
+  enabled?: boolean;
+  danger?: boolean;
+}
+
+const MAX_POPUP_ITEMS = 40;
+const MAX_LABEL_LENGTH = 120;
+
+/**
+ * Valida o que a interface pediu para mostrar. O processo principal só confia no
+ * formato: ids e rótulos são texto curto, a lista é limitada e o resto é ignorado.
+ */
+export function sanitizePopupItems(raw: unknown): PopupMenuItem[] | null {
+  if (!Array.isArray(raw) || raw.length === 0 || raw.length > MAX_POPUP_ITEMS) {
+    return null;
+  }
+  const items: PopupMenuItem[] = [];
+  const seen = new Set<string>();
+  for (const entry of raw) {
+    if (typeof entry !== "object" || entry === null) return null;
+    const { id, label, enabled } = entry as Record<string, unknown>;
+    if (
+      typeof id !== "string" ||
+      id.length === 0 ||
+      id.length > 80 ||
+      seen.has(id) ||
+      typeof label !== "string" ||
+      label.length === 0 ||
+      label.length > MAX_LABEL_LENGTH
+    ) {
+      return null;
+    }
+    seen.add(id);
+    items.push({ id, label, enabled: enabled !== false });
+  }
+  return items;
+}
+
+/** Monta o menu nativo do Electron; `pick` recebe o id do item escolhido. */
+export function buildPopupTemplate(
+  items: PopupMenuItem[],
+  pick: (id: string) => void,
+): MenuItemConstructorOptions[] {
+  return items.map((item) => ({
+    label: item.label,
+    enabled: item.enabled !== false,
+    click: () => pick(item.id),
+  }));
 }

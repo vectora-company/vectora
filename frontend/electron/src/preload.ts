@@ -89,6 +89,12 @@ export interface VectoraDesktopBridge {
    * URL relativa de WebSocket não resolve pra `ws://` (só HTTP/fetch passa
    * pelo proxy de protocolo). `null` se o backend ainda não subiu porta. */
   getBackendWsOrigin: () => Promise<string | null>;
+  /** Menu de clique direito nativo para itens escolhidos pela interface. */
+  contextMenu: {
+    popup: (
+      items: ReadonlyArray<{ id: string; label: string; enabled?: boolean }>,
+    ) => Promise<string | null>;
+  };
   /** Controles da titlebar customizada (frame: false — ver main.ts). */
   windowControls: {
     minimize: () => void;
@@ -215,6 +221,9 @@ const bridge: VectoraDesktopBridge = {
     ipcRenderer.invoke("vectora:restore-update-backup", backup),
   downloadUpdate: () => ipcRenderer.send("vectora:download-update"),
   getBackendWsOrigin: () => ipcRenderer.invoke("vectora:get-backend-ws-origin"),
+  contextMenu: {
+    popup: (items) => ipcRenderer.invoke("vectora:context-menu-popup", items),
+  },
   windowControls: {
     minimize: () => ipcRenderer.send("vectora:window-minimize"),
     maximizeToggle: () => ipcRenderer.send("vectora:window-maximize-toggle"),

@@ -50,7 +50,12 @@ import { Readable } from "stream";
 import treeKill = require("tree-kill");
 import { parseSetCookieHeader, buildCookieHeader } from "./cookie-utils.js";
 import { createOpenPathsDispatcher, pathsFromArgv } from "./open-paths.js";
-import { buildContextMenuTemplate, contextMenuLabels } from "./context-menu.js";
+import {
+  buildContextMenuTemplate,
+  buildPopupTemplate,
+  contextMenuLabels,
+  sanitizePopupItems,
+} from "./context-menu.js";
 import {
   getFreePort,
   backendPath,
@@ -97,7 +102,10 @@ function isTrustedBrowserSender(event: unknown): boolean {
   );
 }
 
-import { computeDefaultWindowSize } from "./window-size.js";
+import {
+  computeDefaultWindowSize,
+  fitBoundsToWorkArea,
+} from "./window-size.js";
 import {
   fetchMarketplaceThemes,
   searchMarketplaceThemes,
@@ -850,6 +858,10 @@ function attachContextMenu(webContents: WebContents): void {
         addToDictionary: (word) =>
           webContents.session.addWordToSpellCheckerDictionary(word),
         copyText: (text) => clipboard.writeText(text),
+        reload: () => webContents.reload(),
+        inspect: app.isPackaged
+          ? undefined
+          : () => webContents.inspectElement(params.x, params.y),
       },
     );
     if (template.length === 0) return;
@@ -858,6 +870,26 @@ function attachContextMenu(webContents: WebContents): void {
         BrowserWindow.fromWebContents(webContents) ?? mainWindow ?? undefined,
     });
   });
+}
+
+/**
+ * A janela é sem moldura (`frame: false`): maximizada por alguns gerenciadores de
+ * janelas do Linux ela sobra além da tela, e os botões da barra de título (fechar
+ * incluído) ficam para fora. Depois de maximizar ou restaurar, encaixa os bounds
+ * na área útil do monitor onde ela está.
+ */
+function fitWindowToWorkArea(): void {
+  const win = mainWindow;
+  if (!win || win.isDestroyed()) return;
+  setTimeout(() => {
+    if (win.isDestroyed() || win.isFullScreen()) return;
+    const bounds = win.getBounds();
+    const fitted = fitBoundsToWorkArea(
+      bounds,
+      screen.getDisplayMatching(bounds).workArea,
+    );
+    if (fitted) win.setBounds(fitted);
+  }, 120);
 }
 
 function createWindow(options: { visible?: boolean } = {}): void {
@@ -920,9 +952,11 @@ function createWindow(options: { visible?: boolean } = {}): void {
 
   mainWindow.on("maximize", () => {
     mainWindow?.webContents.send("vectora:window-state", { maximized: true });
+    fitWindowToWorkArea();
   });
   mainWindow.on("unmaximize", () => {
     mainWindow?.webContents.send("vectora:window-state", { maximized: false });
+    fitWindowToWorkArea();
   });
 
   // Inject app version no preload sem precisar recompilar.
@@ -1373,6 +1407,26 @@ function registerIpc(): void {
   ipcMain.on("vectora:download-update", () => {
     void startUpdateDownload().catch((error: unknown) => {
       console.warn("[updater] downloadUpdate falhou", error);
+    });
+  });
+
+  // Menu de clique direito desenhado pelo Electron para itens que a interface
+  // escolhe (abas, por exemplo): devolve o id do item ou null se fechou sem escolher.
+  ipcMain.handle("vectora:context-menu-popup", (event, rawItems: unknown) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents) return null;
+    const items = sanitizePopupItems(rawItems);
+    if (!items) return null;
+    return new Promise<string | null>((resolve) => {
+      let picked: string | null = null;
+      const menu = Menu.buildFromTemplate(
+        buildPopupTemplate(items, (id) => {
+          picked = id;
+        }),
+      );
+      menu.popup({
+        window: mainWindow ?? undefined,
+        callback: () => resolve(picked),
+      });
     });
   });
 

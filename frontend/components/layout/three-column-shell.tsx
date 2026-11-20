@@ -98,7 +98,7 @@ export function ThreeColumnShell({
         <main
           aria-label={columns.center?.label ?? "Conteúdo principal"}
           data-column-visibility="visible"
-          className="flex w-full flex-[1_1_0%] min-h-0 min-w-0 flex-col overflow-hidden"
+          className="relative flex w-full flex-[1_1_0%] min-h-0 min-w-0 flex-col overflow-hidden"
         >
           <div
             data-testid="shell-header-slot"

@@ -280,42 +280,78 @@ function renderTablet(workbenchOpen: boolean) {
   return { onCloseWorkbench };
 }
 
+function TabletChatPreservationHarness() {
+  return (
+    <IdeModeLayout
+      layoutState="tablet"
+      workbenchOpen={false}
+      header={<div />}
+      navBar={<div />}
+      workbenchContent={<div />}
+      editor={<div />}
+      chat={<StatefulChat />}
+    />
+  );
+}
+
 describe("IdeModeLayout — tablet", () => {
   it("mantém editor e faixa visíveis e só monta o chat quando aberto", () => {
     renderTablet(false);
 
     expect(screen.getByTestId("panel-editor")).toBeInTheDocument();
-    expect(screen.getByTestId("panel-navbar")).toBeInTheDocument();
+    expect(screen.getAllByTestId("panel-navbar").length).toBeGreaterThan(0);
     expect(screen.queryByTestId("panel-chat")).toBeNull();
-    expect(screen.queryByTestId("ide-tablet-backdrop")).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("abrir o chat fecha o workbench e o fundo escurecido fecha a gaveta", () => {
+  it("abrir o chat fecha o workbench e abre a gaveta do chat como diálogo", () => {
     const { onCloseWorkbench } = renderTablet(false);
 
     fireEvent.click(screen.getByTestId("ide-tablet-chat-toggle"));
 
     expect(onCloseWorkbench).toHaveBeenCalled();
-    expect(screen.getByTestId("ide-tablet-chat-drawer")).toBeVisible();
-    fireEvent.click(screen.getByTestId("ide-tablet-backdrop"));
-    expect(screen.getByTestId("ide-tablet-chat-drawer")).not.toBeVisible();
+    expect(screen.getByRole("dialog", { name: /chat/i })).toBeInTheDocument();
+    expect(screen.getByTestId("panel-chat")).toBeVisible();
   });
 
-  it("Esc fecha o workbench e a gaveta do chat", () => {
+  it("Esc fecha a gaveta do workbench aberta", () => {
     const { onCloseWorkbench } = renderTablet(true);
 
-    fireEvent.keyDown(window, { key: "Escape" });
+    fireEvent.keyDown(screen.getByTestId("ide-tablet-workbench-drawer"), {
+      key: "Escape",
+    });
 
     expect(onCloseWorkbench).toHaveBeenCalled();
   });
 
-  it("com o workbench aberto, o fundo escurecido pede para fechá-lo", () => {
-    const { onCloseWorkbench } = renderTablet(true);
+  it("o fundo escurecido é o do Sheet de sessões, por cima de tudo", () => {
+    renderTablet(true);
 
-    expect(screen.getByTestId("ide-tablet-workbench-drawer")).toBeVisible();
-    fireEvent.click(screen.getByTestId("ide-tablet-backdrop"));
+    const overlay = document.querySelector("[data-slot='sheet-overlay']");
+    expect(overlay).not.toBeNull();
+    expect(overlay).toHaveClass("bg-black/50", "fixed", "inset-0");
+  });
 
-    expect(onCloseWorkbench).toHaveBeenCalled();
+  it("a gaveta do workbench é a coluna inteira: faixa e painel", () => {
+    renderTablet(true);
+
+    const drawer = screen.getByTestId("ide-tablet-workbench-drawer");
+    expect(drawer).toContainElement(screen.getByTestId("panel-workbench"));
+    expect(drawer.querySelector("[data-testid='panel-navbar']")).not.toBeNull();
+  });
+
+  it("fechar e reabrir a gaveta do chat preserva o estado dele (stream em andamento)", () => {
+    render(<TabletChatPreservationHarness />);
+
+    fireEvent.click(screen.getByTestId("ide-tablet-chat-toggle"));
+    fireEvent.click(screen.getByTestId("panel-chat"));
+    expect(screen.getByTestId("panel-chat")).toHaveTextContent("preserved");
+
+    fireEvent.click(screen.getByTestId("ide-tablet-chat-toggle"));
+    expect(screen.queryByTestId("panel-chat")).toBeNull();
+    fireEvent.click(screen.getByTestId("ide-tablet-chat-toggle"));
+
+    expect(screen.getByTestId("panel-chat")).toHaveTextContent("preserved");
   });
 });
 
@@ -323,6 +359,7 @@ function renderGeometry(layoutState: "wide" | "tablet", extra = {}) {
   return render(
     <IdeModeLayout
       layoutState={layoutState}
+      workbenchOpen={false}
       header={<div data-testid="panel-header">Header</div>}
       navBar={<div data-testid="panel-navbar">NavBar</div>}
       workbenchContent={<div data-testid="panel-workbench">Workbench</div>}
@@ -352,11 +389,15 @@ describe("IdeModeLayout — o Header só cobre a coluna central", () => {
     renderGeometry("tablet", { workbenchSide: "left" });
 
     const center = screen.getByTestId("shell-header-slot").closest("main");
-    expect(screen.getByTestId("panel-navbar").closest("aside")).not.toBeNull();
+    expect(
+      screen.getAllByTestId("panel-navbar")[0].closest("aside"),
+    ).not.toBeNull();
     expect(
       screen.getByTestId("ide-tablet-chat-rail").closest("aside"),
     ).not.toBeNull();
-    expect(center).not.toContainElement(screen.getByTestId("panel-navbar"));
+    expect(center).not.toContainElement(
+      screen.getAllByTestId("panel-navbar")[0],
+    );
     expect(center).not.toContainElement(
       screen.getByTestId("ide-tablet-chat-rail"),
     );
@@ -366,7 +407,7 @@ describe("IdeModeLayout — o Header só cobre a coluna central", () => {
     renderGeometry("tablet", { workbenchSide: "right" });
 
     const rail = screen.getByTestId("ide-tablet-chat-rail");
-    const navbar = screen.getByTestId("panel-navbar");
+    const navbar = screen.getAllByTestId("panel-navbar")[0];
     expect(rail.closest("aside")).toBe(navbar.closest("aside"));
   });
 
@@ -382,3 +423,18 @@ describe("IdeModeLayout — o Header só cobre a coluna central", () => {
     );
   });
 });
+
+function renderDrawerTablet(extra = {}) {
+  return render(
+    <IdeModeLayout
+      layoutState="tablet"
+      workbenchOpen
+      header={<div data-testid="panel-header">Header</div>}
+      navBar={<div data-testid="panel-navbar">NavBar</div>}
+      workbenchContent={<div data-testid="panel-workbench">Workbench</div>}
+      editor={<div data-testid="panel-editor">Editor</div>}
+      chat={<div data-testid="panel-chat">Chat</div>}
+      {...extra}
+    />,
+  );
+}

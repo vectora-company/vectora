@@ -20,6 +20,7 @@ import { MessageSquare, PanelsTopLeft, Code2 } from "lucide-react";
 import { useReducedMotion } from "motion/react";
 import { mDyn } from "@/lib/i18n-dyn";
 import { m } from "@/lib/paraglide/messages";
+import { CompactDrawer } from "@/components/layout/compact-drawer";
 import { ModeColumnLayout } from "@/components/layout/mode-column-layout";
 import { WorkbenchHost } from "@/components/layout/workbench-host";
 import {
@@ -133,26 +134,7 @@ export function IdeModeLayout({
     }
   }, [resolvedLayoutState, mobilePanel, workbenchOpen]);
 
-  const tabletDrawerOpen =
-    resolvedLayoutState === "tablet" && (workbenchOpen || tabletChatOpen);
-  useEffect(() => {
-    if (!tabletDrawerOpen) return;
-    // Esc fecha a gaveta aberta, como em qualquer painel sobreposto.
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      setTabletChatOpen(false);
-      onCloseWorkbench?.();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [tabletDrawerOpen, onCloseWorkbench]);
-
   if (resolvedLayoutState === "tablet") {
-    const drawerOpen = workbenchOpen || tabletChatOpen;
-    const closeDrawers = () => {
-      setTabletChatOpen(false);
-      onCloseWorkbench?.();
-    };
     const workbenchOnLeft = workbenchSide === "left";
     const chatRail = (
       <nav
@@ -193,67 +175,78 @@ export function IdeModeLayout({
       ? [chatRail]
       : [<Fragment key="workbench-rail">{navBar}</Fragment>, chatRail];
     return (
-      <ThreeColumnShell
-        centerHeader={header}
-        centerOverlay={centerOverlay}
-        direction="ltr"
-        left={
-          workbenchOnLeft ? <div className="flex h-full">{navBar}</div> : null
-        }
-        center={
-          <div
-            data-testid="ide-tablet-layout"
-            className="relative flex-1 min-w-0 min-h-0 overflow-hidden"
-          >
-            <div className="absolute inset-0 min-w-0 overflow-hidden">
-              {editor}
-            </div>
-            {drawerOpen && (
-              <button
-                type="button"
-                data-testid="ide-tablet-backdrop"
-                aria-label={m.workbench_close()}
-                onClick={closeDrawers}
-                className="absolute inset-0 z-30 cursor-default bg-black/55"
-              />
-            )}
+      <>
+        <ThreeColumnShell
+          centerHeader={header}
+          centerOverlay={centerOverlay}
+          direction="ltr"
+          left={
+            workbenchOnLeft ? <div className="flex h-full">{navBar}</div> : null
+          }
+          center={
             <div
-              data-testid="ide-tablet-workbench-drawer"
-              hidden={!workbenchOpen}
-              className={`absolute inset-y-0 z-40 flex min-w-0 w-full overflow-hidden bg-background shadow-xl sm:w-[min(32rem,85%)] ${
-                workbenchOnLeft ? "left-0 border-r" : "right-0 border-l"
-              }`}
+              data-testid="ide-tablet-layout"
+              className="relative flex-1 min-w-0 min-h-0 overflow-hidden"
             >
-              {workbenchContent}
-            </div>
-            {tabletChatMounted && (
-              <div
-                data-testid="ide-tablet-chat-drawer"
-                hidden={!tabletChatOpen}
-                className="absolute inset-y-0 right-0 z-40 flex min-w-0 w-full overflow-hidden border-l bg-background shadow-xl sm:w-[min(32rem,85%)]"
-              >
-                {chat}
+              <div className="absolute inset-0 min-w-0 overflow-hidden">
+                {editor}
               </div>
-            )}
-          </div>
-        }
-        right={<div className="flex h-full">{rightRails}</div>}
-        columns={{
-          left: {
-            label: m.layout_workbench_column(),
-            visibility: workbenchOnLeft ? "visible" : "hidden",
-            width: WORKBENCH_RAIL_WIDTH,
-            minWidth: WORKBENCH_RAIL_WIDTH,
-          },
-          center: { label: "Conteúdo principal" },
-          right: {
-            label: "Chat",
-            visibility: "visible",
-            width: WORKBENCH_RAIL_WIDTH * rightRails.length,
-            minWidth: WORKBENCH_RAIL_WIDTH * rightRails.length,
-          },
-        }}
-      />
+            </div>
+          }
+          right={<div className="flex h-full">{rightRails}</div>}
+          columns={{
+            left: {
+              label: m.layout_workbench_column(),
+              visibility: workbenchOnLeft ? "visible" : "hidden",
+              width: WORKBENCH_RAIL_WIDTH,
+              minWidth: WORKBENCH_RAIL_WIDTH,
+            },
+            center: { label: "Conteúdo principal" },
+            right: {
+              label: "Chat",
+              visibility: "visible",
+              width: WORKBENCH_RAIL_WIDTH * rightRails.length,
+              minWidth: WORKBENCH_RAIL_WIDTH * rightRails.length,
+            },
+          }}
+        />
+        {/* As duas gavetas são a mesma coluna do layout largo (faixa + painel) e
+          abrem como o Sheet de sessões: por cima de tudo, com foco e Esc do
+          Radix. `keepMounted` preserva o estado do workbench e do chat. */}
+        <CompactDrawer
+          open={workbenchOpen}
+          onOpenChange={(open) => {
+            if (!open) onCloseWorkbench?.();
+          }}
+          side={workbenchSide}
+          size="wide"
+          keepMounted
+          showCloseButton={false}
+          title={mDyn("workbench.title")}
+          resizeId="ide-workbench"
+          data-testid="ide-tablet-workbench-drawer"
+        >
+          <WorkbenchHost
+            rail={navBar}
+            panel={workbenchContent}
+            side={workbenchSide}
+          />
+        </CompactDrawer>
+        {tabletChatMounted && (
+          <CompactDrawer
+            open={tabletChatOpen}
+            onOpenChange={setTabletChatOpen}
+            side="right"
+            size="wide"
+            keepMounted
+            title={m.layout_open_chat()}
+            resizeId="ide-chat"
+            data-testid="ide-tablet-chat-drawer"
+          >
+            {chat}
+          </CompactDrawer>
+        )}
+      </>
     );
   }
 

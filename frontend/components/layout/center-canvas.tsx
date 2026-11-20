@@ -3,6 +3,14 @@ import { X } from "lucide-react";
 import { mDyn } from "@/lib/i18n-dyn";
 import { m } from "@/lib/paraglide/messages";
 import type { CanvasDocumentDescriptor } from "@/lib/stores/windows-store";
+import {
+  hasNativeContextMenu,
+  popupNativeContextMenu,
+} from "@/lib/native-context-menu";
+import {
+  useContextMenu,
+  type ContextMenuItem,
+} from "@/components/workbench/git/git-context-menu";
 
 export interface CenterCanvasTab {
   /** Stable unique key for this tab within the CenterCanvas instance. */
@@ -28,6 +36,12 @@ interface CenterCanvasProps {
   activeTab?: string;
   onTabChange?: (id: string) => void;
   onTabClose?: (id: string) => void;
+  /** Itens do menu de clique direito de uma aba; sem a prop não há menu. */
+  getTabMenu?: (
+    tab: CenterCanvasTab,
+    tabs: CenterCanvasTab[],
+    index: number,
+  ) => ContextMenuItem[];
   children?: ReactNode;
 }
 
@@ -39,8 +53,10 @@ export function CenterCanvas({
   activeTab,
   onTabChange,
   onTabClose,
+  getTabMenu,
   children,
 }: CenterCanvasProps) {
+  const menu = useContextMenu();
   const documentTabs: CenterCanvasTab[] = documents.map((document) => ({
     id: document.id,
     label: document.title,
@@ -67,6 +83,7 @@ export function CenterCanvas({
       aria-label={mDyn("ide.canvas")}
       className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
     >
+      {menu.element}
       {resolvedTabs.length > 0 && (
         <div
           role="tablist"
@@ -84,6 +101,20 @@ export function CenterCanvas({
                     : "bg-transparent text-muted-foreground hover:bg-muted/40"
                 }`}
                 data-active={active}
+                onContextMenu={
+                  getTabMenu
+                    ? (event) => {
+                        const items = getTabMenu(tab, resolvedTabs, index);
+                        // No Electron o menu é o nativo; no navegador, o leve.
+                        if (hasNativeContextMenu()) {
+                          event.preventDefault();
+                          void popupNativeContextMenu(items);
+                        } else {
+                          menu.open(event, items);
+                        }
+                      }
+                    : undefined
+                }
               >
                 <button
                   type="button"
