@@ -126,3 +126,40 @@ describe("LAYOUT_TEMPLATES", () => {
     }
   });
 });
+
+describe("topo reservado (barra de título do Electron)", () => {
+  const withBar = { w: 1920, h: 1080, top: 36 };
+
+  it("zonas de cima começam abaixo da barra e a altura é só a área livre", () => {
+    expect(snapRect(zoneById("top-left"), current, min, withBar)).toEqual({
+      x: 0,
+      y: 36,
+      w: 960,
+      h: 522,
+    });
+    expect(snapRect(zoneById("left"), current, min, withBar)).toEqual({
+      x: 0,
+      y: 36,
+      w: 960,
+      h: 1044,
+    });
+  });
+
+  it("zonas de baixo continuam coladas na base", () => {
+    expect(snapRect(zoneById("bottom-right"), current, min, withBar)).toEqual({
+      x: 960,
+      y: 558,
+      w: 960,
+      h: 522,
+    });
+  });
+
+  it("centralizar centra na área livre", () => {
+    expect(snapRect("center", current, min, withBar)).toEqual({
+      x: 560,
+      y: 258,
+      w: 800,
+      h: 600,
+    });
+  });
+});

@@ -115,3 +115,24 @@ describe("fitRectToViewport", () => {
     ).toEqual({ x: 0, y: 0, w: 1000, h: 700 });
   });
 });
+
+describe("topo reservado", () => {
+  const withBar = { w: 1000, h: 700, top: 36 };
+
+  it("mover não sobe além da barra de título", () => {
+    expect(moveRect(start, 0, -999, withBar).y).toBe(36);
+  });
+
+  it("redimensionar pela borda de cima para na barra de título", () => {
+    expect(resizeRect(start, "n", 0, -999, min, withBar).y).toBe(36);
+  });
+
+  it("uma janela salva por cima da barra volta para baixo dela", () => {
+    expect(
+      fitRectToViewport({ x: 0, y: 0, w: 400, h: 300 }, min, withBar).y,
+    ).toBe(36);
+    expect(
+      fitRectToViewport({ x: 0, y: 0, w: 400, h: 900 }, min, withBar).h,
+    ).toBe(664);
+  });
+});

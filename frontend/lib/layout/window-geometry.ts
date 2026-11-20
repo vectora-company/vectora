@@ -17,6 +17,11 @@ export interface Size {
   h: number;
 }
 
+/** Área visível; `top` reserva uma faixa no alto (barra de título do Electron). */
+export interface Viewport extends Size {
+  top?: number;
+}
+
 const clamp = (value: number, min: number, max: number) =>
   Math.min(Math.max(value, min), Math.max(min, max));
 
@@ -25,12 +30,13 @@ export function moveRect(
   start: Rect,
   dx: number,
   dy: number,
-  viewport: Size,
+  viewport: Viewport,
 ): Rect {
+  const top = viewport.top ?? 0;
   return {
     ...start,
     x: clamp(start.x + dx, 0, viewport.w - start.w),
-    y: clamp(start.y + dy, 0, viewport.h - start.h),
+    y: clamp(start.y + dy, top, viewport.h - start.h),
   };
 }
 
@@ -41,8 +47,9 @@ export function resizeRect(
   dx: number,
   dy: number,
   min: Size,
-  viewport: Size,
+  viewport: Viewport,
 ): Rect {
+  const topLimit = viewport.top ?? 0;
   let left = start.x;
   let top = start.y;
   let right = start.x + start.w;
@@ -51,20 +58,25 @@ export function resizeRect(
   if (dir.includes("e")) right = clamp(right + dx, left + min.w, viewport.w);
   if (dir.includes("w")) left = clamp(left + dx, 0, right - min.w);
   if (dir.includes("s")) bottom = clamp(bottom + dy, top + min.h, viewport.h);
-  if (dir.includes("n")) top = clamp(top + dy, 0, bottom - min.h);
+  if (dir.includes("n")) top = clamp(top + dy, topLimit, bottom - min.h);
 
   return { x: left, y: top, w: right - left, h: bottom - top };
 }
 
 /** Traz de volta para a tela uma janela que ficou fora dela (monitor trocado). */
-export function fitRectToViewport(rect: Rect, min: Size, viewport: Size): Rect {
+export function fitRectToViewport(
+  rect: Rect,
+  min: Size,
+  viewport: Viewport,
+): Rect {
+  const top = viewport.top ?? 0;
   const w = clamp(rect.w, min.w, viewport.w);
-  const h = clamp(rect.h, min.h, viewport.h);
+  const h = clamp(rect.h, min.h, viewport.h - top);
   return {
     w,
     h,
     x: clamp(rect.x, 0, viewport.w - w),
-    y: clamp(rect.y, 0, viewport.h - h),
+    y: clamp(rect.y, top, viewport.h - h),
   };
 }
 
@@ -134,11 +146,13 @@ export function snapRect(
   target: LayoutTarget,
   current: Rect,
   min: Size,
-  viewport: Size,
+  viewport: Viewport,
   max: Size = { w: Number.POSITIVE_INFINITY, h: Number.POSITIVE_INFINITY },
 ): Rect {
+  const top = viewport.top ?? 0;
+  const availableH = viewport.h - top;
   const limitW = Math.min(max.w, viewport.w);
-  const limitH = Math.min(max.h, viewport.h);
+  const limitH = Math.min(max.h, availableH);
   if (target === "center") {
     const w = clamp(current.w, min.w, limitW);
     const h = clamp(current.h, min.h, limitH);
@@ -146,11 +160,11 @@ export function snapRect(
       w: Math.round(w),
       h: Math.round(h),
       x: Math.round((viewport.w - w) / 2),
-      y: Math.round((viewport.h - h) / 2),
+      y: Math.round(top + (availableH - h) / 2),
     };
   }
   const w = clamp(viewport.w * target.w, min.w, limitW);
-  const h = clamp(viewport.h * target.h, min.h, limitH);
+  const h = clamp(availableH * target.h, min.h, limitH);
   // Zona que começa no início do eixo fica colada nele; só as que começam
   // adiante e chegam ao fim (direita/base) ficam coladas ao fim.
   const x =
@@ -160,11 +174,11 @@ export function snapRect(
   const y =
     target.y > 0 && target.y + target.h >= 1
       ? viewport.h - h
-      : viewport.h * target.y;
+      : top + availableH * target.y;
   return {
     w: Math.round(w),
     h: Math.round(h),
     x: Math.round(clamp(x, 0, viewport.w - w)),
-    y: Math.round(clamp(y, 0, viewport.h - h)),
+    y: Math.round(clamp(y, top, viewport.h - h)),
   };
 }

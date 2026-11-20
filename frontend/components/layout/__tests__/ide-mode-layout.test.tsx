@@ -329,7 +329,14 @@ describe("IdeModeLayout — tablet", () => {
 
     const overlay = document.querySelector("[data-slot='sheet-overlay']");
     expect(overlay).not.toBeNull();
-    expect(overlay).toHaveClass("bg-black/50", "fixed", "inset-0");
+    // Cobre o app inteiro, exceto a barra de título do Electron (que fica acima).
+    expect(overlay).toHaveClass(
+      "bg-black/50",
+      "fixed",
+      "inset-x-0",
+      "bottom-0",
+      "top-[var(--titlebar-h,0px)]",
+    );
   });
 
   it("a gaveta do workbench é a coluna inteira: faixa e painel", () => {

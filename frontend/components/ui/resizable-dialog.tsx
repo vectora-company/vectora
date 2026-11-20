@@ -20,6 +20,7 @@ import {
   type Rect,
   type ResizeDir,
 } from "@/lib/layout/window-geometry";
+import { keepTitleBarUsable, windowViewport } from "@/lib/layout/viewport";
 import { WindowLayoutMenu } from "@/components/ui/window-layout-menu";
 import { RESIZE_HANDLES } from "@/lib/layout/window-handles";
 
@@ -49,7 +50,7 @@ interface ResizableDialogContentProps extends React.ComponentProps<
   minimized?: boolean;
 }
 
-const viewport = () => ({ w: window.innerWidth, h: window.innerHeight });
+const viewport = windowViewport;
 
 function centeredRect(
   size: { w: number; h: number },
@@ -64,13 +65,13 @@ function centeredRect(
   const h = Math.min(
     Math.max(size.h, limits.minH),
     limits.maxH,
-    view.h - VIEWPORT_MARGIN * 2,
+    view.h - view.top - VIEWPORT_MARGIN * 2,
   );
   return {
     w,
     h,
     x: Math.round((view.w - w) / 2),
-    y: Math.round((view.h - h) / 2),
+    y: Math.round(view.top + (view.h - view.top - h) / 2),
   };
 }
 
@@ -260,13 +261,13 @@ export function ResizableDialogContent({
   if (!resizable) {
     return (
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/50" />
+        <DialogPrimitive.Overlay className="data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-x-0 bottom-0 top-[var(--titlebar-h,0px)] z-50 bg-black/50" />
         <DialogPrimitive.Content
           data-slot="dialog-content"
           className={cn(
             "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
-            "fixed top-1/2 left-1/2 z-50 -translate-x-1/2 -translate-y-1/2",
-            "flex max-h-[calc(100vh-2rem)] flex-col rounded-lg border shadow-lg duration-150",
+            "fixed top-[calc(50%_+_var(--titlebar-h,0px)_/_2)] left-1/2 z-50 -translate-x-1/2 -translate-y-1/2",
+            "flex max-h-[calc(100vh_-_var(--titlebar-h,0px)_-_2rem)] flex-col rounded-lg border shadow-lg duration-150",
             className,
           )}
           style={{
@@ -293,7 +294,7 @@ export function ResizableDialogContent({
   return (
     <DialogPrimitive.Portal>
       {!minimized && (
-        <DialogPrimitive.Overlay className="data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/50" />
+        <DialogPrimitive.Overlay className="data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-x-0 bottom-0 top-[var(--titlebar-h,0px)] z-50 bg-black/50" />
       )}
       <DialogPrimitive.Content
         data-slot="dialog-content"
@@ -310,7 +311,12 @@ export function ResizableDialogContent({
         )}
         style={{
           ...(maximized
-            ? { left: 0, top: 0, width: "100vw", height: "100vh" }
+            ? {
+                left: 0,
+                top: "var(--titlebar-h, 0px)",
+                width: "100vw",
+                height: "calc(100vh - var(--titlebar-h, 0px))",
+              }
             : { left: rect.x, top: rect.y, width: rect.w, height: rect.h }),
           ...(minimized ? { display: "none" } : null),
           ...style,
@@ -322,6 +328,7 @@ export function ResizableDialogContent({
         }}
         onInteractOutside={(event) => {
           if (minimized) event.preventDefault();
+          keepTitleBarUsable(event);
           onInteractOutside?.(event);
         }}
         onPointerDown={onFramePointerDown}

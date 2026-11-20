@@ -3,6 +3,7 @@
 import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { XIcon } from "lucide-react";
+import { keepTitleBarUsable } from "@/lib/layout/viewport";
 import { m } from "@/lib/paraglide/messages";
 
 import { cn } from "@/lib/utils";
@@ -20,7 +21,7 @@ function SheetOverlay({
     <DialogPrimitive.Overlay
       data-slot="sheet-overlay"
       className={cn(
-        "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/50",
+        "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-x-0 bottom-0 top-[var(--titlebar-h,0px)] z-50 bg-black/50",
         className,
       )}
       {...props}
@@ -31,10 +32,10 @@ function SheetOverlay({
 type SheetSide = "left" | "right" | "top" | "bottom";
 
 const sideClasses: Record<SheetSide, string> = {
-  left: "safe-offset-left inset-y-0 left-0 h-full data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left",
+  left: "safe-offset-left bottom-0 top-[var(--titlebar-h,0px)] left-0 data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left",
   right:
-    "safe-offset-right inset-y-0 right-0 h-full data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right",
-  top: "safe-offset-top inset-x-0 top-0 w-full data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top",
+    "safe-offset-right bottom-0 top-[var(--titlebar-h,0px)] right-0 data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right",
+  top: "safe-offset-top inset-x-0 top-[var(--titlebar-h,0px)] w-full data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top",
   bottom:
     "safe-offset-bottom inset-x-0 bottom-0 w-full data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom",
 };
@@ -44,6 +45,7 @@ function SheetContent({
   children,
   side = "right",
   showCloseButton = true,
+  onInteractOutside,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   side?: SheetSide;
@@ -60,6 +62,10 @@ function SheetContent({
           sideClasses[side],
           className,
         )}
+        onInteractOutside={(event) => {
+          keepTitleBarUsable(event);
+          onInteractOutside?.(event);
+        }}
         {...props}
       >
         {children}

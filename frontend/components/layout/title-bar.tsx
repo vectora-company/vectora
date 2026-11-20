@@ -10,11 +10,12 @@
  * refletem navegação da SPA, não da janela do SO.
  */
 
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import Image from "next/image";
 import { useRouter } from "@tanstack/react-router";
 import { ArrowLeft, RotateCw, Minus, Square, Copy, X } from "lucide-react";
 import { m } from "@/lib/paraglide/messages";
+import { TITLEBAR_HEIGHT_VAR } from "@/lib/layout/viewport";
 
 function isDesktop(): boolean {
   return (
@@ -24,7 +25,12 @@ function isDesktop(): boolean {
 
 // `WebkitAppRegion` (drag/no-drag) é específico do Chromium/Electron —
 // `CSSProperties` do React não o declara, então tipamos à parte.
-const dragRegion: CSSProperties = { WebkitAppRegion: "drag" } as CSSProperties;
+const dragRegion: CSSProperties = {
+  WebkitAppRegion: "drag",
+  // Diálogos modais (Radix) desligam o ponteiro fora deles; a barra de título
+  // continua utilizável (maximizar, minimizar, fechar) com eles abertos.
+  pointerEvents: "auto",
+} as CSSProperties;
 const noDragRegion: CSSProperties = {
   WebkitAppRegion: "no-drag",
 } as CSSProperties;
@@ -57,13 +63,30 @@ export function TitleBar() {
     return unsubscribe;
   }, []);
 
+  const barRef = useRef<HTMLDivElement>(null);
+
+  // Publica a altura da barra: overlays e janelas flutuantes começam abaixo dela.
+  useEffect(() => {
+    if (!desktop) return undefined;
+    const root = document.documentElement;
+    root.style.setProperty(
+      TITLEBAR_HEIGHT_VAR,
+      `${barRef.current?.offsetHeight ?? 36}px`,
+    );
+    return () => {
+      root.style.removeProperty(TITLEBAR_HEIGHT_VAR);
+    };
+  }, [desktop]);
+
   if (!desktop) return null;
 
   const controls = window.vectora!.windowControls!;
 
   return (
     <div
-      className="flex h-9 shrink-0 items-center justify-between bg-sidebar text-sidebar-foreground select-none"
+      ref={barRef}
+      data-titlebar
+      className="relative z-[200] flex h-9 shrink-0 items-center justify-between bg-sidebar text-sidebar-foreground select-none"
       style={dragRegion}
     >
       <div

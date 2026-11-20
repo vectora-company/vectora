@@ -158,3 +158,31 @@ describe("TitleBar", () => {
     ).toBeInTheDocument();
   });
 });
+
+describe("TitleBar — convivência com diálogos modais", () => {
+  it("publica a própria altura numa variável CSS e a remove ao sair", async () => {
+    installVectoraBridge();
+    const { unmount } = render(<TitleBar />);
+    await screen.findByLabelText("titlebar_close");
+
+    expect(
+      document.documentElement.style.getPropertyValue("--titlebar-h"),
+    ).toMatch(/^\d+px$/);
+
+    unmount();
+    expect(
+      document.documentElement.style.getPropertyValue("--titlebar-h"),
+    ).toBe("");
+  });
+
+  it("fica acima de diálogos e com ponteiro ligado mesmo se o body o desligar", async () => {
+    installVectoraBridge();
+    render(<TitleBar />);
+    const close = await screen.findByLabelText("titlebar_close");
+    const bar = close.closest("[data-titlebar]") as HTMLElement;
+
+    expect(bar).toBeTruthy();
+    expect(bar.className).toContain("z-[200]");
+    expect(bar.style.pointerEvents).toBe("auto");
+  });
+});
