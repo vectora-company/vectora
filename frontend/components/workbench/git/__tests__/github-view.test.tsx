@@ -195,4 +195,57 @@ describe("GithubView", () => {
       expect(fetchMock.mock.calls.length).toBeGreaterThan(before);
     });
   });
+
+  it("com onOpenItem, clicar no título abre o item como document (em vez de ir ao GitHub)", async () => {
+    const onOpenItem = vi.fn();
+    mockGithub({ "/github/pulls": { status: "ok", pulls: [pull] } });
+    render(
+      <GithubView workspaceId="ws1" kind="pulls" onOpenItem={onOpenItem} />,
+    );
+
+    fireEvent.click(await screen.findByTestId(`github-open-${pull.number}`));
+
+    expect(onOpenItem).toHaveBeenCalledWith({
+      kind: "pull-request",
+      number: pull.number,
+      title: pull.title,
+    });
+    expect(screen.queryByRole("link", { name: /feat: algo/ })).toBeNull();
+  });
+
+  it("nas issues, o document aberto é do tipo issue", async () => {
+    const onOpenItem = vi.fn();
+    mockGithub({ "/github/issues": { status: "ok", issues: [issue] } });
+    render(
+      <GithubView workspaceId="ws1" kind="issues" onOpenItem={onOpenItem} />,
+    );
+
+    fireEvent.click(await screen.findByTestId(`github-open-${issue.number}`));
+
+    expect(onOpenItem).toHaveBeenCalledWith({
+      kind: "issue",
+      number: issue.number,
+      title: issue.title,
+    });
+  });
+
+  it("o seletor de aberto/fechado fica à direita do campo de busca", async () => {
+    mockGithub({ "/github/pulls": { status: "ok", pulls: [] } });
+    render(<GithubView workspaceId="ws1" kind="pulls" />);
+    await screen.findByTestId("github-empty");
+
+    const search = screen.getByTestId("github-filter");
+    const select = screen.getByLabelText(m.workbench_github_state());
+    const refresh = screen.getByRole("button", {
+      name: m.workbench_github_refresh(),
+    });
+
+    expect(
+      search.compareDocumentPosition(select) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      select.compareDocumentPosition(refresh) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
 });

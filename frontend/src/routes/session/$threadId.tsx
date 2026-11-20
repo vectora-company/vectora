@@ -42,6 +42,11 @@ import { FileEditor } from "@/components/workbench/file-editor";
 import { CanvasFileDiff } from "@/components/workbench/canvas-file-diff";
 import { LibraryMcpPreview } from "@/components/workbench/library-mcp-preview";
 import { MarkdownView } from "@/components/workbench/markdown-view";
+import type { GithubItemRef } from "@/components/workbench/git/github-view";
+import {
+  GithubIssueDetail,
+  GithubPullDetail,
+} from "@/components/workbench/git/github-detail";
 import { CanvasDocumentWindows } from "@/components/workbench/canvas-document-windows";
 import {
   CommitDetails,
@@ -868,6 +873,21 @@ function SessionPage() {
     },
     [activeWorkspaceId, openCanvasDocument, threadId, updateCanvasDocument],
   );
+  const openGithubItem = useCallback(
+    (item: GithubItemRef) => {
+      if (!activeWorkspaceId) return;
+      // O conteúdo é lido ao abrir; o descritor guarda só o número.
+      openCanvasDocument({
+        id: `${item.kind}:${activeWorkspaceId}:${item.number}`,
+        kind: item.kind,
+        workspaceId: activeWorkspaceId,
+        threadId,
+        title: `#${item.number} ${item.title}`,
+        githubNumber: item.number,
+      });
+    },
+    [activeWorkspaceId, openCanvasDocument, threadId],
+  );
   const openPlanDocument = useCallback(
     (
       item: PlanItem,
@@ -932,6 +952,25 @@ function SessionPage() {
             }}
             diff={null}
             loading
+          />
+        );
+      }
+      if (
+        (document.kind === "pull-request" || document.kind === "issue") &&
+        document.workspaceId &&
+        document.githubNumber
+      ) {
+        return document.kind === "pull-request" ? (
+          <GithubPullDetail
+            key={document.id}
+            workspaceId={document.workspaceId}
+            number={document.githubNumber}
+          />
+        ) : (
+          <GithubIssueDetail
+            key={document.id}
+            workspaceId={document.workspaceId}
+            number={document.githubNumber}
           />
         );
       }
@@ -1194,6 +1233,7 @@ function SessionPage() {
           side={assistantWorkbenchSide}
           visible
           onOpenCommitDetails={openGitCommitDetails}
+          onOpenGithubItem={openGithubItem}
           onOpenPlanDocument={openPlanDocument}
           onAddToContext={pushMention}
           onSendPrompt={pushDraft}
@@ -1431,6 +1471,7 @@ function SessionPage() {
                       side={ideWorkbenchSide}
                       visible={hydrated && workbenchOpen}
                       onOpenCommitDetails={openGitCommitDetails}
+                      onOpenGithubItem={openGithubItem}
                       onOpenPlanDocument={openPlanDocument}
                       onAddToContext={pushMention}
                       onSendPrompt={pushDraft}
@@ -1536,6 +1577,7 @@ function SessionPage() {
                           side={assistantWorkbenchSide}
                           visible
                           onOpenCommitDetails={openGitCommitDetails}
+                          onOpenGithubItem={openGithubItem}
                           onOpenPlanDocument={openPlanDocument}
                           onAddToContext={pushMention}
                           onSendPrompt={pushDraft}
