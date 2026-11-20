@@ -343,6 +343,15 @@ class TestContratoDoSConstruct:
         assert match is not None
         assert "ignorado: este sistema é" in text
 
+    def test_fonte_do_helper_de_fala_fica_no_backend(self) -> None:
+        """O helper é parte do backend (``speech_to_text.py`` o consome); uma
+        pasta ``native/`` na raiz sugeria uma versão nativa do Vectora."""
+        text = self._text()
+        assert '"backend", "speech", "macos", "main.swift"' in text
+        assert (REPO / "backend" / "speech" / "macos" / "main.swift").is_file()
+        assert not (REPO / "native").exists()
+        assert "native/" not in text
+
     def test_release_garante_o_helper_antes_do_build_hibrido(self) -> None:
         text = self._text()
         assert '_fetch_speech  = _node("build-macos-speech"' in text

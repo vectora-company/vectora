@@ -21,7 +21,6 @@ on:
       - "uv.lock"
       - "SConstruct"
       - "build-hybrid.py"
-      - "native/**"
       - ".github/workflows/vectora.yml"
       - ".github/actions/**"
   pull_request:
@@ -35,7 +34,6 @@ on:
       - "uv.lock"
       - "SConstruct"
       - "build-hybrid.py"
-      - "native/**"
       - ".github/workflows/vectora.yml"
       - ".github/actions/**"
   workflow_dispatch:

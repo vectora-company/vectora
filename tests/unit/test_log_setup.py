@@ -97,3 +97,22 @@ def test_todo_caminho_de_shutdown_marca_o_encerramento() -> None:
         assert text.count("mark_shutdown_requested()") >= text.count(
             "server.should_exit = True"
         ), rel
+
+
+def test_shutdown_filter_suprime_o_aviso_de_prazo_do_uvicorn(monkeypatch) -> None:
+    filtro = log_setup._ShutdownCancellationFilter()
+    record = logging.LogRecord(
+        "uvicorn.error",
+        logging.ERROR,
+        __file__,
+        1,
+        "Cancel %s running task(s), timeout graceful shutdown exceeded",
+        (2,),
+        None,
+    )
+
+    monkeypatch.setattr(log_setup, "_shutdown_requested", False)
+    assert filtro.filter(record) is True
+
+    log_setup.mark_shutdown_requested()
+    assert filtro.filter(record) is False
