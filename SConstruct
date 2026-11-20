@@ -1031,7 +1031,7 @@ def _action_fetch_ffmpeg(target, source, env):
 
 
 def _action_build_macos_speech(target, source, env):
-    """Compila ``native/macos-speech/main.swift`` em ``resources/vectora-speech``.
+    """Compila ``backend/speech/macos/main.swift`` em ``resources/vectora-speech``.
 
     Helper de reconhecimento de fala nativo do macOS (framework Speech),
     usado por ``backend/services/speech_to_text.py``. Em outros sistemas não
@@ -1050,7 +1050,7 @@ def _action_build_macos_speech(target, source, env):
             "swiftc não encontrado; instale as Command Line Tools com "
             "`xcode-select --install`"
         )
-    source_file = os.path.join(VECTORA, "native", "macos-speech", "main.swift")
+    source_file = os.path.join(VECTORA, "backend", "speech", "macos", "main.swift")
     dest_dir = os.path.join(VECTORA, "resources")
     os.makedirs(dest_dir, exist_ok=True)
     dest = os.path.join(dest_dir, "vectora-speech")
