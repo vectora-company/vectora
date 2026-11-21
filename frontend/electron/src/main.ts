@@ -74,6 +74,7 @@ import {
   stopBackendProcess,
   stopBackendTree,
   resolveExternalBackendConnection,
+  unixSocketIsActive,
 } from "./backend-lifecycle.js";
 import {
   BrowserViewManager,
@@ -309,6 +310,7 @@ let backendPidFileWrite: Promise<void> | null = null;
 let shutdownResourcesDisposed = false;
 let backendPort: number | null = null;
 let backendPipePath: string | null = null; // Windows named pipe path (\\.\pipe\vectora-<pid>)
+let backendReady = false;
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let pendingDeepLink: string | null = null;
@@ -470,6 +472,15 @@ const signalProcessTree = (
 ) => treeKill(pid, signal, callback);
 
 async function killStaleBackend(): Promise<void> {
+  if (
+    !resolveExternalBackendConnection(process.env) &&
+    process.platform !== "win32" &&
+    (await unixSocketIsActive(path.join(runtimeHome, "vectora.sock")))
+  ) {
+    throw new Error(
+      `Outra instância do Vectora já está usando ${runtimeHome}. Feche-a antes de iniciar esta.`,
+    );
+  }
   let raw: string;
   try {
     raw = await fs.promises.readFile(_BACKEND_PID_FILE, "utf-8");
@@ -798,6 +809,7 @@ async function startBackend(): Promise<void> {
 
 function handleBackendExit(code: number | null, signal: NodeJS.Signals | null) {
   if ((app as unknown as { isQuitting: boolean }).isQuitting) return;
+  backendReady = false;
   const logs = _backendLog.slice(-15).join("").trim();
   const detail = `code=${code} signal=${signal ?? "none"}${logs ? `\n\n${logs}` : ""}`;
   console.error(`[backend] saiu inesperadamente: ${detail}`);
@@ -821,6 +833,7 @@ function handleBackendExit(code: number | null, signal: NodeJS.Signals | null) {
 }
 
 async function restartBackend(): Promise<void> {
+  backendReady = false;
   try {
     if (backend?.pid) {
       const previousBackend = backend;
@@ -840,6 +853,7 @@ async function restartBackend(): Promise<void> {
     backendPipePath = null;
     await startBackend();
     await waitForBackend();
+    backendReady = true;
     if (mainWindow) {
       void mainWindow.loadURL(`${APP_SCHEME}://app/`);
     } else {
@@ -948,8 +962,7 @@ function createWindow(options: { visible?: boolean } = {}): void {
     }
     return;
   }
-  if (backendPort === null && !backendPipePath)
-    throw new Error("Backend não iniciado.");
+  if (!backendReady) throw new Error("Backend ainda não está pronto.");
   // Janela nasce proporcional à tela detectada, não num tamanho fixo — numa
   // tela 1080p+ um default fixo como 1400x900 já nasce quase em tela cheia,
   // prejudicando o modo janela (ver computeDefaultWindowSize).
@@ -1745,7 +1758,7 @@ app.on("second-instance", (_event, argv, workingDirectory) => {
     if (mainWindow.isMinimized()) mainWindow.restore();
     mainWindow.show();
     mainWindow.focus();
-  } else {
+  } else if (backendReady) {
     createWindow({ visible: process.env.VECTORA_WEB_MODE !== "1" });
   }
 });
@@ -1777,6 +1790,7 @@ app.on("open-url", (event, url) => {
 (app as unknown as { isQuitting: boolean }).isQuitting = false;
 
 app.whenReady().then(async () => {
+  if (!gotLock) return;
   if (installedTestsMode) {
     const executable = backendPath(
       process.env,
@@ -1816,6 +1830,7 @@ app.whenReady().then(async () => {
     await killStaleBackend();
     await startBackend();
     await waitForBackend();
+    backendReady = true;
     await clearPendingUpdate();
     const webMode = process.env.VECTORA_WEB_MODE === "1";
     // In `vectora web`, keep a hidden renderer alive so BrowserViews/CDP use
@@ -1904,7 +1919,7 @@ app.on("before-quit", (event) => {
 
 app.on("activate", () => {
   // macOS: clicar no dock recria janela se fechada.
-  if (BrowserWindow.getAllWindows().length === 0 && backendPort !== null) {
+  if (BrowserWindow.getAllWindows().length === 0 && backendReady) {
     createWindow();
   }
 });

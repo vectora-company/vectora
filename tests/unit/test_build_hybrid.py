@@ -18,6 +18,10 @@ _assert_pydantic_core_extension_bundled = cast(
     "Callable[[Path, str], None]",
     run_path(str(ROOT / "build-hybrid.py"))["_assert_pydantic_core_extension_bundled"],
 )
+_runtime_lock_module = cast(
+    "Callable[[str], str]",
+    run_path(str(ROOT / "build-hybrid.py"))["_runtime_lock_module"],
+)
 
 
 def test_module_probe_does_not_import_package_parent(
@@ -67,3 +71,9 @@ def test_yt_dlp_hook_excludes_emscripten_and_collects_ejs_data() -> None:
         module.startswith("urllib3.contrib.emscripten") for module in hiddenimports
     )
     assert any(destination.startswith("yt_dlp_ejs/") for _source, destination in datas)
+
+
+def test_runtime_lock_platform_module_is_explicitly_collected() -> None:
+    assert _runtime_lock_module("linux") == "fcntl"
+    assert _runtime_lock_module("darwin") == "fcntl"
+    assert _runtime_lock_module("win32") == "msvcrt"

@@ -38,6 +38,7 @@ import signal
 import socket
 import sys
 import threading
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -794,8 +795,6 @@ def _run_start(args: argparse.Namespace, *, force_web: bool = False) -> None:
         sock_dir = _settings_ipc.vectora_home
         sock_dir.mkdir(parents=True, exist_ok=True)
         uds_path = str(sock_dir / "vectora.sock")
-        with contextlib.suppress(FileNotFoundError):
-            Path(uds_path).unlink()
 
     from backend.version import __version__
 
@@ -853,6 +852,29 @@ def _run_start(args: argparse.Namespace, *, force_web: bool = False) -> None:
     from backend.services.log_setup import install_uvicorn_shutdown_filter
 
     install_uvicorn_shutdown_filter()
+
+    def run_with_runtime_lock(action: Callable[[], None]) -> None:
+        from backend.runtime_lock import (
+            RuntimeHomeAlreadyRunningError,
+            lock_runtime_home,
+            unix_socket_is_active,
+        )
+
+        runtime_home = Path(os.environ["VECTORA_HOME"])
+        try:
+            with lock_runtime_home(runtime_home):
+                if uds_path:
+                    socket_path = Path(uds_path)
+                    if unix_socket_is_active(socket_path):
+                        raise RuntimeHomeAlreadyRunningError(
+                            f"Outra instância do Vectora já está ouvindo em {socket_path}."
+                        )
+                    with contextlib.suppress(FileNotFoundError):
+                        socket_path.unlink()
+                action()
+        except RuntimeHomeAlreadyRunningError as exc:
+            logger.log(logging.ERROR, "runtime já está em uso: %s", exc)
+            raise SystemExit(1) from exc
 
     # Aplicado ANTES do branch Windows named-pipe abaixo — esse branch tem um
     # `return` próprio, e sem instalar o handler aqui primeiro ele nunca seria
@@ -920,7 +942,7 @@ def _run_start(args: argparse.Namespace, *, force_web: bool = False) -> None:
                 with contextlib.suppress(asyncio.CancelledError):
                     await shutdown_pipe_task
 
-        asyncio.run(_run_win())
+        run_with_runtime_lock(lambda: asyncio.run(_run_win()))
         # Mesmo `return` cedo do ramo Windows+desktop precisa do os._exit(0)
         # abaixo — sem ele, threads não-daemon (httpx/SQLite do tracer)
         # mantêm o interpreter vivo mesmo após o shutdown gracioso
@@ -939,7 +961,7 @@ def _run_start(args: argparse.Namespace, *, force_web: bool = False) -> None:
             scheme,
             port,
         )
-        asyncio.run(server.serve())
+        run_with_runtime_lock(lambda: asyncio.run(server.serve()))
         logger.info("Vectora: server.serve retornou após shutdown")
     else:
         # Sobe o servidor e, quando há display, a bandeja do sistema (Python).
@@ -948,11 +970,13 @@ def _run_start(args: argparse.Namespace, *, force_web: bool = False) -> None:
         # thread de fundo.
         from backend.services.tray import run_server_with_tray
 
-        run_server_with_tray(
-            server,
-            f"{scheme}://localhost:{port}",
-            headless=headless,
-            icon_ref=icon_ref,
+        run_with_runtime_lock(
+            lambda: run_server_with_tray(
+                server,
+                f"{scheme}://localhost:{port}",
+                headless=headless,
+                icon_ref=icon_ref,
+            )
         )
 
     # Retorno do tray/servidor = shutdown concluído. No Windows, threads

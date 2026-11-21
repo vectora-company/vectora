@@ -89,6 +89,14 @@ def test_flatpak_uses_the_current_supported_freedesktop_runtime() -> None:
     assert "Icon: company.vectora.vectora" in flatpak["body"]
 
 
+def test_second_instance_does_not_open_a_window_before_backend_ready() -> None:
+    second_instance = ELECTRON_MAIN.split('app.on("second-instance"', 1)[1].split(
+        "// Arquivos e pastas passados", 1
+    )[0]
+    assert "else if (backendReady)" in second_instance
+    assert "if (!gotLock) return;" in ELECTRON_MAIN
+
+
 def test_linux_packages_declare_vulkan_runtime_and_snap_opengl_plug() -> None:
     deb = re.search(r"^deb:\n(?P<body>(?:[ \t].*\n|\n)+)", BUILDER, re.MULTILINE)
     snap = re.search(r"^snapcraft:\n(?P<body>(?:[ \t].*\n|\n)+)", BUILDER, re.MULTILINE)

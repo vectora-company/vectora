@@ -230,6 +230,36 @@ export function pingBackendHttp(
   });
 }
 
+export function unixSocketIsActive(
+  socketPath: string,
+  timeoutMs = 1_000,
+): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = net.createConnection(socketPath);
+    let settled = false;
+    let response = "";
+    let timeout: NodeJS.Timeout;
+    const finish = (active: boolean) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      socket.destroy();
+      resolve(active);
+    };
+    timeout = setTimeout(() => finish(false), timeoutMs);
+    socket.once("connect", () =>
+      socket.write(
+        "GET /health HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
+      ),
+    );
+    socket.on("data", (chunk: Buffer) => {
+      response += chunk.toString("utf-8");
+      if (response.includes("\r\n")) finish(response.startsWith("HTTP/"));
+    });
+    socket.once("error", () => finish(false));
+  });
+}
+
 /**
  * GET JSON de um endpoint do backend pelo transporte IPC — usado pra ler
  * settings antes de decidir comportamento do main process (ex.: gate de

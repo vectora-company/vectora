@@ -68,6 +68,11 @@ def _module_is_importable(module: str) -> bool:
     )
 
 
+def _runtime_lock_module(platform: str) -> str:
+    """Return the platform lock module loaded dynamically by runtime_lock."""
+    return "msvcrt" if platform == "win32" else "fcntl"
+
+
 def run(cmd: list, cwd: Path, desc: str, env: dict | None = None) -> None:
     print(f"\n{'=' * 70}\n-> {desc}\n{'=' * 70}\n$ {' '.join(map(str, cmd))}\n")
     merged = {**os.environ, **(env or {})}
@@ -275,6 +280,7 @@ def main() -> None:
     hidden: list[str] = []
     for mod in HIDDEN_IMPORTS:
         hidden += ["--hidden-import", mod]
+    hidden += ["--hidden-import", _runtime_lock_module(sys.platform)]
 
     # Módulos declarados pelos hooks do PyInstaller mas não instalados no projeto.
     # Excluir explicitamente para silenciar os "Hidden import X not found!" warnings.
