@@ -216,6 +216,7 @@
     ],
     "title": "feat: aba Actions na workbench Git, somente leitura",
     "updatedAt": "2026-11-20T02:20:34Z",
-    "url": "https://github.com/vectora-company/vectora/pull/803"
+    "url": "https://github.com/vectora-company/vectora/pull/803",
+    "checks": { "passed": 19, "failed": 0, "pending": 1 }
   }
 ]
