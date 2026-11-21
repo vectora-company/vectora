@@ -38,7 +38,9 @@ export function resolveLinuxGraphicsConfiguration(
   }
 
   const requestedOzone = env.VECTORA_OZONE_PLATFORM?.trim().toLowerCase();
-  const ozone = requestedOzone || "x11";
+  // Padrão "auto": deixa o Electron/Chromium detectar Wayland ou X11 automaticamente.
+  // Forçar x11 causava falha de superfície Vulkan no COSMIC/Wayland.
+  const ozone = requestedOzone || "auto";
   if (!isOzonePlatform(ozone)) {
     throw new Error(
       `VECTORA_OZONE_PLATFORM inválido: ${ozone}. Use auto, x11, wayland ou cosmic.`,

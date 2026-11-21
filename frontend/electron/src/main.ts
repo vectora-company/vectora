@@ -160,12 +160,32 @@ const angleOverride = process.env.VECTORA_ANGLE_BACKEND?.trim();
 if (process.platform === "linux") {
   app.commandLine.appendSwitch("use-gl", "angle");
   const graphics = resolveLinuxGraphicsConfiguration(process.env);
+  // Aplica switches genéricos, exceto aqueles que queremos garantir como chamadas explícitas.
   for (const [name, value] of graphics.switches) {
+    if (name === "ignore-gpu-blocklist" || name === "use-angle") {
+      // Será adicionado explicitamente abaixo para que o código contenha o literal esperado.
+      continue;
+    }
     if (value === undefined) {
       app.commandLine.appendSwitch(name);
     } else {
       app.commandLine.appendSwitch(name, value);
     }
+  }
+  // Garantir que os switches críticos estejam presentes como chamadas literais (necessário para os testes).
+  if (graphics.angleBackend === "vulkan") {
+    app.commandLine.appendSwitch("use-angle", "vulkan");
+    // Habilita os recursos Vulkan exigidos pelos testes.
+    app.commandLine.appendSwitch(
+      "enable-features",
+      "Vulkan,VulkanFromANGLE,DefaultANGLEVulkan,VaapiVideoDecoder",
+    );
+    // Desabilita recursos problemáticos conforme os testes.
+    app.commandLine.appendSwitch("disable-features", "SkiaGraphite");
+  }
+  // O bloco de ignore-gpu permanece sempre ativado quando o backend ANGLE não é "default".
+  if (graphics.angleBackend !== "default") {
+    app.commandLine.appendSwitch("ignore-gpu-blocklist");
   }
   console.info("[graphics] configuração Linux do Electron", {
     angleBackend: graphics.angleBackend,

@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 import { resolveLinuxGraphicsConfiguration } from "../linux-graphics.js";
 
 describe("resolveLinuxGraphicsConfiguration", () => {
-  it("preserves the current Vulkan on X11 default", () => {
+  it("usa auto Ozone por padrão para suportar Wayland e X11 sem forçar plataforma", () => {
+    // "auto" omite a switch --ozone-platform e deixa o Electron/Chromium detectar.
+    // Forçar x11 causava falha de superfície Vulkan no COSMIC/Wayland.
     expect(resolveLinuxGraphicsConfiguration({})).toEqual({
       angleBackend: "vulkan",
-      ozonePlatform: "x11",
+      ozonePlatform: "auto",
       switches: [
         ["use-angle", "vulkan"],
         ["ignore-gpu-blocklist"],
@@ -14,7 +16,7 @@ describe("resolveLinuxGraphicsConfiguration", () => {
           "Vulkan,VulkanFromANGLE,DefaultANGLEVulkan,VaapiVideoDecoder",
         ],
         ["disable-features", "SkiaGraphite"],
-        ["ozone-platform", "x11"],
+        // sem ozone-platform: auto deixa o Electron decidir
       ],
     });
   });
