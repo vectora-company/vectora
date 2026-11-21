@@ -99,6 +99,20 @@ PACKAGING_TOOLS: dict[str, dict[str, str]] = {
         "suse": "fuse3",
         "alpine": "fuse3",
     },
+    "rpmbuild": {
+        "debian": "rpm",
+        "rhel": "rpm-build",
+        "arch": "rpm-tools",
+        "suse": "rpm-build",
+    },
+    "snap": {
+        "debian": "snapd",
+        "rhel": "snapd",
+    },
+    "snapcraft": {
+        "debian": "snapd",
+        "rhel": "snapd",
+    },
 }
 
 _INSTALL_COMMANDS = {
@@ -328,12 +342,18 @@ def packaging_hint(
     family: str, which: Callable[[str], str | None] = shutil.which
 ) -> tuple[list[str], str]:
     """Ferramentas de empacotamento Linux ausentes e o comando para instalá-las."""
-    missing = [tool for tool in PACKAGING_TOOLS if which(tool) is None]
     command = _INSTALL_COMMANDS.get(family)
-    if not missing or command is None:
-        return missing, ""
+    if command is None:
+        return [tool for tool in PACKAGING_TOOLS if which(tool) is None], ""
+    available = [tool for tool in PACKAGING_TOOLS if family in PACKAGING_TOOLS[tool]]
+    missing = [tool for tool in available if which(tool) is None]
+    if not missing:
+        return [], ""
     packages = sorted({PACKAGING_TOOLS[tool][family] for tool in missing})
-    return missing, f"{command} {' '.join(packages)}"
+    install_command = f"{command} {' '.join(packages)}"
+    if "snapcraft" in missing:
+        install_command += " && sudo snap install snapcraft --classic"
+    return missing, install_command
 
 
 def describe_system(host: HostInfo) -> str:

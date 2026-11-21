@@ -1000,6 +1000,12 @@ async def _history_verifications(
         if not entries:
             continue
         last = entries[-1]
+        # Mesma regra do chat ao vivo (conversation_loop): sem arquivo tocado e
+        # sem nenhum gate executado, o turno é uma conversa comum e não ganha o
+        # rodapé "Não verificado". Sem isto o rodapé sumia na hora e voltava ao
+        # recarregar a conversa.
+        if last.get("outcome") == "not_run" and not getattr(run, "files_touched", None):
+            continue
         message_id = await store.latest_assistant_message_id(thread_id, run.run_id)
         if message_id is None:
             continue

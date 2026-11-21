@@ -223,6 +223,13 @@ async def _get_json(
         response.raise_for_status()
         body = response.json()
         result = body if isinstance(body, dict) else None
+    except httpx.HTTPStatusError as exc:
+        logger.warning(
+            "model catalog: provider endpoint returned HTTP %d (%s)",
+            exc.response.status_code,
+            url,
+        )
+        result = None
     except Exception as exc:
         logger.info(
             "model catalog: provider endpoint unavailable (%s: %s)",

@@ -99,8 +99,10 @@ dependencies = [
     # YouTube/outras plataformas (backend/tools/youtube.py) — captions
     # públicas primeiro (sem baixar mídia nenhuma), yt-dlp só como
     # fallback (áudio, sem captions) ou pra extrair um frame sob demanda.
+    # Os extras incluem os scripts JS EJS e o transporte curl-cffi usados
+    # por extratores modernos; o hook do PyInstaller coleta seus dados.
     "youtube-transcript-api>=1.2.5",
-    "yt-dlp>=2026.10.26",
+    "yt-dlp[curl-cffi,default]>=2026.10.26",
     # ctranslate2 não publica wheel para Windows ARM64; nesse alvo, a
     # transcrição remota continua disponível e a readiness local reporta a dependência ausente.
     # macOS Intel não é um alvo suportado e também não possui as wheels locais necessárias.

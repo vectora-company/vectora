@@ -70,7 +70,13 @@ class _ShutdownCancellationFilter(logging.Filter):
     """Oculta traceback de cancelamento causado por shutdown explícito."""
 
     def filter(self, record: logging.LogRecord) -> bool:
-        if not _shutdown_requested or not record.exc_info:
+        if not _shutdown_requested:
+            return True
+        # Aviso do Uvicorn ao cancelar as respostas ainda abertas no fim do
+        # prazo de shutdown gracioso (ex.: streams SSE).
+        if "timeout graceful shutdown exceeded" in record.getMessage():
+            return False
+        if not record.exc_info:
             return True
         exception = record.exc_info[1]
         return type(exception).__name__ != "CancelledError"
