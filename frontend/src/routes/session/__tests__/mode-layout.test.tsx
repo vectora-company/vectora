@@ -832,7 +832,14 @@ describe("SessionPage — gavetas compactas padronizadas", () => {
     await openWorkbenchDrawer();
 
     const overlay = document.querySelector("[data-slot='sheet-overlay']");
-    expect(overlay).toHaveClass("fixed", "inset-0", "bg-black/50");
+    // Cobre a janela toda, menos a barra de título do Electron, que fica acima.
+    expect(overlay).toHaveClass(
+      "fixed",
+      "inset-x-0",
+      "bottom-0",
+      "top-[var(--titlebar-h,0px)]",
+      "bg-black/50",
+    );
   });
 
   it("a gaveta mostra a coluna inteira do workbench (faixa e painel) e preenche a largura", async () => {

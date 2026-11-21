@@ -21,6 +21,7 @@ import {
 } from "react";
 import { Maximize2, Minimize2, Minus, X } from "lucide-react";
 
+import { windowViewport } from "@/lib/layout/viewport";
 import { WindowLayoutMenu } from "@/components/ui/window-layout-menu";
 import { RESIZE_HANDLES } from "@/lib/layout/window-handles";
 import { m } from "@/lib/paraglide/messages";
@@ -51,7 +52,7 @@ interface FloatingFrameProps {
   subHeader?: ReactNode;
 }
 
-const viewportSize = () => ({ w: window.innerWidth, h: window.innerHeight });
+const viewportSize = windowViewport;
 
 export function FloatingFrame({
   rect,
