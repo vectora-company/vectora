@@ -31,6 +31,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from backend.services.git_people import GitPerson
 from backend.vtypes.git import GitOperationSnapshot
 
 logger = logging.getLogger(__name__)
@@ -977,6 +978,68 @@ async def git_members(workspace_id: str, request: Request) -> list[GitMentionUse
         )
         for user in users
     ]
+
+
+@workspace_scoped_router.get("/git/contributors", response_model=list[GitPerson])
+async def git_contributors(
+    workspace_id: str,
+    request: Request,
+    q: Annotated[str, Query(max_length=100)] = "",
+) -> list[GitPerson]:
+    """Pessoas do repositório para marcar como co-autor (``Co-authored-by``).
+
+    Une quem já commitou (``git shortlog``) com os colaboradores do GitHub,
+    quando o ``gh`` está disponível, e acha pelo usuário do GitHub quem ainda
+    não commitou. ``q`` filtra por nome, e-mail ou usuário.
+    """
+    from backend.services.git_people import (
+        filter_people,
+        merge_people,
+        parse_gh_contributors,
+        parse_gh_user,
+        parse_shortlog,
+        valid_username,
+    )
+    from backend.tools.context import ToolContext
+    from backend.tools.gh import _gh_run, _resolve_cwd
+
+    repo = _open_workspace_repo(workspace_id)
+    committers: list[GitPerson] = []
+    own_email = ""
+    if repo is not None:
+        try:
+            raw = await asyncio.to_thread(repo.git.shortlog, "-sne", "HEAD")
+            committers = parse_shortlog(raw)
+            own_email = await asyncio.to_thread(
+                lambda: repo.config_reader().get_value("user", "email", "")
+            )
+        except Exception:
+            committers = []
+
+    context = ToolContext(user_id=_user_id(request), workspace_id=workspace_id)
+    cwd = _resolve_cwd(workspace_id, context)
+    collaborators: list[GitPerson] = []
+    result = await _gh_run(
+        ["api", "repos/:owner/:repo/contributors?per_page=100"],
+        cwd=cwd,
+        user_id=_user_id(request),
+    )
+    if result.get("status") == "ok":
+        collaborators = parse_gh_contributors(str(result.get("output", "")))
+
+    people = merge_people(committers, collaborators)
+    matches = filter_people(people, q, exclude_emails={str(own_email)})
+    wanted = q.strip().lstrip("@")
+    # Quem nunca commitou ali: procura direto pelo usuário do GitHub.
+    if not matches and valid_username(wanted):
+        lookup = await _gh_run(
+            ["api", f"users/{wanted}"], cwd=cwd, user_id=_user_id(request)
+        )
+        if lookup.get("status") == "ok":
+            found = parse_gh_user(str(lookup.get("output", "")))
+            if found is not None:
+                matches = [found]
+    return matches
 
 
 @view_router.get("", response_model=ListWorkspacesResponse)

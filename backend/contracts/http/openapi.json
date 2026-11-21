@@ -4548,6 +4548,46 @@
         "title": "GitPathRequest",
         "type": "object"
       },
+      "GitPerson": {
+        "description": "Alguém que pode ser listado em ``Co-authored-by``.",
+        "properties": {
+          "commits": {
+            "default": 0,
+            "title": "Commits",
+            "type": "integer"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "source": {
+            "default": "git",
+            "title": "Source",
+            "type": "string"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          }
+        },
+        "required": [
+          "name",
+          "email"
+        ],
+        "title": "GitPerson",
+        "type": "object"
+      },
       "GitReorderRequest": {
         "properties": {
           "commits": {
@@ -31250,6 +31290,64 @@
           }
         },
         "summary": "List Conflicts",
+        "tags": [
+          "workspaces-view"
+        ]
+      }
+    },
+    "/workspaces/{workspace_id}/git/contributors": {
+      "get": {
+        "description": "Pessoas do repositório para marcar como co-autor (``Co-authored-by``).\n\nUne quem já commitou (``git shortlog``) com os colaboradores do GitHub,\nquando o ``gh`` está disponível, e acha pelo usuário do GitHub quem ainda\nnão commitou. ``q`` filtra por nome, e-mail ou usuário.",
+        "operationId": "git_contributors_workspaces__workspace_id__git_contributors_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 100,
+              "title": "Q",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/GitPerson"
+                  },
+                  "title": "Response Git Contributors Workspaces  Workspace Id  Git Contributors Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Git Contributors",
         "tags": [
           "workspaces-view"
         ]
