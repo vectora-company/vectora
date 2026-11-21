@@ -159,15 +159,38 @@ async def ensure_nats_sidecar() -> str | None:
         #   * vivo mas mudo (zumbi) ou já morto -> descarta e sobe um novo.
         registered = _read_stale_pids(store_dir)
         registered_url = _read_registered_url(store_dir)
-        alive = [p for p in registered if _pid_is_alive_safe(p)]
+        flatpak = bool(os.environ.get("FLATPAK_ID"))
+        reusable = False
+        if flatpak:
+            # Flatpak uses a private PID namespace. PIDs persisted in the
+            # shared home directory belong to another namespace and must never
+            # be signalled; the registered localhost URL still identifies a
+            # running NATS instance shared by this app.
+            reusable = bool(registered_url and _responds(registered_url))
+            if not reusable and registered:
+                logger.info(
+                    "nats_sidecar: ignorando PIDs persistidos de outra execução "
+                    "Flatpak (namespace de PID isolado)"
+                )
+                _clear_pid_file(store_dir)
+            alive: list[int] = []
+        else:
+            alive = [p for p in registered if _pid_is_alive_safe(p)]
+            reusable = bool(alive and registered_url and _responds(registered_url))
 
-        if alive and registered_url and _responds(registered_url):
+        if reusable:
             _url = registered_url
-            logger.info(
-                "nats_sidecar: reusando sidecar já ativo em %s (pid=%s)",
-                registered_url,
-                alive[0],
-            )
+            if flatpak:
+                logger.info(
+                    "nats_sidecar: reusando sidecar já ativo em %s (Flatpak)",
+                    registered_url,
+                )
+            else:
+                logger.info(
+                    "nats_sidecar: reusando sidecar já ativo em %s (pid=%s)",
+                    registered_url,
+                    alive[0],
+                )
             return _url
 
         for zumbi in alive:
@@ -454,8 +477,6 @@ async def stop_nats_sidecar() -> None:
     store_dir = settings.vectora_home / "nats"
     if _proc is not None:
         _remove_pid(store_dir, _proc.pid)
-    else:
-        _clear_pid_file(store_dir)
 
     if _proc is None:
         return

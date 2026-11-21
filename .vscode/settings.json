@@ -20,7 +20,7 @@
     "*.sdb": "${capture}.${extname}-*",
     "*.s3db": "${capture}.${extname}-*"
   },
-  "chat.agent.enabled": false,
+  "chat.agent.enabled": true,
   "files.associations": {
     ".sequelizerc": "javascript",
     ".stylelintrc": "json",

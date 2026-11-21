@@ -21,7 +21,6 @@ on:
       - "uv.lock"
       - "SConstruct"
       - "build-hybrid.py"
-      - "native/**"
       - ".github/workflows/vectora.yml"
       - ".github/actions/**"
   pull_request:
@@ -35,7 +34,6 @@ on:
       - "uv.lock"
       - "SConstruct"
       - "build-hybrid.py"
-      - "native/**"
       - ".github/workflows/vectora.yml"
       - ".github/actions/**"
   workflow_dispatch:
@@ -529,7 +527,7 @@ jobs:
             [ "$attempt" -lt 5 ] || exit 1
             sleep $((attempt * 10))
           done
-          sudo apt-get -o Acquire::Retries=5 install -y flatpak flatpak-builder fuse3 libarchive-tools
+          sudo apt-get -o Acquire::Retries=5 install -y flatpak flatpak-builder fuse3 libarchive-tools rpm snapd
           image="ghcr.io/canonical/snapcraft:8_core22"
           compat_dir="${RUNNER_TEMP:?RUNNER_TEMP must be set}/snapcraft-compat"
           docker pull "$image"

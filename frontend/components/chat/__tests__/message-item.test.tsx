@@ -922,33 +922,23 @@ describe("MessageItem — plano e verificação", () => {
     expect(screen.queryByTestId("plan-block")).toBeNull();
   });
 
-  it.each([
-    ["passed", m.chat_verification_passed()],
-    ["degraded", m.chat_verification_not_verified()],
-    ["failed", m.chat_verification_failed()],
-  ])("rodapé de verificação %s", (status, label) => {
-    render(
-      <MessageItem
-        {...baseProps(
-          msg({
-            content: "Feito",
-            verification: { status, outcome: "x", detail: "detalhe do gate" },
-          }),
-        )}
-      />,
-    );
+  it.each(["passed", "degraded", "failed"])(
+    "não mostra rodapé de verificação (%s): a verificação roda, mas não é sinalizada no chat",
+    (status) => {
+      render(
+        <MessageItem
+          {...baseProps(
+            msg({
+              content: "Feito",
+              verification: { status, outcome: "x", detail: "detalhe do gate" },
+            }),
+          )}
+        />,
+      );
 
-    const footer = screen.getByTestId("verification-footer");
-    expect(footer.textContent).toBe(label);
-    expect(footer.getAttribute("data-status")).toBe(status);
-    expect(footer.getAttribute("title")).toBe("detalhe do gate");
-  });
-
-  it("não mostra rodapé quando não houve verificação", () => {
-    render(<MessageItem {...baseProps(msg({ content: "ok" }))} />);
-
-    expect(screen.queryByTestId("verification-footer")).toBeNull();
-  });
+      expect(screen.queryByTestId("verification-footer")).toBeNull();
+    },
+  );
 });
 
 describe("MessageItem — orientações do usuário", () => {
