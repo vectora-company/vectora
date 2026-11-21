@@ -7,15 +7,15 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { GitPullRequest, MessageSquare, RefreshCw, Search } from "lucide-react";
+import { GitPullRequest, MessageSquare } from "lucide-react";
 
 import { m } from "@/lib/paraglide/messages";
 import {
   WorkbenchEmpty,
   WorkbenchError,
   WorkbenchLoading,
-  WorkbenchToolbar,
 } from "../primitives";
+import { GithubListToolbar, LIST_SELECT_CLASS } from "./github-list-toolbar";
 
 export interface GithubPull {
   number: number;
@@ -46,7 +46,7 @@ type Kind = "pulls" | "issues";
 
 /** O que a lista entrega ao abrir um item como document. */
 export interface GithubItemRef {
-  kind: "pull-request" | "issue";
+  kind: "pull-request" | "issue" | "workflow-run";
   number: number;
   title: string;
 }
@@ -359,24 +359,16 @@ export function GithubView({
 
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="github-view">
-      <WorkbenchToolbar className="flex-wrap">
-        <label className="relative flex min-w-24 flex-1 items-center">
-          <Search className="pointer-events-none absolute left-1.5 h-3 w-3 text-muted-foreground" />
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={m.workbench_github_filter_placeholder()}
-            aria-label={m.workbench_github_filter_placeholder()}
-            data-testid="github-filter"
-            className="h-6 w-full rounded border border-border bg-background pr-1.5 pl-5 text-xs outline-none focus:border-primary"
-          />
-        </label>
+      <GithubListToolbar
+        query={query}
+        onQueryChange={setQuery}
+        onRefresh={reload}
+      >
         <select
           value={filter}
           onChange={(e) => setFilter(e.target.value as StateFilter)}
           aria-label={m.workbench_github_state()}
-          className="h-6 rounded border border-border bg-background px-1.5 text-xs text-muted-foreground"
+          className={LIST_SELECT_CLASS}
         >
           {STATE_FILTERS.map((option) => (
             <option key={option} value={option}>
@@ -384,16 +376,7 @@ export function GithubView({
             </option>
           ))}
         </select>
-        <button
-          type="button"
-          aria-label={m.workbench_github_refresh()}
-          title={m.workbench_github_refresh()}
-          onClick={reload}
-          className="ml-auto flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-        >
-          <RefreshCw className="h-3.5 w-3.5" />
-        </button>
-      </WorkbenchToolbar>
+      </GithubListToolbar>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {loaded.status === "loading" && <WorkbenchLoading />}

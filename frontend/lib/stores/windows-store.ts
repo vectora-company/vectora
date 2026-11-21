@@ -39,7 +39,8 @@ export type CanvasDocumentKind =
   | "plan"
   | "mcp-preview"
   | "pull-request"
-  | "issue";
+  | "issue"
+  | "workflow-run";
 
 export interface McpCanvasPreviewData {
   id: string;
@@ -168,10 +169,15 @@ function sanitizePersistedCanvas(state: PersistedWindowsState) {
           typeof candidate.path === "string" && candidate.path.trim().length > 0
         );
       }
-      if (candidate.kind === "pull-request" || candidate.kind === "issue") {
+      if (
+        candidate.kind === "pull-request" ||
+        candidate.kind === "issue" ||
+        candidate.kind === "workflow-run"
+      ) {
+        // Número do PR ou da issue, ou id do run: sempre um inteiro seguro.
         return (
           typeof candidate.githubNumber === "number" &&
-          Number.isInteger(candidate.githubNumber) &&
+          Number.isSafeInteger(candidate.githubNumber) &&
           candidate.githubNumber > 0
         );
       }

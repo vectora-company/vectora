@@ -60,6 +60,17 @@ def sem_bwrap_automatico(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _limpa_cache_de_leituras_do_gh():
+    """O handler do GitHub guarda leituras por alguns segundos; sem limpar, um
+    teste veria a resposta simulada do anterior."""
+    from backend.api.handlers.github import clear_gh_cache
+
+    clear_gh_cache()
+    yield
+    clear_gh_cache()
+
+
+@pytest.fixture(autouse=True)
 def _encerra_workers_do_jail():
     """Nenhum worker jailado sobrevive ao teste que o criou: o `jail_manager` é
     um singleton do processo, e um worker esquecido seguiria apontando para a

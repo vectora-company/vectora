@@ -1,0 +1,54 @@
+{
+  "status": "ok",
+  "message": "",
+  "runs": [
+    {
+      "id": 44660022585,
+      "number": 592,
+      "title": "feat: aba Actions na workbench Git, somente leitura",
+      "workflow": "PR Gate",
+      "status": "completed",
+      "conclusion": "success",
+      "event": "pull_request",
+      "branch": "feat/git-actions-tab",
+      "sha": "36545bdf2ddd5fc0b71e003a8b2922f2e09c330f",
+      "created_at": "2026-11-20T02:20:04Z",
+      "updated_at": "2026-11-20T02:20:51Z",
+      "started_at": "2026-11-20T02:20:04Z",
+      "url": "https://github.com/vectora-company/vectora/actions/runs/44660022585",
+      "attempt": 1
+    },
+    {
+      "id": 44660020996,
+      "number": 591,
+      "title": "feat: aba Actions na workbench Git, somente leitura",
+      "workflow": "PR Gate",
+      "status": "completed",
+      "conclusion": "success",
+      "event": "pull_request",
+      "branch": "feat/git-actions-tab",
+      "sha": "36545bdf2ddd5fc0b71e003a8b2922f2e09c330f",
+      "created_at": "2026-11-20T02:20:03Z",
+      "updated_at": "2026-11-20T02:24:03Z",
+      "started_at": "2026-11-20T02:20:03Z",
+      "url": "https://github.com/vectora-company/vectora/actions/runs/44660020996",
+      "attempt": 1
+    },
+    {
+      "id": 44660020896,
+      "number": 4096,
+      "title": "feat: aba Actions na workbench Git, somente leitura",
+      "workflow": "Vectora (app)",
+      "status": "in_progress",
+      "conclusion": "",
+      "event": "pull_request",
+      "branch": "feat/git-actions-tab",
+      "sha": "36545bdf2ddd5fc0b71e003a8b2922f2e09c330f",
+      "created_at": "2026-11-20T02:20:03Z",
+      "updated_at": "2026-11-20T02:29:15Z",
+      "started_at": "2026-11-20T02:20:03Z",
+      "url": "https://github.com/vectora-company/vectora/actions/runs/44660020896",
+      "attempt": 1
+    }
+  ]
+}

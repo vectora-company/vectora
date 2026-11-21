@@ -39,6 +39,7 @@ import { ChangesView } from "./changes-view";
 import { HistoryView, type GitCommitDetailsState } from "./history-view";
 import { CompareView } from "./compare-view";
 import { OverflowTabs } from "@/components/workbench/overflow-tabs";
+import { ActionsView } from "./actions-view";
 import { GithubView, type GithubItemRef } from "./github-view";
 import { StashModal } from "./stash-modal";
 import { WorktreesModal } from "./worktrees-modal";
@@ -46,7 +47,7 @@ import { m } from "@/lib/paraglide/messages";
 import { WorkbenchSettingsSurface } from "@/components/workbench/settings/workbench-settings-surface";
 import { gitSettings } from "@/components/workbench/settings/workbench-settings-registry";
 
-type GitView = "changes" | "history" | "prs" | "issues" | "compare";
+type GitView = "changes" | "history" | "prs" | "issues" | "actions" | "compare";
 
 function PrDialog({
   workspaceId,
@@ -402,6 +403,7 @@ export function GitTab({
           { id: "history", label: m.workbench_git_tab_history() },
           { id: "prs", label: m.workbench_github_pulls() },
           { id: "issues", label: m.workbench_github_issues() },
+          { id: "actions", label: m.workbench_git_tab_actions() },
           { id: "compare", label: m.workbench_git_document_compare() },
         ]}
       />
@@ -428,6 +430,13 @@ export function GitTab({
             key={`${wsId}:${view}`}
             workspaceId={wsId}
             kind={view === "prs" ? "pulls" : "issues"}
+            onOpenItem={onOpenGithubItem}
+          />
+        ) : view === "actions" ? (
+          <ActionsView
+            key={`${wsId}:${repoKey}`}
+            workspaceId={wsId}
+            currentBranch={status?.branch || branches?.current || null}
             onOpenItem={onOpenGithubItem}
           />
         ) : (

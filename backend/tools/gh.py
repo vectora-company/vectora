@@ -18,11 +18,21 @@ import asyncio
 import json
 import logging
 import os
+import warnings
 
 from backend.tools.context import ToolContext
 from backend.tools.registry import ToolExtras, vtool
 
 logger = logging.getLogger(__name__)
+
+# O lancedb avisa a cada fork que o runtime assíncrono dele foi reiniciado no
+# filho. Aqui o filho executa o `gh` na hora (exec), sem tocar no lancedb, então
+# o risco descrito não existe e o aviso só repetia a cada chamada.
+warnings.filterwarnings(
+    "ignore",
+    message="lancedb fork support is experimental",
+    category=RuntimeWarning,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -50,7 +60,7 @@ async def _gh_run(
         "github_cli_command_started",
         extra={
             "tool": "gh_cli",
-            "operation": " ".join(args[:3]),
+            "operation": " ".join(args[:2]),
             "command": "gh " + " ".join(args),
             "status": "started",
         },
@@ -126,7 +136,7 @@ async def _gh_run(
             "github_cli_command_failed",
             extra={
                 "tool": "gh_cli",
-                "operation": " ".join(args[:3]),
+                "operation": " ".join(args[:2]),
                 "command": "gh " + " ".join(args),
                 "exit_code": proc.returncode,
                 "status": "error",
@@ -142,7 +152,7 @@ async def _gh_run(
         "github_cli_command_completed",
         extra={
             "tool": "gh_cli",
-            "operation": " ".join(args[:3]),
+            "operation": " ".join(args[:2]),
             "command": "gh " + " ".join(args),
             "exit_code": proc.returncode,
             "output_length": len(stdout),

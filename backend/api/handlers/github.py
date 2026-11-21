@@ -7,7 +7,9 @@ só leitura. Cada resposta traz um campo ``status`` para a interface mostrar
 
 from __future__ import annotations
 
+import asyncio
 import json
+import time
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException, Path, Query, Request
@@ -19,7 +21,7 @@ router = APIRouter(prefix="/github", tags=["github"])
 
 _PR_FIELDS = (
     "number,title,state,isDraft,author,headRefName,baseRefName,updatedAt,url,"
-    "reviewDecision,statusCheckRollup"
+    "reviewDecision"
 )
 _ISSUE_FIELDS = "number,title,state,author,labels,updatedAt,url,comments"
 _LIST_LIMIT = 30
@@ -35,6 +37,55 @@ _ISSUE_DETAIL_FIELDS = (
 )
 _MAX_COMMENTS = 100
 _MAX_FILES = 300
+
+# Cache curto das leituras do `gh`: trocar de aba ou de document remonta a tela
+# e repetia a mesma consulta (a lista de PRs passa de 200 KB). Só respostas
+# bem-sucedidas entram; o TTL fica abaixo do menor intervalo de polling (8 s).
+_GH_CACHE_TTL_S = 4.0
+_GH_CACHE_MAX = 64
+_gh_cache: dict[tuple, tuple[float, dict]] = {}
+_gh_inflight: dict[tuple, asyncio.Future] = {}
+
+
+def clear_gh_cache() -> None:
+    """Esvazia o cache de leituras (usado nos testes)."""
+    _gh_cache.clear()
+    _gh_inflight.clear()
+
+
+async def _gh_read(
+    args: list[str], cwd: str | None = None, user_id: str | None = None
+) -> dict:
+    """`_gh_run` para leituras, com cache curto e junção de chamadas iguais.
+
+    A chave inclui usuário e diretório, então um usuário nunca recebe a
+    resposta de outro. Chamadas simultâneas idênticas esperam a mesma execução.
+    """
+    key = (user_id, cwd, tuple(args))
+    now = time.monotonic()
+    hit = _gh_cache.get(key)
+    if hit and now - hit[0] < _GH_CACHE_TTL_S:
+        return hit[1]
+    pending = _gh_inflight.get(key)
+    if pending is not None:
+        return await asyncio.shield(pending)
+    future: asyncio.Future = asyncio.get_running_loop().create_future()
+    _gh_inflight[key] = future
+    try:
+        result = await _gh_run(args, cwd=cwd, user_id=user_id)
+    except BaseException as exc:
+        future.set_exception(exc)
+        future.exception()  # evita o aviso de exceção nunca lida
+        raise
+    else:
+        future.set_result(result)
+    finally:
+        _gh_inflight.pop(key, None)
+    if result.get("status") == "ok":
+        if len(_gh_cache) >= _GH_CACHE_MAX:
+            _gh_cache.pop(next(iter(_gh_cache)))
+        _gh_cache[key] = (time.monotonic(), result)
+    return result
 
 
 class PullChecks(BaseModel):
@@ -224,9 +275,13 @@ async def list_pulls(
     state: Annotated[Literal["open", "closed", "merged", "all"], Query()] = "open",
     workspace_id: str | None = None,
 ) -> PullListResponse:
-    """Pull requests do repositório do workspace, com o resumo dos checks."""
+    """Pull requests do repositório do workspace.
+
+    Os checks não vêm na lista: `statusCheckRollup` passava de 200 KB por
+    consulta. O resumo continua no detalhe de cada PR.
+    """
     user_id = _require_user(request)
-    result = await _gh_run(
+    result = await _gh_read(
         [
             "pr",
             "list",
@@ -259,7 +314,6 @@ async def list_pulls(
             updated_at=str(item.get("updatedAt", "")),
             url=str(item.get("url", "")),
             review_decision=str(item.get("reviewDecision") or ""),
-            checks=_checks_summary(item.get("statusCheckRollup")),
         )
         for item in raw
         if isinstance(item, dict) and "number" in item
@@ -275,7 +329,7 @@ async def list_issues(
 ) -> IssueListResponse:
     """Issues do repositório do workspace."""
     user_id = _require_user(request)
-    result = await _gh_run(
+    result = await _gh_read(
         [
             "issue",
             "list",
@@ -409,7 +463,7 @@ async def get_pull(
 ) -> PullDetailResponse:
     """Um PR por inteiro: corpo, comentários, commits, arquivos e checks."""
     user_id = _require_user(request)
-    result = await _gh_run(
+    result = await _gh_read(
         ["pr", "view", str(number), "--json", _PR_DETAIL_FIELDS],
         cwd=_workspace_cwd(workspace_id),
         user_id=user_id,
@@ -434,7 +488,7 @@ async def get_issue(
 ) -> IssueDetailResponse:
     """Uma issue por inteiro: corpo, rótulos, responsáveis e comentários."""
     user_id = _require_user(request)
-    result = await _gh_run(
+    result = await _gh_read(
         ["issue", "view", str(number), "--json", _ISSUE_DETAIL_FIELDS],
         cwd=_workspace_cwd(workspace_id),
         user_id=user_id,
@@ -463,3 +517,288 @@ async def get_issue(
         return IssueDetailResponse(status="ok", issue=issue)
     except (ValueError, TypeError):
         return IssueDetailResponse(status="error", message="Resposta inválida do gh.")
+
+
+# ---------------------------------------------------------------------------
+# Actions (somente leitura): runs, jobs, passos, log e workflows
+# ---------------------------------------------------------------------------
+
+_RUN_LIST_FIELDS = (
+    "databaseId,number,displayTitle,workflowName,status,conclusion,event,"
+    "headBranch,headSha,createdAt,updatedAt,startedAt,url,attempt"
+)
+_RUN_DETAIL_FIELDS = _RUN_LIST_FIELDS + ",jobs"
+_RUN_LIMIT = 30
+_MAX_LOG_CHARS = 200_000
+
+# Estados e conclusões que o `gh run list --status` aceita.
+_RUN_STATUSES = frozenset(
+    {
+        "queued",
+        "in_progress",
+        "completed",
+        "waiting",
+        "requested",
+        "pending",
+        "success",
+        "failure",
+        "cancelled",
+        "skipped",
+        "timed_out",
+        "neutral",
+        "stale",
+        "action_required",
+        "startup_failure",
+    }
+)
+# Branch e workflow vão como argumento: nunca começam com "-" (opção) e só
+# usam caracteres comuns de nomes de branch e de arquivo de workflow.
+_REF_PATTERN = r"^[A-Za-z0-9_][A-Za-z0-9_./ @+-]{0,199}$"
+
+
+class RunSummary(BaseModel):
+    id: int
+    number: int = 0
+    title: str = ""
+    workflow: str = ""
+    status: str = ""
+    conclusion: str = ""
+    event: str = ""
+    branch: str = ""
+    sha: str = ""
+    created_at: str = ""
+    updated_at: str = ""
+    started_at: str = ""
+    url: str = ""
+    attempt: int = 1
+
+
+class RunStep(BaseModel):
+    number: int = 0
+    name: str = ""
+    status: str = ""
+    conclusion: str = ""
+    started_at: str = ""
+    completed_at: str = ""
+
+
+class RunJob(BaseModel):
+    id: int
+    name: str = ""
+    status: str = ""
+    conclusion: str = ""
+    started_at: str = ""
+    completed_at: str = ""
+    url: str = ""
+    steps: list[RunStep] = Field(default_factory=list)
+
+
+class RunDetail(RunSummary):
+    jobs: list[RunJob] = Field(default_factory=list)
+
+
+class Workflow(BaseModel):
+    id: int
+    name: str
+    state: str = ""
+
+
+class RunListResponse(BaseModel):
+    status: Literal["ok", "unavailable", "error"]
+    message: str = ""
+    runs: list[RunSummary] = Field(default_factory=list)
+
+
+class RunDetailResponse(BaseModel):
+    status: Literal["ok", "unavailable", "error"]
+    message: str = ""
+    run: RunDetail | None = None
+
+
+class WorkflowListResponse(BaseModel):
+    status: Literal["ok", "unavailable", "error"]
+    message: str = ""
+    workflows: list[Workflow] = Field(default_factory=list)
+
+
+class JobLogResponse(BaseModel):
+    status: Literal["ok", "unavailable", "error"]
+    message: str = ""
+    log: str = ""
+    truncated: bool = False
+
+
+def _int(value: object, default: int = 0) -> int:
+    return value if isinstance(value, int) and not isinstance(value, bool) else default
+
+
+def _run_summary(item: dict) -> RunSummary:
+    return RunSummary(
+        id=int(item["databaseId"]),
+        number=_int(item.get("number")),
+        title=str(item.get("displayTitle", "")),
+        workflow=str(item.get("workflowName", "")),
+        status=str(item.get("status", "")),
+        conclusion=str(item.get("conclusion") or ""),
+        event=str(item.get("event", "")),
+        branch=str(item.get("headBranch", "")),
+        sha=str(item.get("headSha", "")),
+        created_at=str(item.get("createdAt", "")),
+        updated_at=str(item.get("updatedAt", "")),
+        started_at=str(item.get("startedAt", "")),
+        url=str(item.get("url", "")),
+        attempt=max(1, _int(item.get("attempt"), 1)),
+    )
+
+
+def _run_job(item: dict) -> RunJob:
+    steps = [
+        RunStep(
+            number=_int(step.get("number")),
+            name=str(step.get("name", "")),
+            status=str(step.get("status", "")),
+            conclusion=str(step.get("conclusion") or ""),
+            started_at=str(step.get("startedAt") or ""),
+            completed_at=str(step.get("completedAt") or ""),
+        )
+        for step in item.get("steps") or []
+        if isinstance(step, dict)
+    ]
+    return RunJob(
+        id=int(item["databaseId"]),
+        name=str(item.get("name", "")),
+        status=str(item.get("status", "")),
+        conclusion=str(item.get("conclusion") or ""),
+        started_at=str(item.get("startedAt") or ""),
+        completed_at=str(item.get("completedAt") or ""),
+        url=str(item.get("url", "")),
+        steps=steps,
+    )
+
+
+@router.get("/runs", response_model=RunListResponse)
+async def list_runs(
+    request: Request,
+    status: Annotated[str | None, Query()] = None,
+    branch: Annotated[str | None, Query(pattern=_REF_PATTERN)] = None,
+    workflow: Annotated[str | None, Query(pattern=_REF_PATTERN)] = None,
+    workspace_id: str | None = None,
+) -> RunListResponse:
+    """Runs do GitHub Actions do repositório, com filtros opcionais."""
+    user_id = _require_user(request)
+    if status is not None and status not in _RUN_STATUSES:
+        raise HTTPException(status_code=422, detail="Estado de run inválido.")
+    args = ["run", "list", "--limit", str(_RUN_LIMIT), "--json", _RUN_LIST_FIELDS]
+    if status:
+        args += ["--status", status]
+    if branch:
+        args += ["--branch", branch]
+    if workflow:
+        args += ["--workflow", workflow]
+    result = await _gh_read(args, cwd=_workspace_cwd(workspace_id), user_id=user_id)
+    if result["status"] != "ok":
+        failure, message = _failure(result)
+        return RunListResponse(status=failure, message=message)
+    try:
+        raw = json.loads(result["output"])
+        if not isinstance(raw, list):
+            raise ValueError("lista esperada")
+        runs = [
+            _run_summary(item)
+            for item in raw
+            if isinstance(item, dict) and "databaseId" in item
+        ]
+        return RunListResponse(status="ok", runs=runs)
+    except (ValueError, TypeError):
+        return RunListResponse(status="error", message="Resposta inválida do gh.")
+
+
+@router.get("/runs/{run_id}", response_model=RunDetailResponse)
+async def get_run(
+    request: Request,
+    run_id: Annotated[int, Path(ge=1)],
+    workspace_id: str | None = None,
+) -> RunDetailResponse:
+    """Um run por inteiro: metadados, jobs e passos."""
+    user_id = _require_user(request)
+    result = await _gh_read(
+        ["run", "view", str(run_id), "--json", _RUN_DETAIL_FIELDS],
+        cwd=_workspace_cwd(workspace_id),
+        user_id=user_id,
+    )
+    if result["status"] != "ok":
+        failure, message = _failure(result)
+        return RunDetailResponse(status=failure, message=message)
+    try:
+        raw = json.loads(result["output"])
+        if not isinstance(raw, dict) or "databaseId" not in raw:
+            raise ValueError("sem id")
+        jobs = [
+            _run_job(job)
+            for job in raw.get("jobs") or []
+            if isinstance(job, dict) and "databaseId" in job
+        ]
+        run = RunDetail(**_run_summary(raw).model_dump(), jobs=jobs)
+        return RunDetailResponse(status="ok", run=run)
+    except (ValueError, TypeError):
+        return RunDetailResponse(status="error", message="Resposta inválida do gh.")
+
+
+@router.get("/runs/{run_id}/jobs/{job_id}/log", response_model=JobLogResponse)
+async def get_job_log(
+    request: Request,
+    run_id: Annotated[int, Path(ge=1)],
+    job_id: Annotated[int, Path(ge=1)],
+    workspace_id: str | None = None,
+) -> JobLogResponse:
+    """Log de um job (só existe depois de o job terminar), limitado em tamanho."""
+    user_id = _require_user(request)
+    result = await _gh_read(
+        ["run", "view", str(run_id), "--job", str(job_id), "--log"],
+        cwd=_workspace_cwd(workspace_id),
+        user_id=user_id,
+    )
+    if result["status"] != "ok":
+        failure, message = _failure(result)
+        return JobLogResponse(status=failure, message=message)
+    text = str(result.get("output", ""))
+    truncated = len(text) > _MAX_LOG_CHARS
+    # Mantém o fim do log, onde costuma estar a falha.
+    return JobLogResponse(
+        status="ok",
+        log=text[-_MAX_LOG_CHARS:] if truncated else text,
+        truncated=truncated,
+    )
+
+
+@router.get("/workflows", response_model=WorkflowListResponse)
+async def list_workflows(
+    request: Request,
+    workspace_id: str | None = None,
+) -> WorkflowListResponse:
+    """Workflows do repositório, para o filtro da aba Actions."""
+    user_id = _require_user(request)
+    result = await _gh_read(
+        ["workflow", "list", "--json", "id,name,state"],
+        cwd=_workspace_cwd(workspace_id),
+        user_id=user_id,
+    )
+    if result["status"] != "ok":
+        failure, message = _failure(result)
+        return WorkflowListResponse(status=failure, message=message)
+    try:
+        raw = json.loads(result["output"])
+        if not isinstance(raw, list):
+            raise ValueError("lista esperada")
+        workflows = [
+            Workflow(
+                id=int(item["id"]),
+                name=str(item.get("name", "")),
+                state=str(item.get("state", "")),
+            )
+            for item in raw
+            if isinstance(item, dict) and "id" in item
+        ]
+        return WorkflowListResponse(status="ok", workflows=workflows)
+    except (ValueError, TypeError):
+        return WorkflowListResponse(status="error", message="Resposta inválida do gh.")

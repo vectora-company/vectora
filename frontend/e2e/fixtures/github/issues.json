@@ -1,0 +1,16 @@
+{
+  "status": "ok",
+  "message": "",
+  "issues": [
+    {
+      "number": 802,
+      "title": "feat: aba Actions na workbench Git, somente leitura",
+      "state": "OPEN",
+      "author": "brunosrz",
+      "labels": ["enhancement", "backend", "frontend", "git-workbench"],
+      "updated_at": "2026-11-20T02:20:07Z",
+      "url": "https://github.com/vectora-company/vectora/issues/802",
+      "comments": 1
+    }
+  ]
+}

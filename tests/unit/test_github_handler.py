@@ -44,7 +44,9 @@ def test_checks_summary_counts_each_outcome() -> None:
     assert github._checks_summary(None).passed == 0
 
 
-async def test_pulls_are_listed_with_checks_and_review(monkeypatch) -> None:
+async def test_pulls_are_listed_with_review_and_without_checks_payload(
+    monkeypatch,
+) -> None:
     payload = [
         {
             "number": 7,
@@ -70,7 +72,9 @@ async def test_pulls_are_listed_with_checks_and_review(monkeypatch) -> None:
     pull = response.pulls[0]
     assert (pull.number, pull.author, pull.is_draft) == (7, "ana", True)
     assert pull.review_decision == "APPROVED"
-    assert pull.checks.passed == 1
+    assert pull.checks.passed == 0
+    # A lista não pede o rollup de checks (payload pesado); só o detalhe pede.
+    assert "statusCheckRollup" not in calls[0][0][calls[0][0].index("--json") + 1]
     assert calls[0][0][:4] == ["pr", "list", "--state", "all"]
     assert calls[0][1] == "alice"
 
@@ -289,3 +293,72 @@ def test_comment_list_is_capped() -> None:
     many = [{"author": {"login": "a"}, "body": str(i)} for i in range(500)]
 
     assert len(github._comments(many)) == 100
+
+
+# --- cache curto das leituras do gh -----------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_leitura_repetida_usa_o_cache_e_chama_o_gh_uma_vez(monkeypatch):
+    calls = _fake_gh(monkeypatch, {"status": "ok", "output": "[]"})
+
+    first = await github._gh_read(["pr", "list"], cwd="/w", user_id="u1")
+    second = await github._gh_read(["pr", "list"], cwd="/w", user_id="u1")
+
+    assert first == second
+    assert len(calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_cache_nao_mistura_usuarios_nem_argumentos(monkeypatch):
+    calls = _fake_gh(monkeypatch, {"status": "ok", "output": "[]"})
+
+    await github._gh_read(["pr", "list"], cwd="/w", user_id="u1")
+    await github._gh_read(["pr", "list"], cwd="/w", user_id="u2")
+    await github._gh_read(["issue", "list"], cwd="/w", user_id="u1")
+
+    assert len(calls) == 3
+
+
+@pytest.mark.asyncio
+async def test_erro_nao_fica_em_cache(monkeypatch):
+    calls = _fake_gh(monkeypatch, {"status": "error", "message": "boom"})
+
+    await github._gh_read(["pr", "list"], cwd="/w", user_id="u1")
+    await github._gh_read(["pr", "list"], cwd="/w", user_id="u1")
+
+    assert len(calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_chamadas_simultaneas_iguais_compartilham_uma_execucao(monkeypatch):
+    import asyncio
+
+    started = 0
+
+    async def slow(args, cwd=None, input_data=None, user_id=None):
+        nonlocal started
+        started += 1
+        await asyncio.sleep(0.01)
+        return {"status": "ok", "output": "[]"}
+
+    monkeypatch.setattr(github, "_gh_run", slow)
+
+    await asyncio.gather(
+        *(github._gh_read(["pr", "list"], cwd="/w", user_id="u1") for _ in range(5))
+    )
+
+    assert started == 1
+
+
+@pytest.mark.asyncio
+async def test_cache_expira_depois_do_ttl(monkeypatch):
+    calls = _fake_gh(monkeypatch, {"status": "ok", "output": "[]"})
+    clock = [100.0]
+    monkeypatch.setattr(github.time, "monotonic", lambda: clock[0])
+
+    await github._gh_read(["pr", "list"], cwd="/w", user_id="u1")
+    clock[0] += github._GH_CACHE_TTL_S + 1
+    await github._gh_read(["pr", "list"], cwd="/w", user_id="u1")
+
+    assert len(calls) == 2
