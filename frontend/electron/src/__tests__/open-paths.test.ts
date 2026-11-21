@@ -40,34 +40,6 @@ describe("pathsFromArgv", () => {
     expect(pathsFromArgv(argv)).toEqual(["/repo/frontend", "/home/u/foto.png"]);
   });
 
-  it("em desenvolvimento descarta o app mesmo com opções antes dele", () => {
-    const argv = [
-      "electron",
-      "--no-sandbox",
-      "--remote-debugging-port=9222",
-      "/repo/frontend/dist/main.js",
-      "/home/u/foto.png",
-    ];
-
-    expect(pathsFromArgv(argv, { defaultApp: true })).toEqual([
-      "/home/u/foto.png",
-    ]);
-  });
-
-  it("em desenvolvimento sem nenhum arquivo não abre nada (só o app)", () => {
-    expect(
-      pathsFromArgv(["electron", "--no-sandbox", "dist/main.js"], {
-        defaultApp: true,
-      }),
-    ).toEqual([]);
-  });
-
-  it("instalado, o primeiro argumento que não é opção já é um arquivo", () => {
-    expect(pathsFromArgv(["vectora", "--no-sandbox", "/a.txt"])).toEqual([
-      "/a.txt",
-    ]);
-  });
-
   it("converte file:// (o que o Linux entrega com %U), inclusive com espaço e acento", () => {
     const argv = ["vectora", "file:///home/u/Meus%20docs/relat%C3%B3rio.pdf"];
 

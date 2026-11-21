@@ -40,21 +40,6 @@ def _electron_dir() -> Path:
     return _frontend_dir() / "electron"
 
 
-def resolve_linux_ozone_argument(requested: str | None) -> str | None:
-    """Resolve o backend de janela do Chromium usado pelo Electron no Linux."""
-    platform = (requested or "x11").strip().lower()
-    if platform == "cosmic":
-        platform = "wayland"
-    if platform == "auto":
-        return None
-    if platform not in {"wayland", "x11"}:
-        raise ValueError(
-            "VECTORA_OZONE_PLATFORM inválido: "
-            f"{platform}. Use auto, x11, wayland ou cosmic."
-        )
-    return f"--ozone-platform={platform}"
-
-
 def resolve_electron_launch() -> tuple[str, list[str]] | None:
     """Retorna ``(executável, [main.js])`` prontos para
     ``asyncio.create_subprocess_exec``, ou ``None`` se o build de dev do
@@ -68,22 +53,11 @@ def resolve_electron_launch() -> tuple[str, list[str]] | None:
     sem `path.txt`/`dist/` — o `scons frontend` não detecta isso).
     """
     main_js = _electron_dir() / "dist" / "main.js"
-    main_exists = main_js.is_file()
-    source_dir = _electron_dir() / "src"
-    source_files = list(source_dir.rglob("*.ts")) if source_dir.is_dir() else []
-    main_is_stale = (
-        main_exists
-        and bool(source_files)
-        and main_js.stat().st_mtime_ns
-        < max(source.stat().st_mtime_ns for source in source_files)
-    )
-    if not main_exists or main_is_stale:
-        reason = "ausente" if not main_exists else "desatualizado em relação aos fontes"
+    if not main_js.is_file():
         logger.warning(
-            "electron_launcher: %s %s — rode `pnpm --dir frontend "
+            "electron_launcher: %s ausente — rode `pnpm --dir frontend "
             "run electron:build` (ou `scons frontend`)",
             main_js,
-            reason,
         )
         return None
 
