@@ -31,6 +31,7 @@ import {
   apiCreateWorktree,
   fetchPullRequests,
   apiCreatePR,
+  fetchGitCommitSuggestion,
 } from "../api";
 
 function jsonResponse(body: unknown, ok = true, status = 200) {
@@ -444,5 +445,40 @@ describe("repositórios do workspace", () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({}, false, 500));
 
     await expect(selectGitRepo("ws", "a")).rejects.toThrow("HTTP 500");
+  });
+});
+
+describe("api — sugestão de commit", () => {
+  it("envia os arquivos escolhidos por POST para o servidor analisar só eles", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ title: "feat: x", description: "d" }),
+    );
+
+    const result = await fetchGitCommitSuggestion("ws1", ["a.ts", "b/c.ts"]);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/workspaces/ws1/git/commit/suggestion",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ paths: ["a.ts", "b/c.ts"] }),
+      }),
+    );
+    expect(result?.title).toBe("feat: x");
+  });
+
+  it("sem escolha envia lista vazia (todas as alterações)", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ title: "t", description: "" }),
+    );
+
+    await fetchGitCommitSuggestion("ws1");
+
+    expect(JSON.parse(fetchMock.mock.calls[0]![1].body)).toEqual({ paths: [] });
+  });
+
+  it("devolve null quando o servidor falha", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({}, false, 500));
+
+    expect(await fetchGitCommitSuggestion("ws1", ["a.ts"])).toBeNull();
   });
 });

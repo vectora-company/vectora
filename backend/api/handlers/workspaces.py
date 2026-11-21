@@ -2689,33 +2689,56 @@ class GitCommitSuggestion(BaseModel):
     description: str
 
 
-def _git_commit_suggestion_sync(workspace_id: str) -> GitCommitSuggestion:
-    """Build a commit suggestion without blocking the FastAPI event loop."""
+class GitCommitSuggestionRequest(BaseModel):
+    """Arquivos a considerar; vazio significa todas as alterações."""
+
+    paths: list[str] = Field(default_factory=list, max_length=500)
+
+
+def _git_commit_context_sync(workspace_id: str, paths: list[str] | None) -> Any | None:
+    """Lê as alterações (staged, unstaged e novas) sem bloquear o event loop."""
+    from backend.services.commit_message import (
+        ChangeContext,
+        collect_change_context,
+    )
+
     repo = _open_workspace_repo(workspace_id)
     if repo is None:
+        return None
+    return collect_change_context(repo, paths)
+
+
+def _git_commit_suggestion_sync(
+    workspace_id: str, paths: list[str] | None = None
+) -> GitCommitSuggestion:
+    """Sugestão sem modelo, baseada só no diff (usada onde não há `await`)."""
+    from backend.services.commit_message import heuristic_suggestion
+
+    ctx = _git_commit_context_sync(workspace_id, paths)
+    if ctx is None:
         return GitCommitSuggestion(title="", description="")
-    staged_paths = (
-        {
-            path
-            for item in repo.index.diff("HEAD")
-            for path in (item.a_path, item.b_path)
-            if path
-        }
-        if repo.head.is_valid()
-        else {path for path, _stage in repo.index.entries}
-    )
-    unstaged = repo.index.diff(None)
-    paths = staged_paths | {
-        path for item in unstaged for path in (item.a_path, item.b_path) if path
-    }
-    paths.update(path for path in repo.untracked_files if path)
-    count = len(paths)
-    if count == 0:
-        return GitCommitSuggestion(title="", description="")
-    noun = "arquivo" if count == 1 else "arquivos"
+    suggestion = heuristic_suggestion(ctx)
     return GitCommitSuggestion(
-        title=f"Atualiza {count} {noun}",
-        description="Alterações agrupadas a partir do estado staged atual.",
+        title=suggestion.title, description=suggestion.description
+    )
+
+
+async def suggest_commit_message(
+    workspace_id: str, paths: list[str] | None = None
+) -> GitCommitSuggestion:
+    """Título e descrição a partir do diff dos arquivos escolhidos.
+
+    Usa o modelo configurado com o diff real e o estilo dos commits recentes;
+    sem modelo (ou com resposta inválida) cai numa heurística do próprio diff.
+    """
+    from backend.services.commit_message import generate_commit_suggestion
+
+    ctx = await asyncio.to_thread(_git_commit_context_sync, workspace_id, paths)
+    if ctx is None:
+        return GitCommitSuggestion(title="", description="")
+    suggestion = await generate_commit_suggestion(ctx)
+    return GitCommitSuggestion(
+        title=suggestion.title, description=suggestion.description
     )
 
 
@@ -2723,13 +2746,22 @@ def _git_commit_suggestion_sync(workspace_id: str) -> GitCommitSuggestion:
     "/git/commit/suggestion", response_model=GitCommitSuggestion
 )
 async def git_commit_suggestion(workspace_id: str) -> GitCommitSuggestion:
-    """Gera um rascunho editável a partir das alterações do workspace.
+    """Rascunho editável a partir de todas as alterações do workspace.
 
-    O compositor de commit exibe alterações staged e unstaged na mesma lista.
-    Portanto, a sugestão precisa considerar ambos os estados (e também arquivos
-    não rastreados) para funcionar antes de o usuário fazer o stage manual.
+    O compositor de commit exibe alterações staged e unstaged na mesma lista;
+    a sugestão considera ambos (e os arquivos não rastreados).
     """
-    return await asyncio.to_thread(_git_commit_suggestion_sync, workspace_id)
+    return await suggest_commit_message(workspace_id)
+
+
+@workspace_scoped_router.post(
+    "/git/commit/suggestion", response_model=GitCommitSuggestion
+)
+async def git_commit_suggestion_for_paths(
+    workspace_id: str, body: GitCommitSuggestionRequest
+) -> GitCommitSuggestion:
+    """Igual ao GET, mas só dos arquivos escolhidos no compositor."""
+    return await suggest_commit_message(workspace_id, body.paths or None)
 
 
 class GitSquashRequest(BaseModel):

@@ -110,8 +110,34 @@ async def test_commit_suggestion_uses_staged_files(
 
     result = await git_commit_suggestion("ws-git")
 
-    assert result.title == "Atualiza 2 arquivos"
-    assert result.description == "Alterações agrupadas a partir do estado staged atual."
+    # Sem modelo configurado, a sugestão vem do próprio diff (nada de texto fixo).
+    assert "b.txt" in result.title
+    assert "Atualiza 2 arquivos" not in result.title
+    assert "- b.txt" in result.description
+    assert "- c.txt" in result.description
+
+
+@pytest.mark.asyncio
+async def test_commit_suggestion_only_for_chosen_paths(
+    ws_repo: tuple[git.Repo, Path],
+) -> None:
+    from backend.api.handlers.workspaces import (
+        GitCommitSuggestionRequest,
+        git_commit_suggestion_for_paths,
+    )
+
+    _repo, tmp_path = ws_repo
+    (tmp_path / "b.txt").write_text("b\n")
+    (tmp_path / "c.txt").write_text("c\n")
+    _repo.index.add(["b.txt", "c.txt"])
+
+    result = await git_commit_suggestion_for_paths(
+        "ws-git", GitCommitSuggestionRequest(paths=["c.txt"])
+    )
+
+    assert "c.txt" in result.description
+    assert "b.txt" not in result.description
+    assert "b.txt" not in result.title
 
 
 @pytest.mark.asyncio

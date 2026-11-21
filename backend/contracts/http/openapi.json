@@ -4240,6 +4240,21 @@
         "title": "GitCommitSuggestion",
         "type": "object"
       },
+      "GitCommitSuggestionRequest": {
+        "description": "Arquivos a considerar; vazio significa todas as alterações.",
+        "properties": {
+          "paths": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 500,
+            "title": "Paths",
+            "type": "array"
+          }
+        },
+        "title": "GitCommitSuggestionRequest",
+        "type": "object"
+      },
       "GitInitRequest": {
         "properties": {
           "workspace_id": {
@@ -30970,7 +30985,7 @@
     },
     "/workspaces/{workspace_id}/git/commit/suggestion": {
       "get": {
-        "description": "Gera um rascunho editável a partir das alterações do workspace.\n\nO compositor de commit exibe alterações staged e unstaged na mesma lista.\nPortanto, a sugestão precisa considerar ambos os estados (e também arquivos\nnão rastreados) para funcionar antes de o usuário fazer o stage manual.",
+        "description": "Rascunho editável a partir de todas as alterações do workspace.\n\nO compositor de commit exibe alterações staged e unstaged na mesma lista;\na sugestão considera ambos (e os arquivos não rastreados).",
         "operationId": "git_commit_suggestion_workspaces__workspace_id__git_commit_suggestion_get",
         "parameters": [
           {
@@ -31006,6 +31021,57 @@
           }
         },
         "summary": "Git Commit Suggestion",
+        "tags": [
+          "workspaces-view"
+        ]
+      },
+      "post": {
+        "description": "Igual ao GET, mas só dos arquivos escolhidos no compositor.",
+        "operationId": "git_commit_suggestion_for_paths_workspaces__workspace_id__git_commit_suggestion_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GitCommitSuggestionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GitCommitSuggestion"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Git Commit Suggestion For Paths",
         "tags": [
           "workspaces-view"
         ]
