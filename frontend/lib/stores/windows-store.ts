@@ -33,7 +33,13 @@ export interface FileWindowState {
 }
 
 export type CanvasDocumentKind =
-  "file" | "file-diff" | "commit-details" | "plan" | "mcp-preview";
+  | "file"
+  | "file-diff"
+  | "commit-details"
+  | "plan"
+  | "mcp-preview"
+  | "pull-request"
+  | "issue";
 
 export interface McpCanvasPreviewData {
   id: string;
@@ -61,6 +67,8 @@ export interface CanvasDocumentDescriptor {
   title: string;
   path?: string;
   commitSha?: string;
+  /** Número do PR ou da issue (kinds `pull-request` e `issue`); o conteúdo é lido ao abrir. */
+  githubNumber?: number;
   editedFile?: EditedFile;
   commitDetails?: GitCommitDetailsState;
   plan?: { item: PlanItem; content: string | null; error?: string };
@@ -158,6 +166,13 @@ function sanitizePersistedCanvas(state: PersistedWindowsState) {
       if (candidate.kind === "file" || candidate.kind === "file-diff") {
         return (
           typeof candidate.path === "string" && candidate.path.trim().length > 0
+        );
+      }
+      if (candidate.kind === "pull-request" || candidate.kind === "issue") {
+        return (
+          typeof candidate.githubNumber === "number" &&
+          Number.isInteger(candidate.githubNumber) &&
+          candidate.githubNumber > 0
         );
       }
       return (

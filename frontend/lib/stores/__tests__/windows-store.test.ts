@@ -752,3 +752,86 @@ describe("windows-store — documentos minimizados na dock", () => {
     expect(useWindowsStore.getState().minimizedCanvasDocumentIds).toEqual([]);
   });
 });
+
+const migrateWindows = () =>
+  useWindowsStore.persist.getOptions().migrate as (
+    state: unknown,
+    version: number,
+  ) => { canvasDocuments: Array<{ id: string }> };
+
+const githubDoc = (id: string, kind: string, githubNumber?: unknown) => ({
+  id,
+  kind,
+  workspaceId: "ws",
+  title: "x",
+  githubNumber,
+});
+
+describe("windows-store — documents de PR e issue", () => {
+  it("abrir um PR ou uma issue guarda só o número, e o document fica ativo", () => {
+    const store = useWindowsStore.getState();
+    store.openCanvasDocument({
+      id: "pull-request:ws:7",
+      kind: "pull-request",
+      workspaceId: "ws",
+      title: "#7 feat",
+      githubNumber: 7,
+    });
+    store.openCanvasDocument({
+      id: "issue:ws:3",
+      kind: "issue",
+      workspaceId: "ws",
+      title: "#3 bug",
+      githubNumber: 3,
+    });
+
+    const state = useWindowsStore.getState();
+    expect(state.canvasDocuments.map((d) => d.githubNumber)).toEqual([7, 3]);
+    expect(state.activeCanvasDocumentId).toBe("issue:ws:3");
+  });
+
+  it("restaura documents de PR e issue válidos ao recarregar", () => {
+    const restored = migrateWindows()(
+      {
+        canvasDocuments: [
+          githubDoc("pull-request:ws:7", "pull-request", 7),
+          githubDoc("issue:ws:3", "issue", 3),
+        ],
+      },
+      1,
+    );
+
+    expect(restored.canvasDocuments.map((d) => d.id)).toEqual([
+      "pull-request:ws:7",
+      "issue:ws:3",
+    ]);
+  });
+
+  it.each([
+    ["sem número", undefined],
+    ["número zero", 0],
+    ["número negativo", -2],
+    ["número fracionário", 1.5],
+    ["número em texto", "7"],
+  ])("descarta documents de PR sem número válido (%s)", (_name, number) => {
+    const restored = migrateWindows()(
+      {
+        canvasDocuments: [
+          githubDoc("pull-request:ws:x", "pull-request", number),
+        ],
+      },
+      1,
+    );
+
+    expect(restored.canvasDocuments).toEqual([]);
+  });
+
+  it("documents de kind desconhecido continuam sendo descartados", () => {
+    const restored = migrateWindows()(
+      { canvasDocuments: [githubDoc("a", "inventado", 1)] },
+      1,
+    );
+
+    expect(restored.canvasDocuments).toEqual([]);
+  });
+});

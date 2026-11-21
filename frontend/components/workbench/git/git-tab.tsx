@@ -39,7 +39,7 @@ import { ChangesView } from "./changes-view";
 import { HistoryView, type GitCommitDetailsState } from "./history-view";
 import { CompareView } from "./compare-view";
 import { OverflowTabs } from "@/components/workbench/overflow-tabs";
-import { GithubView } from "./github-view";
+import { GithubView, type GithubItemRef } from "./github-view";
 import { StashModal } from "./stash-modal";
 import { WorktreesModal } from "./worktrees-modal";
 import { m } from "@/lib/paraglide/messages";
@@ -178,9 +178,11 @@ function PrDialog({
 export function GitTab({
   threadId: _threadId,
   onOpenCommitDetails,
+  onOpenGithubItem,
 }: {
   threadId: string;
   onOpenCommitDetails?: (details: GitCommitDetailsState) => void;
+  onOpenGithubItem?: (item: GithubItemRef) => void;
 }) {
   const workspace = useWorkspacesStore((s) => s.getActive());
   const wsId = workspace?.id ?? "";
@@ -426,6 +428,7 @@ export function GitTab({
             key={`${wsId}:${view}`}
             workspaceId={wsId}
             kind={view === "prs" ? "pulls" : "issues"}
+            onOpenItem={onOpenGithubItem}
           />
         ) : (
           <HistoryView

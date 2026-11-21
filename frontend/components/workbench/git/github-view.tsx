@@ -43,6 +43,15 @@ export interface GithubIssue {
 }
 
 type Kind = "pulls" | "issues";
+
+/** O que a lista entrega ao abrir um item como document. */
+export interface GithubItemRef {
+  kind: "pull-request" | "issue";
+  number: number;
+  title: string;
+}
+
+type OpenItem = (item: GithubItemRef) => void;
 type StateFilter = "open" | "closed" | "all";
 
 type Loaded =
@@ -86,19 +95,67 @@ function ChecksChip({ checks }: { checks: GithubPull["checks"] }) {
   );
 }
 
-function PullRow({ pull }: { pull: GithubPull }) {
+/** Título da linha: abre o document na workbench; sem o handler, vira link para o GitHub. */
+function ItemTitle({
+  number,
+  title,
+  url,
+  onOpen,
+}: {
+  number: number;
+  title: string;
+  url: string;
+  onOpen?: () => void;
+}) {
+  const label = (
+    <>
+      <span className="text-muted-foreground">#{number}</span> {title}
+    </>
+  );
+  const className =
+    "block text-left text-xs font-medium text-foreground hover:underline";
+  if (!onOpen)
+    return (
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={className}
+      >
+        {label}
+      </a>
+    );
+  return (
+    <button
+      type="button"
+      data-testid={`github-open-${number}`}
+      onClick={onOpen}
+      className={`${className} w-full`}
+    >
+      {label}
+    </button>
+  );
+}
+
+function PullRow({ pull, onOpen }: { pull: GithubPull; onOpen?: OpenItem }) {
   const review = reviewLabel(pull.review_decision);
   return (
     <li className="border-b border-border/40 px-3 py-2">
-      <a
-        href={pull.url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="block text-xs font-medium text-foreground hover:underline"
-      >
-        <span className="text-muted-foreground">#{pull.number}</span>{" "}
-        {pull.title}
-      </a>
+      <ItemTitle
+        number={pull.number}
+        title={pull.title}
+        url={pull.url}
+        onOpen={
+          onOpen
+            ? () =>
+                onOpen({
+                  kind: "pull-request",
+                  number: pull.number,
+                  title: pull.title,
+                })
+            : undefined
+        }
+      />
       <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground">
         <span>{pull.author}</span>
         <span className="font-mono">
@@ -112,18 +169,30 @@ function PullRow({ pull }: { pull: GithubPull }) {
   );
 }
 
-function IssueRow({ issue }: { issue: GithubIssue }) {
+function IssueRow({
+  issue,
+  onOpen,
+}: {
+  issue: GithubIssue;
+  onOpen?: OpenItem;
+}) {
   return (
     <li className="border-b border-border/40 px-3 py-2">
-      <a
-        href={issue.url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="block text-xs font-medium text-foreground hover:underline"
-      >
-        <span className="text-muted-foreground">#{issue.number}</span>{" "}
-        {issue.title}
-      </a>
+      <ItemTitle
+        number={issue.number}
+        title={issue.title}
+        url={issue.url}
+        onOpen={
+          onOpen
+            ? () =>
+                onOpen({
+                  kind: "issue",
+                  number: issue.number,
+                  title: issue.title,
+                })
+            : undefined
+        }
+      />
       <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground">
         <span>{issue.author}</span>
         {issue.labels.map((label) => (
@@ -156,7 +225,15 @@ export function filterByTitle<T extends { number: number; title: string }>(
   );
 }
 
-function PullList({ pulls, query }: { pulls: GithubPull[]; query: string }) {
+function PullList({
+  pulls,
+  query,
+  onOpen,
+}: {
+  pulls: GithubPull[];
+  query: string;
+  onOpen?: OpenItem;
+}) {
   const shown = filterByTitle(pulls, query);
   if (pulls.length === 0)
     return (
@@ -173,7 +250,7 @@ function PullList({ pulls, query }: { pulls: GithubPull[]; query: string }) {
   return (
     <ul>
       {shown.map((pull) => (
-        <PullRow key={pull.number} pull={pull} />
+        <PullRow key={pull.number} pull={pull} onOpen={onOpen} />
       ))}
     </ul>
   );
@@ -182,9 +259,11 @@ function PullList({ pulls, query }: { pulls: GithubPull[]; query: string }) {
 function IssueList({
   issues,
   query,
+  onOpen,
 }: {
   issues: GithubIssue[];
   query: string;
+  onOpen?: OpenItem;
 }) {
   const shown = filterByTitle(issues, query);
   if (issues.length === 0)
@@ -202,7 +281,7 @@ function IssueList({
   return (
     <ul>
       {shown.map((issue) => (
-        <IssueRow key={issue.number} issue={issue} />
+        <IssueRow key={issue.number} issue={issue} onOpen={onOpen} />
       ))}
     </ul>
   );
@@ -211,10 +290,13 @@ function IssueList({
 export function GithubView({
   workspaceId,
   kind,
+  onOpenItem,
 }: {
   workspaceId: string;
   /** Qual lista mostrar: cada uma é uma aba própria da workbench Git. */
   kind: Kind;
+  /** Clicar num item o abre como document (como o detalhe de um commit). */
+  onOpenItem?: OpenItem;
 }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<StateFilter>("open");
@@ -278,18 +360,6 @@ export function GithubView({
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="github-view">
       <WorkbenchToolbar className="flex-wrap">
-        <select
-          value={filter}
-          onChange={(e) => setFilter(e.target.value as StateFilter)}
-          aria-label={m.workbench_github_state()}
-          className="h-6 rounded border border-border bg-background px-1.5 text-xs text-muted-foreground"
-        >
-          {STATE_FILTERS.map((option) => (
-            <option key={option} value={option}>
-              {stateLabel(option)}
-            </option>
-          ))}
-        </select>
         <label className="relative flex min-w-24 flex-1 items-center">
           <Search className="pointer-events-none absolute left-1.5 h-3 w-3 text-muted-foreground" />
           <input
@@ -302,6 +372,18 @@ export function GithubView({
             className="h-6 w-full rounded border border-border bg-background pr-1.5 pl-5 text-xs outline-none focus:border-primary"
           />
         </label>
+        <select
+          value={filter}
+          onChange={(e) => setFilter(e.target.value as StateFilter)}
+          aria-label={m.workbench_github_state()}
+          className="h-6 rounded border border-border bg-background px-1.5 text-xs text-muted-foreground"
+        >
+          {STATE_FILTERS.map((option) => (
+            <option key={option} value={option}>
+              {stateLabel(option)}
+            </option>
+          ))}
+        </select>
         <button
           type="button"
           aria-label={m.workbench_github_refresh()}
@@ -331,10 +413,10 @@ export function GithubView({
           </WorkbenchError>
         )}
         {loaded.status === "ok" && kind === "pulls" && (
-          <PullList pulls={loaded.pulls} query={query} />
+          <PullList pulls={loaded.pulls} query={query} onOpen={onOpenItem} />
         )}
         {loaded.status === "ok" && kind === "issues" && (
-          <IssueList issues={loaded.issues} query={query} />
+          <IssueList issues={loaded.issues} query={query} onOpen={onOpenItem} />
         )}
       </div>
     </div>

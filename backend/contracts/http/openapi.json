@@ -4751,6 +4751,32 @@
         "title": "GitSyncRequest",
         "type": "object"
       },
+      "GithubComment": {
+        "properties": {
+          "author": {
+            "default": "",
+            "title": "Author",
+            "type": "string"
+          },
+          "body": {
+            "default": "",
+            "title": "Body",
+            "type": "string"
+          },
+          "created_at": {
+            "default": "",
+            "title": "Created At",
+            "type": "string"
+          },
+          "url": {
+            "default": "",
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "title": "GithubComment",
+        "type": "object"
+      },
       "GitignoreAppendRequest": {
         "description": "Regra literal que será adicionada ao .gitignore do workspace.",
         "properties": {
@@ -5842,6 +5868,114 @@
           "live"
         ],
         "title": "IsolationReportModel",
+        "type": "object"
+      },
+      "IssueDetail": {
+        "description": "Uma issue por inteiro, para abrir como document na workbench Git.",
+        "properties": {
+          "assignees": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Assignees",
+            "type": "array"
+          },
+          "author": {
+            "default": "",
+            "title": "Author",
+            "type": "string"
+          },
+          "body": {
+            "default": "",
+            "title": "Body",
+            "type": "string"
+          },
+          "comments": {
+            "items": {
+              "$ref": "#/components/schemas/GithubComment"
+            },
+            "title": "Comments",
+            "type": "array"
+          },
+          "created_at": {
+            "default": "",
+            "title": "Created At",
+            "type": "string"
+          },
+          "labels": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Labels",
+            "type": "array"
+          },
+          "milestone": {
+            "default": "",
+            "title": "Milestone",
+            "type": "string"
+          },
+          "number": {
+            "title": "Number",
+            "type": "integer"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "default": "",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "url": {
+            "default": "",
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "number",
+          "title",
+          "state"
+        ],
+        "title": "IssueDetail",
+        "type": "object"
+      },
+      "IssueDetailResponse": {
+        "properties": {
+          "issue": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IssueDetail"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "message": {
+            "default": "",
+            "title": "Message",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "IssueDetailResponse",
         "type": "object"
       },
       "IssueListResponse": {
@@ -8107,6 +8241,229 @@
           }
         },
         "title": "PullChecks",
+        "type": "object"
+      },
+      "PullCommit": {
+        "properties": {
+          "author": {
+            "default": "",
+            "title": "Author",
+            "type": "string"
+          },
+          "date": {
+            "default": "",
+            "title": "Date",
+            "type": "string"
+          },
+          "message": {
+            "default": "",
+            "title": "Message",
+            "type": "string"
+          },
+          "sha": {
+            "title": "Sha",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sha"
+        ],
+        "title": "PullCommit",
+        "type": "object"
+      },
+      "PullDetail": {
+        "description": "Um PR por inteiro, para abrir como document na workbench Git.",
+        "properties": {
+          "additions": {
+            "default": 0,
+            "title": "Additions",
+            "type": "integer"
+          },
+          "assignees": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Assignees",
+            "type": "array"
+          },
+          "author": {
+            "default": "",
+            "title": "Author",
+            "type": "string"
+          },
+          "base_ref": {
+            "default": "",
+            "title": "Base Ref",
+            "type": "string"
+          },
+          "body": {
+            "default": "",
+            "title": "Body",
+            "type": "string"
+          },
+          "changed_files": {
+            "default": 0,
+            "title": "Changed Files",
+            "type": "integer"
+          },
+          "checks": {
+            "$ref": "#/components/schemas/PullChecks"
+          },
+          "comments": {
+            "items": {
+              "$ref": "#/components/schemas/GithubComment"
+            },
+            "title": "Comments",
+            "type": "array"
+          },
+          "commits": {
+            "items": {
+              "$ref": "#/components/schemas/PullCommit"
+            },
+            "title": "Commits",
+            "type": "array"
+          },
+          "created_at": {
+            "default": "",
+            "title": "Created At",
+            "type": "string"
+          },
+          "deletions": {
+            "default": 0,
+            "title": "Deletions",
+            "type": "integer"
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/PullFile"
+            },
+            "title": "Files",
+            "type": "array"
+          },
+          "head_ref": {
+            "default": "",
+            "title": "Head Ref",
+            "type": "string"
+          },
+          "is_draft": {
+            "default": false,
+            "title": "Is Draft",
+            "type": "boolean"
+          },
+          "labels": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Labels",
+            "type": "array"
+          },
+          "mergeable": {
+            "default": "",
+            "title": "Mergeable",
+            "type": "string"
+          },
+          "milestone": {
+            "default": "",
+            "title": "Milestone",
+            "type": "string"
+          },
+          "number": {
+            "title": "Number",
+            "type": "integer"
+          },
+          "review_decision": {
+            "default": "",
+            "title": "Review Decision",
+            "type": "string"
+          },
+          "reviewers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reviewers",
+            "type": "array"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "default": "",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "url": {
+            "default": "",
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "number",
+          "title",
+          "state"
+        ],
+        "title": "PullDetail",
+        "type": "object"
+      },
+      "PullDetailResponse": {
+        "properties": {
+          "message": {
+            "default": "",
+            "title": "Message",
+            "type": "string"
+          },
+          "pull": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PullDetail"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "PullDetailResponse",
+        "type": "object"
+      },
+      "PullFile": {
+        "properties": {
+          "additions": {
+            "default": 0,
+            "title": "Additions",
+            "type": "integer"
+          },
+          "deletions": {
+            "default": 0,
+            "title": "Deletions",
+            "type": "integer"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "title": "PullFile",
         "type": "object"
       },
       "PullListResponse": {
@@ -18307,6 +18664,66 @@
         ]
       }
     },
+    "/github/issues/{number}": {
+      "get": {
+        "description": "Uma issue por inteiro: corpo, rótulos, responsáveis e comentários.",
+        "operationId": "get_issue_github_issues__number__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "number",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Number",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Issue",
+        "tags": [
+          "github"
+        ]
+      }
+    },
     "/github/pulls": {
       "get": {
         "description": "Pull requests do repositório do workspace, com o resumo dos checks.",
@@ -18368,6 +18785,66 @@
           }
         },
         "summary": "List Pulls",
+        "tags": [
+          "github"
+        ]
+      }
+    },
+    "/github/pulls/{number}": {
+      "get": {
+        "description": "Um PR por inteiro: corpo, comentários, commits, arquivos e checks.",
+        "operationId": "get_pull_github_pulls__number__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "number",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Number",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PullDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Pull",
         "tags": [
           "github"
         ]

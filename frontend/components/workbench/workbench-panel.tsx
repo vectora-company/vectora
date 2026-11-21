@@ -65,6 +65,7 @@ import { TasksTab } from "./tabs/tasks-tab";
 import { ContextGraphTab } from "./tabs/context-graph-tab";
 import { LibraryTab } from "./tabs/library-tab";
 import type { GitCommitDetailsState } from "./git/history-view";
+import type { GithubItemRef } from "./git/github-view";
 import type { PlanItem } from "@/lib/stores/workbench-store";
 import { m } from "@/lib/paraglide/messages";
 import { mDyn } from "@/lib/i18n-dyn";
@@ -79,6 +80,8 @@ interface WorkbenchPanelProps {
   threadId: string;
   /** Abre os detalhes de um commit no canvas compartilhado. */
   onOpenCommitDetails?: (details: GitCommitDetailsState) => void;
+  /** Abre um PR ou uma issue do GitHub no canvas compartilhado. */
+  onOpenGithubItem?: (item: GithubItemRef) => void;
   onOpenPlanDocument?: (
     item: PlanItem,
     content: string | null,
@@ -345,6 +348,7 @@ export function WorkbenchNavBar({
 export function WorkbenchContent({
   threadId,
   onOpenCommitDetails,
+  onOpenGithubItem,
   onOpenPlanDocument,
   onAddToContext,
   onSendPrompt,
@@ -439,6 +443,7 @@ export function WorkbenchContent({
               <GitTab
                 threadId={threadId}
                 onOpenCommitDetails={onOpenCommitDetails}
+                onOpenGithubItem={onOpenGithubItem}
               />
             )}
             {activeTab === "plan" && (
