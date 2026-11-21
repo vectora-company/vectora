@@ -172,7 +172,7 @@ if (angleOverride) {
 }
 if (process.platform === "linux" && angleOverride !== "gl") {
   app.commandLine.appendSwitch("ignore-gpu-blocklist");
-  app.commandLine.appendSwitch("use-vulkan");
+  // ANGLE usa Vulkan sem forçar a superfície Vulkan nativa do compositor Skia.
   app.commandLine.appendSwitch(
     "enable-features",
     "Vulkan,VulkanFromANGLE,DefaultANGLEVulkan,VaapiVideoDecoder",

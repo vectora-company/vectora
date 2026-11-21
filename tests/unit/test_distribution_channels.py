@@ -99,9 +99,10 @@ def test_linux_packages_declare_vulkan_runtime_and_snap_opengl_plug() -> None:
     assert "- opengl" in snap["body"]
 
 
-def test_linux_electron_explicitly_enables_angle_vulkan() -> None:
+def test_linux_electron_uses_angle_vulkan_without_forcing_vulkan_compositor() -> None:
     assert 'appendSwitch("ignore-gpu-blocklist")' in ELECTRON_MAIN
-    assert 'appendSwitch("use-vulkan")' in ELECTRON_MAIN
+    assert 'appendSwitch("use-angle", "vulkan")' in ELECTRON_MAIN
+    assert 'appendSwitch("use-vulkan")' not in ELECTRON_MAIN
     assert (
         "Vulkan,VulkanFromANGLE,DefaultANGLEVulkan,VaapiVideoDecoder" in ELECTRON_MAIN
     )
