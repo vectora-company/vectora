@@ -12,6 +12,13 @@ import { spawn, spawnSync, ChildProcess } from "child_process";
 import * as http from "http";
 import * as net from "net";
 import * as path from "path";
+import type { Writable } from "stream";
+
+export function ignoreBrokenPipe(stream: Writable): void {
+  stream.on("error", (error: Error) => {
+    if ((error as NodeJS.ErrnoException).code !== "EPIPE") throw error;
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Porta livre
@@ -220,6 +227,36 @@ export function pingBackendHttp(
     );
     req.on("error", () => resolve(false));
     req.end();
+  });
+}
+
+export function unixSocketIsActive(
+  socketPath: string,
+  timeoutMs = 1_000,
+): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = net.createConnection(socketPath);
+    let settled = false;
+    let response = "";
+    let timeout: NodeJS.Timeout;
+    const finish = (active: boolean) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      socket.destroy();
+      resolve(active);
+    };
+    timeout = setTimeout(() => finish(false), timeoutMs);
+    socket.once("connect", () =>
+      socket.write(
+        "GET /health HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
+      ),
+    );
+    socket.on("data", (chunk: Buffer) => {
+      response += chunk.toString("utf-8");
+      if (response.includes("\r\n")) finish(response.startsWith("HTTP/"));
+    });
+    socket.once("error", () => finish(false));
   });
 }
 
