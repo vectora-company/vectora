@@ -146,7 +146,7 @@ async def test_job_log_real_keeps_the_text_as_gh_prints_it(gh_output) -> None:
     assert all(line.count("\t") >= 2 for line in response.log.splitlines() if line)
 
 
-async def test_pull_list_real_counts_real_checks(gh_output) -> None:
+async def test_pull_list_real_without_checks_payload(gh_output) -> None:
     gh_output("gh_pr_list.json")
 
     response = await github.list_pulls(_request(), "all", None)
@@ -154,7 +154,10 @@ async def test_pull_list_real_counts_real_checks(gh_output) -> None:
     assert response.status == "ok" and response.pulls
     pull = response.pulls[0]
     assert pull.author and pull.head_ref and pull.base_ref
-    assert pull.checks.passed + pull.checks.failed + pull.checks.pending > 0
+    # A lista não pede o rollup de checks (payload pesado); só o detalhe pede.
+    assert (
+        pull.checks.passed == 0 and pull.checks.failed == 0 and pull.checks.pending == 0
+    )
 
 
 async def test_pull_detail_real_maps_commits_files_comments_and_milestone(
