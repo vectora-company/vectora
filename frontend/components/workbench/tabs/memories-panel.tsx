@@ -11,7 +11,7 @@
  * - Limpa todas as memórias (DELETE /memory) com confirmação
  */
 
-import { Brain, Edit2, Loader2, Plus, Trash2 } from "lucide-react";
+import { Brain, Edit2, Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -32,6 +32,10 @@ import { mDyn } from "@/lib/i18n-dyn";
 // Tipos
 // ---------------------------------------------------------------------------
 import { settingsItemClass } from "@/components/settings/primitives";
+import {
+  WorkbenchActions,
+  WorkbenchEmpty,
+} from "@/components/workbench/primitives";
 import { cn } from "@/lib/utils";
 
 interface MemoryItem {
@@ -107,7 +111,31 @@ async function createMemory(key: string, content: string): Promise<void> {
 // Componente principal
 // ---------------------------------------------------------------------------
 
-export function MemoriesPanel() {
+export interface LearnedSkill {
+  id: string;
+  name: string;
+  description: string;
+}
+
+export interface LearnedFact {
+  key: string;
+  content: string;
+}
+
+interface MemoriesPanelProps {
+  /**
+   * Layout denso da workbench: textos e botões menores, ações numa linha
+   * abaixo do resumo e os itens aprendidos (skills e fatos) na mesma lista.
+   */
+  compact?: boolean;
+  /** Skills e fatos aprendidos, mostrados junto das memórias (só no compacto). */
+  learned?: { skills: LearnedSkill[]; facts: LearnedFact[] };
+}
+
+export function MemoriesPanel({
+  compact = false,
+  learned,
+}: MemoriesPanelProps = {}) {
   const [memories, setMemories] = useState<MemoryItem[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -240,31 +268,74 @@ export function MemoriesPanel() {
         })
       : m.memory_empty_title();
 
+  // Fatos já listados como memória não se repetem; só entra o que falta.
+  const memoryKeys = new Set(memories.map((item) => item.key));
+  const extraFacts = (learned?.facts ?? []).filter(
+    (fact) => !memoryKeys.has(fact.key),
+  );
+  const extraSkills = learned?.skills ?? [];
+  const hasExtras = extraFacts.length + extraSkills.length > 0;
+  const nothingToShow = memories.length === 0 && !hasExtras;
+
+  // Tamanhos: no layout denso usam-se as variações menores do tema.
+  const actionSize = compact ? "xs" : "sm";
+  const iconClass = compact ? "" : "w-3.5 h-3.5 mr-1.5";
+  const cardClass = compact
+    ? "space-y-1.5 rounded-lg border border-border/60 bg-card/30 px-2.5 py-2"
+    : cn(settingsItemClass, "space-y-2 p-3");
+  const bodyTextClass = compact
+    ? "text-xs text-foreground line-clamp-3"
+    : "text-sm text-foreground/90 line-clamp-3";
+
+  const actions = (
+    <WorkbenchActions testId="memory-actions">
+      <Button
+        variant="outline"
+        size={actionSize}
+        onClick={() => setAddOpen(true)}
+      >
+        <Plus className={iconClass} />
+        {m.memory_add()}
+      </Button>
+      {memories.length > 0 && (
+        <Button
+          variant="outline"
+          size={actionSize}
+          className="text-destructive hover:text-destructive dark:hover:text-destructive"
+          onClick={() => setClearConfirmOpen(true)}
+        >
+          <Trash2 className={iconClass} />
+          {m.memory_clear_all()}
+        </Button>
+      )}
+    </WorkbenchActions>
+  );
+
   return (
-    <div className="space-y-4">
-      {/* Cabeçalho */}
-      <div className="flex items-center justify-between">
+    <div className={compact ? "space-y-2" : "space-y-4"}>
+      {/* Resumo e, numa linha abaixo, as ações */}
+      <div
+        className={
+          compact ? "space-y-1.5" : "flex items-center justify-between"
+        }
+      >
         <div className="space-y-0.5">
-          <p className="text-sm font-medium">{headerTitle}</p>
-          <p className="text-xs text-muted-foreground">{m.memory_subtitle()}</p>
+          <p
+            className={compact ? "text-xs font-medium" : "text-sm font-medium"}
+          >
+            {headerTitle}
+          </p>
+          <p
+            className={
+              compact
+                ? "text-[10px] text-muted-foreground"
+                : "text-xs text-muted-foreground"
+            }
+          >
+            {m.memory_subtitle()}
+          </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => setAddOpen(true)}>
-            <Plus className="w-3.5 h-3.5 mr-1.5" />
-            {m.memory_add()}
-          </Button>
-          {memories.length > 0 && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-destructive hover:text-destructive dark:hover:text-destructive"
-              onClick={() => setClearConfirmOpen(true)}
-            >
-              <Trash2 className="w-3.5 h-3.5 mr-1.5" />
-              {m.memory_clear_all()}
-            </Button>
-          )}
-        </div>
+        {actions}
       </div>
 
       {/* Erro */}
@@ -274,26 +345,37 @@ export function MemoriesPanel() {
         </p>
       )}
 
-      {/* Empty state */}
-      {memories.length === 0 && !loading && (
-        <div className="flex flex-col items-center justify-center py-10 text-center space-y-3">
-          <Brain className="w-10 h-10 text-muted-foreground/30" />
-          <p className="text-sm text-muted-foreground">
-            {m.memory_empty_hint()}
-          </p>
-          <p className="text-xs text-muted-foreground/70 max-w-[260px]">
-            {m.memory_empty_hint2()}
-          </p>
-        </div>
-      )}
+      {/* Empty state: um só, no lugar de vários textos repetidos */}
+      {nothingToShow &&
+        !loading &&
+        (compact ? (
+          <WorkbenchEmpty compact>
+            {m.workbench_memory_journey_empty()}
+          </WorkbenchEmpty>
+        ) : (
+          <div className="flex flex-col items-center justify-center py-10 text-center space-y-3">
+            <Brain className="w-10 h-10 text-muted-foreground/30" />
+            <p className="text-sm text-muted-foreground">
+              {m.memory_empty_hint()}
+            </p>
+            <p className="text-xs text-muted-foreground/70 max-w-[260px]">
+              {m.memory_empty_hint2()}
+            </p>
+          </div>
+        ))}
 
-      {/* Lista de memórias */}
-      <div className="space-y-2">
+      {/* Lista: memórias salvas + skills e fatos aprendidos, tudo junto */}
+      <div className={compact ? "space-y-1.5" : "space-y-2"}>
         {memories.map((mem) => (
-          <div key={mem.key} className={cn(settingsItemClass, "space-y-2 p-3")}>
+          <div key={mem.key} className={cardClass}>
             {/* Key + data */}
             <div className="flex items-start justify-between gap-2">
-              <span className="text-xs font-mono text-muted-foreground truncate">
+              <span
+                className={cn(
+                  "font-mono text-muted-foreground truncate",
+                  compact ? "text-[10px]" : "text-xs",
+                )}
+              >
                 {mem.key}
               </span>
               {mem.updated_at && (
@@ -312,12 +394,11 @@ export function MemoriesPanel() {
                   className="text-sm min-h-[80px] resize-none"
                   autoFocus
                 />
-                <div className="flex gap-2">
+                <WorkbenchActions>
                   <Button
-                    size="sm"
+                    size={compact ? "xs" : "sm"}
                     onClick={handleEditSave}
                     disabled={saving}
-                    className="h-7 text-xs"
                   >
                     {saving && (
                       <Loader2 className="w-3 h-3 animate-spin mr-1" />
@@ -325,50 +406,65 @@ export function MemoriesPanel() {
                     {m.memory_save()}
                   </Button>
                   <Button
-                    size="sm"
+                    size={compact ? "xs" : "sm"}
                     variant="ghost"
                     onClick={() => setEditingKey(null)}
                     disabled={saving}
-                    className="h-7 text-xs"
                   >
                     {m.memory_cancel()}
                   </Button>
-                </div>
+                </WorkbenchActions>
               </div>
             ) : (
-              <p className="text-sm text-foreground/90 line-clamp-3">
-                {mem.content}
-              </p>
+              <p className={bodyTextClass}>{mem.content}</p>
             )}
 
             {/* Ações */}
             {editingKey !== mem.key && (
-              <div className="flex gap-1.5 pt-1">
+              <WorkbenchActions>
                 <Button
                   variant="ghost"
-                  size="sm"
-                  className="h-6 px-2 text-xs text-muted-foreground"
+                  size="xs"
+                  className="text-muted-foreground"
                   onClick={() => handleEditStart(mem)}
                 >
-                  <Edit2 className="w-3 h-3 mr-1" />
+                  <Edit2 />
                   {m.memory_edit()}
                 </Button>
                 <Button
                   variant="ghost"
-                  size="sm"
-                  className="h-6 px-2 text-xs text-muted-foreground hover:text-destructive"
+                  size="xs"
+                  className="text-muted-foreground hover:text-destructive"
                   onClick={() => handleDelete(mem.key)}
                   disabled={deletingKey === mem.key}
                 >
                   {deletingKey === mem.key ? (
-                    <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                    <Loader2 className="animate-spin" />
                   ) : (
-                    <Trash2 className="w-3 h-3 mr-1" />
+                    <Trash2 />
                   )}
                   {m.memory_delete()}
                 </Button>
-              </div>
+              </WorkbenchActions>
             )}
+          </div>
+        ))}
+
+        {extraFacts.map((fact) => (
+          <div key={fact.key} className={cardClass}>
+            <p className={bodyTextClass}>{fact.content}</p>
+          </div>
+        ))}
+
+        {extraSkills.map((skill) => (
+          <div key={skill.id} className={cardClass}>
+            <p className="flex items-center gap-1 truncate text-xs font-medium text-foreground">
+              <Sparkles className="h-3 w-3 shrink-0 text-muted-foreground" />
+              {m.workbench_memory_journey_skill_label({ name: skill.name })}
+            </p>
+            <p className="truncate text-[10px] text-muted-foreground">
+              {skill.description}
+            </p>
           </div>
         ))}
       </div>
