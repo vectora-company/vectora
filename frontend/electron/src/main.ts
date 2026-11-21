@@ -76,6 +76,7 @@ import {
   resolveExternalBackendConnection,
   unixSocketIsActive,
 } from "./backend-lifecycle.js";
+import { resolveLinuxGraphicsConfiguration } from "./linux-graphics.js";
 import {
   BrowserViewManager,
   clearBrowserSessionData,
@@ -155,36 +156,34 @@ if (!installedTestsMode) {
   app.commandLine.appendSwitch("remote-debugging-address", "127.0.0.1");
   app.commandLine.appendSwitch("remote-debugging-port", electronCdpPort);
 }
-// Seleciona o backend ANGLE nativo da plataforma. WebGL continua disponível
-// no renderer e é encaminhado pelo ANGLE para este backend.
-app.commandLine.appendSwitch("use-gl", "angle");
-// `VECTORA_ANGLE_BACKEND` troca o backend em qualquer plataforma (ex.: "gl" ou
-// "default"), para máquinas onde o padrão não inicializa.
 const angleOverride = process.env.VECTORA_ANGLE_BACKEND?.trim();
-if (angleOverride) {
-  app.commandLine.appendSwitch("use-angle", angleOverride);
-} else if (process.platform === "win32") {
-  // Usa DirectX 11 sobre DirectX 12, ambos no caminho gráfico.
-  app.commandLine.appendSwitch("use-angle", "d3d11on12");
-} else if (process.platform === "darwin") {
-  app.commandLine.appendSwitch("use-angle", "metal");
-} else {
-  app.commandLine.appendSwitch("use-angle", "vulkan");
-}
-if (process.platform === "linux" && angleOverride !== "gl") {
-  app.commandLine.appendSwitch("ignore-gpu-blocklist");
-  // ANGLE usa Vulkan sem forçar a superfície Vulkan nativa do compositor Skia.
-  app.commandLine.appendSwitch(
-    "enable-features",
-    "Vulkan,VulkanFromANGLE,DefaultANGLEVulkan,VaapiVideoDecoder",
-  );
-  app.commandLine.appendSwitch("disable-features", "SkiaGraphite");
-}
 if (process.platform === "linux") {
-  // Usa XWayland/X11 como protocolo de janela; Vulkan continua sendo o
-  // backend gráfico. Wayland não é um backend de renderização compatível com
-  // Vulkan no Chromium.
-  app.commandLine.appendSwitch("ozone-platform", "x11");
+  app.commandLine.appendSwitch("use-gl", "angle");
+  const graphics = resolveLinuxGraphicsConfiguration(process.env);
+  for (const [name, value] of graphics.switches) {
+    if (value === undefined) {
+      app.commandLine.appendSwitch(name);
+    } else {
+      app.commandLine.appendSwitch(name, value);
+    }
+  }
+  console.info("[graphics] configuração Linux do Electron", {
+    angleBackend: graphics.angleBackend,
+    ozonePlatform: graphics.ozonePlatform,
+  });
+} else {
+  // Seleciona o backend ANGLE nativo da plataforma. WebGL continua disponível
+  // no renderer e é encaminhado pelo ANGLE para este backend.
+  app.commandLine.appendSwitch("use-gl", "angle");
+  // `VECTORA_ANGLE_BACKEND` troca o backend em qualquer plataforma.
+  if (angleOverride) {
+    app.commandLine.appendSwitch("use-angle", angleOverride);
+  } else if (process.platform === "win32") {
+    // Usa DirectX 11 sobre DirectX 12, ambos no caminho gráfico.
+    app.commandLine.appendSwitch("use-angle", "d3d11on12");
+  } else if (process.platform === "darwin") {
+    app.commandLine.appendSwitch("use-angle", "metal");
+  }
 }
 
 let electronCdpProxy: import("node:http").Server | null = null;

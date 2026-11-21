@@ -25,7 +25,10 @@ import socket
 import sys
 from collections.abc import Callable
 
-from backend.services.electron_launcher import resolve_electron_launch
+from backend.services.electron_launcher import (
+    resolve_electron_launch,
+    resolve_linux_ozone_argument,
+)
 from backend.services.subprocess_logging import pipe_to_logger
 from backend.services.subprocess_sidecar_utils import (
     LazyLock,
@@ -202,12 +205,21 @@ async def ensure_electron_sidecar() -> asyncio.subprocess.Process | None:
             return None
         exe, exe_args = launch
         if sys.platform == "linux":
-            # Ozone escolhe o backend de janelas antes de executar o main.js.
-            # app.commandLine.appendSwitch() mantém a configuração dos
-            # renderers, mas não muda a plataforma já selecionada pelo
-            # processo principal; passe x11 antes do entrypoint para garantir
-            # XWayland também na BrowserWindow nativa.
-            exe_args = ["--ozone-platform=x11", *exe_args]
+            ozone_error: str | None = None
+            try:
+                ozone_argument = resolve_linux_ozone_argument(
+                    os.environ.get("VECTORA_OZONE_PLATFORM")
+                )
+            except ValueError as exc:
+                ozone_argument = None
+                ozone_error = str(exc)
+            if ozone_error is not None:
+                logger.error("electron_sidecar: %s", ozone_error)
+                return None
+            if ozone_argument is not None:
+                # Ozone escolhe o backend de janelas antes do entrypoint.
+                # O processo principal aplica os demais switches de renderização.
+                exe_args = [ozone_argument, *exe_args]
 
         cdp_port = _ensure_electron_cdp_port()
         cdp_proxy_port = _ensure_electron_cdp_proxy_port()
