@@ -74,7 +74,11 @@ export function fixDriveRootArgument(argument: string): string {
 interface PathsFromArgvOptions {
   /** Diretório de trabalho de quem chamou (segunda instância); base de caminhos relativos. */
   cwd?: string;
-  /** `electron .` em desenvolvimento: o segundo argumento é o app, não um arquivo. */
+  /**
+   * `electron .` em desenvolvimento: o app (script ou pasta) é o primeiro
+   * argumento que não é opção, não um arquivo para abrir. Opções podem vir
+   * antes dele (`electron --no-sandbox dist/main.js`).
+   */
   defaultApp?: boolean;
 }
 
@@ -89,11 +93,17 @@ export function pathsFromArgv(
   argv: readonly string[],
   options: PathsFromArgvOptions = {},
 ): string[] {
-  const skip = options.defaultApp ? 2 : 1;
   const found: string[] = [];
-  for (const rawArgument of argv.slice(skip)) {
+  // Em desenvolvimento o Electron recebe o próprio app como argumento; sem
+  // descartá-lo, o `main.js` entrava no chat como anexo a cada abertura.
+  let appSkipped = !options.defaultApp;
+  for (const rawArgument of argv.slice(1)) {
     const raw = fixDriveRootArgument(rawArgument);
     if (!raw || raw.startsWith("-")) continue;
+    if (!appSkipped) {
+      appSkipped = true;
+      continue;
+    }
     let candidate = raw;
     if (/^file:\/\//i.test(raw)) {
       try {

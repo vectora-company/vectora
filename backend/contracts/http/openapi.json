@@ -19656,6 +19656,27 @@
         ]
       }
     },
+    "/internal/desktop/handshake": {
+      "post": {
+        "description": "Confirma pelo transporte desktop quem iniciou a sessão.",
+        "operationId": "desktop_handshake_internal_desktop_handshake_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Desktop Handshake Internal Desktop Handshake Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Desktop Handshake"
+      }
+    },
     "/license/connect": {
       "post": {
         "description": "Login com a conta vectora.company → obtém e ativa o VECTORA_TOKEN.\n\nChama ``services.vectora.company/license/agent-login`` (email + senha).\nEm caso de sucesso ela devolve ``{token, tier, status}``; o token é\npersistido em ``config.toml [license]`` e validado imediatamente (popula\no cache que o banner e o /license/status leem).",

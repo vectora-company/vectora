@@ -402,6 +402,41 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Não abre janela — mantém backend + bandeja ativos.",
     )
+    graphics = start_p.add_argument_group("gráficos do Electron")
+    graphics.add_argument(
+        "--vulkan",
+        dest="graphics_angle",
+        action="store_const",
+        const="vulkan",
+        default=None,
+    )
+    graphics.add_argument(
+        "--gl", "--opengl", dest="graphics_angle", action="store_const", const="gl"
+    )
+    graphics.add_argument(
+        "--auto", dest="graphics_angle", action="store_const", const="default"
+    )
+    graphics.add_argument(
+        "--d3d11", dest="graphics_angle", action="store_const", const="d3d11"
+    )
+    graphics.add_argument(
+        "--d3d11on12", dest="graphics_angle", action="store_const", const="d3d11on12"
+    )
+    graphics.add_argument(
+        "--d3d9", dest="graphics_angle", action="store_const", const="d3d9"
+    )
+    graphics.add_argument(
+        "--metal", dest="graphics_angle", action="store_const", const="metal"
+    )
+    graphics.add_argument(
+        "--x11", dest="graphics_ozone", action="store_const", const="x11", default=None
+    )
+    graphics.add_argument(
+        "--wayland", dest="graphics_ozone", action="store_const", const="wayland"
+    )
+    graphics.add_argument(
+        "--cosmic", dest="graphics_ozone", action="store_const", const="cosmic"
+    )
     start_p.add_argument("--host", default="0.0.0.0", help="Host de escuta")  # noqa: S104  # nosec B104
     start_p.add_argument("--port", type=int, default=None, help="Porta (default: 8080)")
     start_p.add_argument(
@@ -703,6 +738,11 @@ def _run_start(args: argparse.Namespace, *, force_web: bool = False) -> None:
     headless = getattr(args, "headless", False)
     if headless:
         os.environ["VECTORA_HEADLESS"] = "1"
+
+    if getattr(args, "graphics_angle", None):
+        os.environ["VECTORA_ANGLE_BACKEND"] = args.graphics_angle
+    if getattr(args, "graphics_ozone", None):
+        os.environ["VECTORA_OZONE_PLATFORM"] = args.graphics_ozone
 
     # Precedência da porta: --port > VECTORA_PORT (env do Electron) > 8080.
     port = args.port or int(os.environ.get("VECTORA_PORT") or 0) or 8080

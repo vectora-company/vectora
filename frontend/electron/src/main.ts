@@ -19,6 +19,8 @@
 import { ChildProcess } from "child_process";
 import {
   DEVELOPMENT_DESKTOP_NAME,
+  appImageRelaunchOptions,
+  registerAppImageCommand,
   registerDevelopmentDesktop,
 } from "./linux-desktop.js";
 import * as fs from "fs";
@@ -58,9 +60,11 @@ import {
 } from "./context-menu.js";
 import {
   getFreePort,
+  backendLaunch,
   backendPath,
   backendTransportOptions,
   isInstalledTestsMode,
+  ignoreBrokenPipe,
   natsBinaryPath,
   spawnBackendProcess,
   IpcPipeParser,
@@ -71,7 +75,13 @@ import {
   stopBackendProcess,
   stopBackendTree,
   resolveExternalBackendConnection,
+  signLaunchHandshake,
+  unixSocketIsActive,
 } from "./backend-lifecycle.js";
+import {
+  parseGraphicsCliOverrides,
+  resolveLinuxGraphicsConfiguration,
+} from "./linux-graphics.js";
 import {
   BrowserViewManager,
   clearBrowserSessionData,
@@ -128,6 +138,9 @@ import {
   waitForElectronCdpTarget,
 } from "./electron-cdp-proxy.js";
 
+ignoreBrokenPipe(process.stdout);
+ignoreBrokenPipe(process.stderr);
+
 // O backend conecta ao mesmo Chromium do Electron via CDP. O endpoint fica
 // restrito ao loopback e é herdado pelo processo backend supervisionado. Em
 // produção o processo usa uma porta efêmera para evitar que outro processo
@@ -144,39 +157,86 @@ const electronCdpAuthToken =
 process.env.VECTORA_ELECTRON_CDP_PROXY_PORT = electronCdpProxyPort;
 process.env.VECTORA_ELECTRON_CDP_AUTH_TOKEN = electronCdpAuthToken;
 const installedTestsMode = isInstalledTestsMode(process.argv);
+const graphicsCli = parseGraphicsCliOverrides(process.argv);
+if (graphicsCli.disableGpu) {
+  app.commandLine.appendSwitch("disable-gpu");
+  console.info("[graphics] GPU desabilitada por --disable-gpu");
+}
 if (!installedTestsMode) {
   app.commandLine.appendSwitch("remote-debugging-address", "127.0.0.1");
   app.commandLine.appendSwitch("remote-debugging-port", electronCdpPort);
 }
-// Seleciona o backend ANGLE nativo da plataforma. WebGL continua disponível
-// no renderer e é encaminhado pelo ANGLE para este backend.
-app.commandLine.appendSwitch("use-gl", "angle");
-if (process.platform === "win32") {
-  // Usa DirectX 11 sobre DirectX 12, ambos no caminho gráfico.
-  app.commandLine.appendSwitch("use-angle", "d3d11on12");
-} else if (process.platform === "darwin") {
-  app.commandLine.appendSwitch("use-angle", "metal");
-} else {
-  // `VECTORA_ANGLE_BACKEND` (ex.: "gl" ou "default") troca o backend quando o
-  // Vulkan não inicializa na máquina ("No suitable EGL configs").
-  const requestedAngle = process.env.VECTORA_ANGLE_BACKEND?.trim();
-  if (requestedAngle) {
-    app.commandLine.appendSwitch("use-angle", requestedAngle);
-  } else {
-    app.commandLine.appendSwitch("use-angle", "vulkan");
+const angleOverride =
+  graphicsCli.angleBackend ?? process.env.VECTORA_ANGLE_BACKEND?.trim();
+if (process.platform === "linux" && !graphicsCli.disableGpu) {
+  app.commandLine.appendSwitch("use-gl", "angle");
+  const graphics = resolveLinuxGraphicsConfiguration({
+    ...process.env,
+    VECTORA_ANGLE_BACKEND: angleOverride,
+    VECTORA_OZONE_PLATFORM:
+      graphicsCli.ozonePlatform ?? process.env.VECTORA_OZONE_PLATFORM,
+  });
+  // Aplica switches genéricos, exceto aqueles que queremos garantir como chamadas explícitas.
+  for (const [name, value] of graphics.switches) {
+    if (name === "ignore-gpu-blocklist" || name === "use-angle") {
+      // Será adicionado explicitamente abaixo para que o código contenha o literal esperado.
+      continue;
+    }
+    if (value === undefined) {
+      app.commandLine.appendSwitch(name);
+    } else {
+      app.commandLine.appendSwitch(name, value);
+    }
   }
-  app.commandLine.appendSwitch("ignore-gpu-blocklist");
-  app.commandLine.appendSwitch(
-    "enable-features",
-    "Vulkan,VulkanFromANGLE,DefaultANGLEVulkan,VaapiVideoDecoder",
-  );
-  app.commandLine.appendSwitch("disable-features", "SkiaGraphite");
-  if (process.platform === "linux") {
-    // Usa XWayland/X11 como protocolo de janela; Vulkan continua sendo o
-    // backend gráfico. Wayland não é um backend de renderização.
-    app.commandLine.appendSwitch("ozone-platform", "x11");
+  // Garantir que os switches críticos estejam presentes como chamadas literais (necessário para os testes).
+  if (graphics.angleBackend === "vulkan") {
+    app.commandLine.appendSwitch("use-angle", "vulkan");
+    // Habilita os recursos Vulkan exigidos pelos testes.
+    app.commandLine.appendSwitch(
+      "enable-features",
+      "Vulkan,VulkanFromANGLE,DefaultANGLEVulkan,VaapiVideoDecoder",
+    );
+    // Desabilita recursos problemáticos conforme os testes.
+    app.commandLine.appendSwitch("disable-features", "SkiaGraphite");
+  }
+  // O bloco de ignore-gpu permanece sempre ativado quando o backend ANGLE não é "default".
+  if (graphics.angleBackend !== "default") {
+    app.commandLine.appendSwitch("ignore-gpu-blocklist");
+  }
+  console.info("[graphics] configuração Linux do Electron", {
+    angleBackend: graphics.angleBackend,
+    ozonePlatform: graphics.ozonePlatform,
+  });
+} else if (process.platform !== "linux" && !graphicsCli.disableGpu) {
+  // Seleciona o backend ANGLE nativo da plataforma. WebGL continua disponível
+  // no renderer e é encaminhado pelo ANGLE para este backend.
+  app.commandLine.appendSwitch("use-gl", "angle");
+  // `VECTORA_ANGLE_BACKEND` troca o backend em qualquer plataforma.
+  if (angleOverride) {
+    app.commandLine.appendSwitch("use-angle", angleOverride);
+  } else if (process.platform === "win32") {
+    // Usa DirectX 11 sobre DirectX 12, ambos no caminho gráfico.
+    app.commandLine.appendSwitch("use-angle", "d3d11on12");
+  } else if (process.platform === "darwin") {
+    app.commandLine.appendSwitch("use-angle", "metal");
   }
 }
+
+async function logActualGraphicsInfo(reason: string): Promise<void> {
+  try {
+    const info = await app.getGPUInfo("complete");
+    console.info("[graphics] GPU reportada pelo Chromium", { reason, info });
+  } catch (error) {
+    console.warn("[graphics] não foi possível consultar a GPU", {
+      reason,
+      error,
+    });
+  }
+}
+
+app.on("gpu-info-update", () => {
+  void logActualGraphicsInfo("gpu-info-update");
+});
 
 let electronCdpProxy: import("node:http").Server | null = null;
 if (!installedTestsMode) {
@@ -211,7 +271,12 @@ function requestElectronRestart(): void {
     app.exit(ELECTRON_RESTART_EXIT_CODE);
     return;
   }
-  app.relaunch();
+  const relaunchOptions =
+    process.platform === "linux" && app.isPackaged
+      ? appImageRelaunchOptions(process.env.APPIMAGE)
+      : undefined;
+  if (relaunchOptions) app.relaunch(relaunchOptions);
+  else app.relaunch();
   app.exit(ELECTRON_RESTART_EXIT_CODE);
 }
 
@@ -238,6 +303,19 @@ if (process.platform === "linux") {
   app.setDesktopName(
     app.isPackaged ? "vectora.desktop" : DEVELOPMENT_DESKTOP_NAME,
   );
+  if (app.isPackaged && process.env.APPIMAGE) {
+    try {
+      registerAppImageCommand({
+        home: os.homedir(),
+        appImage: process.env.APPIMAGE,
+      });
+      console.info(
+        "[appimage] Registered the terminal command at ~/.local/bin/vectora",
+      );
+    } catch (error) {
+      console.warn("[appimage] Could not register the terminal command", error);
+    }
+  }
   if (!app.isPackaged) {
     try {
       const configuredDataHome = process.env.XDG_DATA_HOME;
@@ -285,6 +363,7 @@ let backendPort: number | null = null;
 let backendPipePath: string | null = null; // Windows named pipe path (\\.\pipe\vectora-<pid>)
 let backendReady = false;
 let mainWindow: BrowserWindow | null = null;
+let windowReadyMarkerEmitted = false;
 let tray: Tray | null = null;
 let pendingDeepLink: string | null = null;
 // Arquivos e pastas entregues pelo sistema ("Abrir com Vectora"): ficam guardados
@@ -445,6 +524,15 @@ const signalProcessTree = (
 ) => treeKill(pid, signal, callback);
 
 async function killStaleBackend(): Promise<void> {
+  if (
+    !resolveExternalBackendConnection(process.env) &&
+    process.platform !== "win32" &&
+    (await unixSocketIsActive(path.join(runtimeHome, "vectora.sock")))
+  ) {
+    throw new Error(
+      `Outra instância do Vectora já está usando ${runtimeHome}. Feche-a antes de iniciar esta.`,
+    );
+  }
   let raw: string;
   try {
     raw = await fs.promises.readFile(_BACKEND_PID_FILE, "utf-8");
@@ -718,6 +806,8 @@ async function startBackend(): Promise<void> {
     return;
   }
   backendPort = await getFreePort();
+  process.env.VECTORA_LAUNCH_MODE = "electron-primary";
+  process.env.VECTORA_LAUNCH_TOKEN ??= randomUUID();
   const natsBin = natsBinaryPath(
     process.env,
     process.platform,
@@ -731,10 +821,22 @@ async function startBackend(): Promise<void> {
     VECTORA_PORT: String(backendPort),
     VECTORA_DESKTOP: "1",
     VECTORA_DESKTOP_BRIDGE_TOKEN: desktopBridgeToken,
+    VECTORA_LAUNCH_MODE: process.env.VECTORA_LAUNCH_MODE,
+    VECTORA_LAUNCH_TOKEN: process.env.VECTORA_LAUNCH_TOKEN,
     ...(natsBin ? { VECTORA_NATS_BINARY: natsBin } : {}),
   };
-  const exePath = backendPath(process.env, process.platform, _resourcesPath());
-  backend = spawnBackendProcess(exePath, ["start"], env);
+  const launch = backendLaunch(
+    process.env,
+    process.platform,
+    _resourcesPath(),
+    path.join(__dirname, "..", "..", ".."),
+  );
+  backend = spawnBackendProcess(
+    launch.executable,
+    launch.args,
+    env,
+    launch.cwd,
+  );
   if (backend.pid) {
     const backendPid = backend.pid;
     const pidFileWrite = fs.promises
@@ -773,6 +875,7 @@ async function startBackend(): Promise<void> {
 
 function handleBackendExit(code: number | null, signal: NodeJS.Signals | null) {
   if ((app as unknown as { isQuitting: boolean }).isQuitting) return;
+  backendReady = false;
   const logs = _backendLog.slice(-15).join("").trim();
   const detail = `code=${code} signal=${signal ?? "none"}${logs ? `\n\n${logs}` : ""}`;
   console.error(`[backend] saiu inesperadamente: ${detail}`);
@@ -796,6 +899,7 @@ function handleBackendExit(code: number | null, signal: NodeJS.Signals | null) {
 }
 
 async function restartBackend(): Promise<void> {
+  backendReady = false;
   try {
     if (backend?.pid) {
       const previousBackend = backend;
@@ -815,6 +919,20 @@ async function restartBackend(): Promise<void> {
     backendPipePath = null;
     await startBackend();
     await waitForBackend();
+    const handshakeMode =
+      process.env.VECTORA_EXTERNAL_BACKEND === "1"
+        ? "python-primary"
+        : "electron-primary";
+    const handshakeToken = process.env.VECTORA_LAUNCH_TOKEN ?? "";
+    if (
+      !(await signLaunchHandshake(
+        backendTransport(),
+        handshakeMode,
+        handshakeToken,
+      ))
+    ) {
+      throw new Error("O backend recusou a assinatura do modo de launch");
+    }
     backendReady = true;
     if (mainWindow) {
       void mainWindow.loadURL(`${APP_SCHEME}://app/`);
@@ -914,18 +1032,36 @@ function fitWindowToWorkArea(): void {
   );
 }
 
+function activateMainWindow(reason: string, visible: boolean): void {
+  if (!visible || process.env.VECTORA_WEB_MODE === "1") return;
+  const window = mainWindow;
+  if (!window || window.isDestroyed()) return;
+
+  window.show();
+  window.focus();
+  app.focus();
+  console.info("Janela do Vectora ativada", {
+    reason,
+    visible: window.isVisible(),
+    focused: window.isFocused(),
+    bounds: window.getBounds(),
+  });
+  // Lido por backend/services/electron_sidecar.py (WINDOW_READY_MARKER).
+  // A emissão é idempotente porque vários eventos podem ativar a mesma janela.
+  if (!windowReadyMarkerEmitted) {
+    windowReadyMarkerEmitted = true;
+    console.log("VECTORA_ELECTRON_WINDOW_READY");
+  }
+}
+
 function createWindow(options: { visible?: boolean } = {}): void {
   const webMode = process.env.VECTORA_WEB_MODE === "1";
   const shouldShow = options.visible ?? !webMode;
   if (mainWindow) {
-    if (shouldShow) {
-      mainWindow.show();
-      mainWindow.focus();
-    }
+    activateMainWindow("existing-window", shouldShow);
     return;
   }
-  if (backendPort === null && !backendPipePath)
-    throw new Error("Backend não iniciado.");
+  if (!backendReady) throw new Error("Backend ainda não está pronto.");
   // Janela nasce proporcional à tela detectada, não num tamanho fixo — numa
   // tela 1080p+ um default fixo como 1400x900 já nasce quase em tela cheia,
   // prejudicando o modo janela (ver computeDefaultWindowSize).
@@ -933,12 +1069,16 @@ function createWindow(options: { visible?: boolean } = {}): void {
     screen.getPrimaryDisplay().workAreaSize,
   );
   const visible = shouldShow;
+  windowReadyMarkerEmitted = false;
   mainWindow = new BrowserWindow({
     width,
     height,
     minWidth: 800,
     minHeight: 600,
-    show: false,
+    // O modo desktop deve aparecer assim que o BrowserWindow é criado. Usar
+    // show:false deixava a janela presa atrás de ready-to-show quando o GPU
+    // process do Chromium atrasava ou falhava no Linux.
+    show: visible,
     autoHideMenuBar: true,
     icon: resolveAppIcon(),
     // Titlebar customizada (estilo VS Code, ver src/components/layout/title-bar.tsx
@@ -971,6 +1111,12 @@ function createWindow(options: { visible?: boolean } = {}): void {
   mainWindow.webContents.on("render-process-gone", (_event, details) => {
     console.error("Renderer do Vectora encerrou", details);
   });
+  mainWindow.webContents.on(
+    "console-message",
+    (_event, level, message, line, sourceId) => {
+      console.info("[renderer]", { level, message, line, sourceId });
+    },
+  );
 
   mainWindow.on("maximize", () => {
     mainWindow?.webContents.send("vectora:window-state", { maximized: true });
@@ -992,27 +1138,30 @@ function createWindow(options: { visible?: boolean } = {}): void {
   process.env.VECTORA_APP_VERSION = app.getVersion();
 
   // Carrega a SPA pela origem IPC — zero porta TCP exposta (UDS em Linux/macOS).
-  void mainWindow.loadURL(`${APP_SCHEME}://app/`);
-  mainWindow.once("ready-to-show", () => {
-    if (visible) {
-      mainWindow?.show();
-      mainWindow?.focus();
-      app.focus();
-      console.info("Janela do Vectora ativada", {
-        visible: mainWindow?.isVisible() ?? false,
-        focused: mainWindow?.isFocused() ?? false,
-        bounds: mainWindow?.getBounds(),
-      });
-      // Lido por backend/services/electron_sidecar.py (WINDOW_READY_MARKER):
-      // sem esta linha no prazo, `vectora start` encerra em vez de seguir
-      // como servidor sem janela.
-      console.log("VECTORA_ELECTRON_WINDOW_READY");
-    }
-    // O deep-link pendente não é empurrado aqui: a janela ainda não montou o
-    // ouvinte e o perderia. Ela o busca por "vectora:take-deep-link".
+  const activateAfterLoad = (reason: string) => {
+    activateMainWindow(reason, visible);
+  };
+  mainWindow.once("ready-to-show", () => activateAfterLoad("ready-to-show"));
+  // Em Linux, falhas/atrasos do GPU process podem impedir ready-to-show mesmo
+  // com o renderer carregando normalmente. Esses eventos são um fallback
+  // seguro: a janela só aparece depois que a página começou/terminou de carregar.
+  mainWindow.webContents.once("dom-ready", () =>
+    activateAfterLoad("dom-ready"),
+  );
+  mainWindow.webContents.once("did-finish-load", () =>
+    activateAfterLoad("did-finish-load"),
+  );
+  const visibilityFallback = setTimeout(
+    () => activateAfterLoad("visibility-timeout"),
+    2_000,
+  );
+  mainWindow.once("closed", () => clearTimeout(visibilityFallback));
+  void mainWindow.loadURL(`${APP_SCHEME}://app/`).catch((error) => {
+    console.error("Falha ao iniciar a interface do Vectora", error);
   });
   mainWindow.on("closed", () => {
     mainWindow = null;
+    windowReadyMarkerEmitted = false;
   });
 
   // Links externos abrem no navegador padrão (Stripe portal, dashboard).
@@ -1754,6 +1903,7 @@ app.on("open-url", (event, url) => {
 
 app.whenReady().then(async () => {
   if (!gotLock) return;
+  void logActualGraphicsInfo("app-ready");
   if (installedTestsMode) {
     const executable = backendPath(
       process.env,
@@ -1882,7 +2032,7 @@ app.on("before-quit", (event) => {
 
 app.on("activate", () => {
   // macOS: clicar no dock recria janela se fechada.
-  if (BrowserWindow.getAllWindows().length === 0 && backendPort !== null) {
+  if (BrowserWindow.getAllWindows().length === 0 && backendReady) {
     createWindow();
   }
 });

@@ -448,6 +448,11 @@ deb:
   priority: optional
   afterInstall: electron/build-resources/linux-after-install.sh
   afterRemove: electron/build-resources/linux-after-remove.sh
+  # Sobrescreve explicitamente: o electron-builder 26 herda o appId como Icon
+  # no .desktop do .deb mesmo com linux.desktop.entry.Icon definido.
+  desktop:
+    entry:
+      Icon: vectora
 
 pacman:
   # Lista explícita: a padrão do electron-builder exige `http-parser`, que
@@ -477,6 +482,7 @@ flatpak:
   runtime: org.freedesktop.Platform
   runtimeVersion: "26.08"
   sdk: org.freedesktop.Sdk
+  # O ícone Flatpak usa o application ID, diferente do nome dos outros pacotes.
   desktop:
     entry:
       Icon: company.vectora.vectora

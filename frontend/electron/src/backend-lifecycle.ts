@@ -12,6 +12,13 @@ import { spawn, spawnSync, ChildProcess } from "child_process";
 import * as http from "http";
 import * as net from "net";
 import * as path from "path";
+import type { Writable } from "stream";
+
+export function ignoreBrokenPipe(stream: Writable): void {
+  stream.on("error", (error: Error) => {
+    if ((error as NodeJS.ErrnoException).code !== "EPIPE") throw error;
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Porta livre
@@ -39,7 +46,15 @@ export function getFreePort(): Promise<number> {
 
 export interface PathResolutionEnv {
   VECTORA_CORE_PATH?: string;
+  VECTORA_DEV_BACKEND?: string;
+  VECTORA_DEV_BACKEND_EXECUTABLE?: string;
   VECTORA_NATS_BINARY?: string;
+}
+
+export interface BackendLaunch {
+  executable: string;
+  args: string[];
+  cwd?: string;
 }
 
 /**
@@ -61,6 +76,28 @@ export function backendPath(
   }
   const exe = platform === "win32" ? "vectora.exe" : "vectora";
   return path.join(resourcesPath, "vectora-core", exe);
+}
+
+/** Resolve o backend que o Electron deve iniciar no modo alternativo de dev. */
+export function backendLaunch(
+  env: PathResolutionEnv,
+  platform: NodeJS.Platform,
+  resourcesPath: string,
+  sourceRoot: string,
+): BackendLaunch {
+  if (env.VECTORA_DEV_BACKEND === "source") {
+    return {
+      executable:
+        env.VECTORA_DEV_BACKEND_EXECUTABLE ??
+        (platform === "win32" ? "uv.exe" : "uv"),
+      args: ["run", "vectora", "start"],
+      cwd: sourceRoot,
+    };
+  }
+  return {
+    executable: backendPath(env, platform, resourcesPath),
+    args: ["start"],
+  };
 }
 
 /**
@@ -195,9 +232,11 @@ export function spawnBackendProcess(
   exePath: string,
   args: string[],
   env: NodeJS.ProcessEnv,
+  cwd?: string,
 ): ChildProcess {
   return spawn(exePath, args, {
     env,
+    ...(cwd ? { cwd } : {}),
     stdio: ["ignore", "pipe", "pipe"],
   });
 }
@@ -220,6 +259,62 @@ export function pingBackendHttp(
     );
     req.on("error", () => resolve(false));
     req.end();
+  });
+}
+
+export function signLaunchHandshake(
+  transport: http.RequestOptions,
+  mode: "python-primary" | "electron-primary",
+  token: string,
+): Promise<boolean> {
+  return new Promise((resolve) => {
+    const req = http.request(
+      {
+        ...transport,
+        method: "POST",
+        path: "/internal/desktop/handshake",
+        headers: {
+          "x-vectora-launch-mode": mode,
+          "x-vectora-launch-token": token,
+        },
+      },
+      (res) => {
+        res.resume();
+        resolve((res.statusCode ?? 500) < 400);
+      },
+    );
+    req.on("error", () => resolve(false));
+    req.end();
+  });
+}
+
+export function unixSocketIsActive(
+  socketPath: string,
+  timeoutMs = 1_000,
+): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = net.createConnection(socketPath);
+    let settled = false;
+    let response = "";
+    let timeout: NodeJS.Timeout;
+    const finish = (active: boolean) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      socket.destroy();
+      resolve(active);
+    };
+    timeout = setTimeout(() => finish(false), timeoutMs);
+    socket.once("connect", () =>
+      socket.write(
+        "GET /health HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
+      ),
+    );
+    socket.on("data", (chunk: Buffer) => {
+      response += chunk.toString("utf-8");
+      if (response.includes("\r\n")) finish(response.startsWith("HTTP/"));
+    });
+    socket.once("error", () => finish(false));
   });
 }
 
