@@ -222,6 +222,10 @@ def _action_build_python(target, source, env):
             "--dir",
         ],
         cwd=ROOT,
+        env={
+            "VECTORA_UPDATE_CHANNEL": _resolve_update_channel(),
+            "CSC_IDENTITY_AUTO_DISCOVERY": "false",
+        },
     )
     unpacked_name = {
         "linux": "linux-unpacked",
