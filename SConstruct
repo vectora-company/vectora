@@ -221,7 +221,9 @@ def _action_smoke(target, source, env):
     binary_name = "vectora.exe" if sys.platform == "win32" else "vectora"
     binary = os.path.join(ROOT, "dist", "vectora", binary_name)
     if not os.path.isfile(binary):
-        raise SystemExit(f"ERRO: {binary} não existe -- rode `scons release` primeiro.")
+        raise SystemExit(
+            f"ERRO: {binary} não existe -- rode `scons build-python` ou `scons release` primeiro."
+        )
 
     port = 8781  # porta alta, fora do default (8080) para não colidir com um dev server local
     home_dir = tempfile.mkdtemp(prefix="vectora-smoke-")
@@ -971,7 +973,8 @@ def _action_help(target, source, env):
 
   Build
     scons frontend         só o build do frontend (frontend/dist/)
-    scons build-backend    gera o executável Python empacotado com PyInstaller
+    scons build-python     gera o executável Python empacotado para o fluxo
+                           alternativo Python → Electron
     scons install          prepara tudo: detecta o sistema e a arquitetura (e a distro no
                            Linux), sincroniza Python, pnpm ci, Electron, NATS, FFmpeg e,
                            só no macOS, o helper de fala; termina com a lista do instalado
@@ -1256,13 +1259,13 @@ _fetch_speech  = _node("build-macos-speech", _action_build_macos_speech)
 _inst_desktop  = _node("install-desktop", _action_install_desktop)
 _build_chat    = _node("build-chat",      _action_build_chat,    deps=[_inst_desktop])
 _build_backend = _node(
-    "build-backend",
+    "build-python",
     _action_build_backend,
     deps=[_build_chat, _fetch_nats, _fetch_ffmpeg, _fetch_speech],
 )
 # O nó é usado internamente pelo release, mas também é um fluxo útil para
 # testar diretamente o executável Python empacotado.
-env.Alias("build-backend", _build_backend)
+env.Alias("build-python", _build_backend)
 _build_desktop = _node(
     "build-desktop",
     _action_build_desktop,
@@ -1276,7 +1279,7 @@ _cmd("release", lambda target, source, env: _action_package(target, source, env)
 # forçaria um novo empacotamento inteiro (caro) toda vez que `scons smoke`
 # rodasse -- inclusive em CI, logo depois do binário já ter sido construído
 # no passo anterior do workflow. `_action_smoke` já checa se o binário
-# existe e falha com uma mensagem clara ("rode scons build-backend/release
+# existe e falha com uma mensagem clara ("rode scons build-python/release
 # primeiro") se não existir.
 _cmd("smoke", _action_smoke)
 

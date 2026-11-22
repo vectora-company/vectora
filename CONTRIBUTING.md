@@ -195,7 +195,7 @@ Electron não instalado (`linux-unpacked`, `win-unpacked` ou equivalente), e
 aponte o backend para o executável Electron empacotado:
 
 ```bash
-uv run scons build-backend
+uv run scons build-python
 pnpm --dir frontend run electron:dist:linux -- --dir
 VECTORA_PACKAGED_ELECTRON_PATH="$PWD/frontend/dist-electron/linux-unpacked/vectora" \
   ./dist/vectora/vectora start
