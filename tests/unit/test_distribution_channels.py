@@ -114,6 +114,10 @@ def test_linux_desktop_entries_use_the_installed_vectora_icon() -> None:
     assert "icon: electron/build-resources/linux-icons" in linux["body"]
     assert "Icon: vectora" in linux["body"]
     assert "Icon: vectora" in deb["body"]
+    after_install = (
+        ROOT / "frontend/electron/build-resources/linux-after-install.sh"
+    ).read_text(encoding="utf-8")
+    assert "Icon=vectora" in after_install
 
 
 def test_linux_electron_uses_angle_vulkan_without_forcing_vulkan_compositor() -> None:
