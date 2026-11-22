@@ -70,22 +70,6 @@ Os recursos incluídos nesta versão são listados abaixo.
 - feat(chat): envia PDF, áudio e vídeo nativos aos modelos que aceitam (#481)
 - feat(chat): aceita qualquer arquivo anexado e classifica pelos bytes (#480)
 
-- feat(mcp): transcreve localmente o áudio devolvido por ferramentas MCP (#501)
-- feat(contexto): aprende o custo em tokens de uma imagem por modelo (#500)
-- feat(midia): tela para configurar os limites de imagens de PDF e vídeo (#499)
-- feat(build): scons install completo, com detecção do ambiente (#496)
-- feat(midia): limites configuráveis e ferramentas de PDF e vídeo com opções (#494)
-- feat(midia): configuração da transcrição local nas configurações do app (#492)
-- feat(midia): reconhecimento de fala nativo do macOS para transcrição local (#491)
-- feat(midia): transcrição local-first de áudio e vídeo e PDF em imagens (#490)
-- feat(chat): envia PDF e vídeo como imagens a modelos que só leem imagem (#488)
-- feat(chat): imagens devolvidas por ferramentas MCP chegam ao modelo (#487)
-- feat(chat): envia PDF, áudio e vídeo nativos pelo OpenRouter e 9router (#486)
-- feat(chat): screenshots de ferramentas chegam ao modelo como imagem (#483)
-- feat(chat): composer aceita qualquer arquivo e mostra como cada anexo chegou ao modelo (#482)
-- feat(chat): envia PDF, áudio e vídeo nativos aos modelos que aceitam (#481)
-- feat(chat): aceita qualquer arquivo anexado e classifica pelos bytes (#480)
-
 ### Bug Fixes
 
 As correções incluídas nesta versão são listadas abaixo.
@@ -102,9 +86,19 @@ As correções incluídas nesta versão são listadas abaixo.
 - fix(ci): lê o epoch da última tag anotada pelo commit (#484)
 - fix(contexto): estimativa de tokens conta as imagens de PDF e vídeo (#493)
 - fix(chat): imagens anexadas chegam ao modelo depois de gravadas no histórico (#479)
-- fix(ci): lê o epoch da última tag anotada pelo commit (#484)
-- fix(contexto): estimativa de tokens conta as imagens de PDF e vídeo (#493)
-- fix(chat): imagens anexadas chegam ao modelo depois de gravadas no histórico (#479)
+- fix: abertura limpa do app em desenvolvimento, shutdown sem traceback e janela correta no Linux (#806)
+- test(electron): adiciona fluxos alternativos Python e Electron (#809)
+- fix(admin): grava o storage_mode fora do event loop (#804)
+- fix(desktop): diálogos não cobrem a barra de título do Electron (#785)
+- fix(ui): textos e confirmação do Provider Routing pelo i18n (#750)
+- feat: cache de prompt no OpenRouter e no llama.cpp (#720)
+- feat: chave de cache de prompt por conversa na OpenAI (#712)
+- fix: política de memória, histórico sem avisos de cancelamento e remember em segundo plano (#690)
+- feat: acesso às ferramentas em Administração com RBAC por role (#684)
+- ci: rodar o Local LLM só sob demanda (#639)
+- ci: unir os workflows de PR num gate único com fila de jobs (#637)
+- fix(embedding): permitir reprocessar itens esgotados (#608)
+- fix: corrigir transporte web e instalar Laya local no Linux (#593)
 
 ## [0.1.24] (2026-11-04)
 
