@@ -1260,6 +1260,9 @@ _build_backend = _node(
     _action_build_backend,
     deps=[_build_chat, _fetch_nats, _fetch_ffmpeg, _fetch_speech],
 )
+# O nó é usado internamente pelo release, mas também é um fluxo útil para
+# testar diretamente o executável Python empacotado.
+env.Alias("build-backend", _build_backend)
 _build_desktop = _node(
     "build-desktop",
     _action_build_desktop,
