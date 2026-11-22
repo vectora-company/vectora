@@ -175,6 +175,17 @@ if (process.platform === "linux" && !graphicsCli.disableGpu) {
     VECTORA_OZONE_PLATFORM:
       graphicsCli.ozonePlatform ?? process.env.VECTORA_OZONE_PLATFORM,
   });
+  app.commandLine.appendSwitch("ignore-gpu-blocklist");
+  if (graphicsCli.angleBackend) {
+    app.commandLine.appendSwitch("use-angle", graphicsCli.angleBackend);
+  } else {
+    app.commandLine.appendSwitch("use-angle", "vulkan");
+  }
+  app.commandLine.appendSwitch(
+    "enable-features",
+    "Vulkan,VulkanFromANGLE,DefaultANGLEVulkan,VaapiVideoDecoder",
+  );
+  app.commandLine.appendSwitch("disable-features", "SkiaGraphite");
   for (const [name, value] of graphics.switches) {
     if (value === undefined) {
       app.commandLine.appendSwitch(name);

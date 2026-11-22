@@ -441,6 +441,8 @@ deb:
     - libsecret-1-0
     - libdrm2
     - libgbm1
+    - libvulkan1
+    - mesa-vulkan-drivers
   recommends:
     - libappindicator3-1 | libayatana-appindicator3-1
   priority: optional
@@ -480,11 +482,18 @@ flatpak:
   runtime: org.freedesktop.Platform
   runtimeVersion: "26.08"
   sdk: org.freedesktop.Sdk
+  baseVersion: "26.08"
+  desktop:
+    entry:
+      Icon: company.vectora.vectora
 
 snapcraft:
   base: core22
   core22:
     confinement: strict
+    plugs:
+      - default
+      - opengl
 
 nsis:
   # ManifestDPIAware true vem de build-resources/installer.nsh (hook customHeader,
