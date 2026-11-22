@@ -36,6 +36,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from pathlib import Path
 import time
 import urllib.error
 import urllib.request
@@ -666,7 +667,12 @@ def _action_package(target, source, env, platform=""):
     output_arg = f"-c.directories.output={out_dir}"
 
     builder_env: dict[str, str] = {
-        "VECTORA_UPDATE_CHANNEL": _resolve_update_channel()
+        "VECTORA_UPDATE_CHANNEL": _resolve_update_channel(),
+        # Mantém o zip do Electron entre execuções locais do SCons. Sem isso,
+        # cada processo do electron-builder pode resolver um cache diferente.
+        "ELECTRON_CACHE": os.environ.get(
+            "ELECTRON_CACHE", os.path.join(Path.home(), ".cache", "electron")
+        ),
     }
     has_signing_creds = any(
         os.environ.get(k)
@@ -684,8 +690,9 @@ def _action_package(target, source, env, platform=""):
         else:
             builder_env["CSC_IDENTITY_AUTO_DISCOVERY"] = "false"
     if is_linux:
-        # Snap pode alterar linux-unpacked enquanto o AppImage lê seus arquivos.
-        # Gere os demais formatos primeiro e Snap em uma segunda passada.
+        # Uma única execução prepara linux-unpacked e reutiliza a mesma cópia
+        # do Electron para todos os instaladores Linux. Separar o Snap em outra
+        # execução fazia o builder extrair/preparar o Electron novamente.
         _run(
             [
                 *cmd,
@@ -694,12 +701,12 @@ def _action_package(target, source, env, platform=""):
                 "rpm",
                 "pacman",
                 "flatpak",
+                "snap",
                 "tar.gz",
                 output_arg,
             ],
             env=builder_env or None,
         )
-        _run([*cmd, "snap", output_arg], env=builder_env or None)
     else:
         _run([*cmd, output_arg], env=builder_env or None)
 
