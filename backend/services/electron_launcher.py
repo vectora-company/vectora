@@ -56,30 +56,22 @@ def resolve_linux_ozone_argument(requested: str | None) -> str | None:
     return f"--ozone-platform={platform}"
 
 
-def resolve_electron_launch() -> tuple[str, list[str]] | None:
-    """Retorna ``(executável, [main.js])`` prontos para
-    ``asyncio.create_subprocess_exec``, ou ``None`` se o build de dev do
-    Electron não estiver disponível (não instalado, não buildado).
-
-    Cada motivo de falha loga um aviso específico — sem isso, `vectora
-    start` cai silenciosamente pro modo web sem nenhuma pista de por que
-    o Electron não subiu (achado ao vivo: `pnpm install --frozen-lockfile`
-    reporta "Already up to date" mesmo quando o postinstall do pacote
-    `electron` nunca rodou de verdade, deixando `node_modules/electron/`
-    sem `path.txt`/`dist/` — o `scons frontend` não detecta isso).
-    """
+def _resolve_packaged_override() -> tuple[str, list[str]] | None:
     packaged_override = os.environ.get("VECTORA_PACKAGED_ELECTRON_PATH", "").strip()
-    if packaged_override:
-        executable = Path(packaged_override).expanduser()
-        if executable.is_file() and os.access(executable, os.X_OK):
-            return str(executable), []
-        logger.warning(
-            "electron_launcher: VECTORA_PACKAGED_ELECTRON_PATH não aponta "
-            "para um executável: %s",
-            executable,
-        )
+    if not packaged_override:
         return None
+    executable = Path(packaged_override).expanduser()
+    if executable.is_file() and os.access(executable, os.X_OK):
+        return str(executable), []
+    logger.warning(
+        "electron_launcher: VECTORA_PACKAGED_ELECTRON_PATH não aponta "
+        "para um executável: %s",
+        executable,
+    )
+    return None
 
+
+def _resolve_source_launch() -> tuple[str, list[str]] | None:
     main_js = _electron_dir() / "dist" / "main.js"
     main_exists = main_js.is_file()
     source_dir = _electron_dir() / "src"
@@ -130,3 +122,23 @@ def resolve_electron_launch() -> tuple[str, list[str]] | None:
         return None
 
     return str(exe_path), [str(main_js)]
+
+
+def resolve_electron_launch() -> tuple[str, list[str]] | None:
+    """Retorna ``(executável, [main.js])`` prontos para
+    ``asyncio.create_subprocess_exec``, ou ``None`` se o build de dev do
+    Electron não estiver disponível (não instalado, não buildado).
+
+    Cada motivo de falha loga um aviso específico — sem isso, `vectora
+    start` cai silenciosamente pro modo web sem nenhuma pista de por que
+    o Electron não subiu (achado ao vivo: `pnpm install --frozen-lockfile`
+    reporta "Already up to date" mesmo quando o postinstall do pacote
+    `electron` nunca rodou de verdade, deixando `node_modules/electron/`
+    sem `path.txt`/`dist/` — o `scons frontend` não detecta isso).
+    """
+    packaged = _resolve_packaged_override()
+    return (
+        packaged
+        if os.environ.get("VECTORA_PACKAGED_ELECTRON_PATH", "").strip()
+        else _resolve_source_launch()
+    )
