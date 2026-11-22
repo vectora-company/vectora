@@ -208,6 +208,35 @@ def _action_build_backend(target, source, env):
     print(f">> executável do backend pronto em {binary}")
 
 
+def _action_build_python(target, source, env):
+    """Gera o bundle alternativo Python → Electron para o SO atual."""
+    platform = {"linux": "linux", "win32": "win", "darwin": "mac"}[sys.platform]
+    _run(
+        [
+            PNPM,
+            "--dir",
+            "frontend",
+            "run",
+            f"electron:dist:{platform}",
+            "--",
+            "--dir",
+        ],
+        cwd=ROOT,
+    )
+    unpacked_name = {
+        "linux": "linux-unpacked",
+        "win": "win-unpacked",
+        "mac": "mac",
+    }[platform]
+    source_dir = os.path.join(ROOT, "frontend", "dist-electron", unpacked_name)
+    destination = os.path.join(ROOT, "dist", "vectora", "electron")
+    if not os.path.isdir(source_dir):
+        raise SystemExit(f"ERRO: Electron unpacked não gerado em {source_dir}")
+    shutil.rmtree(destination, ignore_errors=True)
+    shutil.copytree(source_dir, destination)
+    print(f">> bundle Python → Electron pronto em {destination}")
+
+
 def _action_smoke(target, source, env):
     """Sobe o binário híbrido empacotado de verdade (não o source interpretado)
     e confirma que `/health` responde 200.
@@ -973,8 +1002,8 @@ def _action_help(target, source, env):
 
   Build
     scons frontend         só o build do frontend (frontend/dist/)
-    scons build-python     gera o executável Python empacotado para o fluxo
-                           alternativo Python → Electron
+    scons build-python     gera o bundle executável Python → Electron
+                           para o fluxo alternativo
     scons install          prepara tudo: detecta o sistema e a arquitetura (e a distro no
                            Linux), sincroniza Python, pnpm ci, Electron, NATS, FFmpeg e,
                            só no macOS, o helper de fala; termina com a lista do instalado
@@ -1259,13 +1288,16 @@ _fetch_speech  = _node("build-macos-speech", _action_build_macos_speech)
 _inst_desktop  = _node("install-desktop", _action_install_desktop)
 _build_chat    = _node("build-chat",      _action_build_chat,    deps=[_inst_desktop])
 _build_backend = _node(
-    "build-python",
+    "build-backend",
     _action_build_backend,
     deps=[_build_chat, _fetch_nats, _fetch_ffmpeg, _fetch_speech],
 )
-# O nó é usado internamente pelo release, mas também é um fluxo útil para
-# testar diretamente o executável Python empacotado.
-env.Alias("build-python", _build_backend)
+_build_python = _node(
+    "build-python",
+    _action_build_python,
+    deps=[_build_backend],
+)
+env.Alias("build-python", _build_python)
 _build_desktop = _node(
     "build-desktop",
     _action_build_desktop,

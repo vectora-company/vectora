@@ -196,11 +196,10 @@ aponte o backend para o executável Electron empacotado:
 
 ```bash
 uv run scons build-python
-pnpm --dir frontend run electron:dist:linux -- --dir
-VECTORA_PACKAGED_ELECTRON_PATH="$PWD/frontend/dist-electron/linux-unpacked/vectora" \
-  ./dist/vectora/vectora start
+./dist/vectora/vectora start
 ```
 
-O último comando mantém o Python empacotado como processo principal e faz com
-que ele inicie o Electron empacotado. O workflow de release não usa esse modo:
+O alvo `build-python` coloca o Electron empacotado em `dist/vectora/electron/`;
+o Python empacotado o descobre automaticamente e permanece como processo
+principal, iniciando o Electron. O workflow de release não usa esse modo:
 ele continua com o Electron empacotado iniciando `vectora-core`.

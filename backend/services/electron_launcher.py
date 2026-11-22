@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -124,6 +125,24 @@ def _resolve_source_launch() -> tuple[str, list[str]] | None:
     return str(exe_path), [str(main_js)]
 
 
+def _resolve_packaged_sibling() -> tuple[str, list[str]] | None:
+    """Resolve o Electron empacotado ao lado do executável PyInstaller."""
+    executable_name = "vectora.exe" if sys.platform == "win32" else "vectora"
+    executable = Path(sys.executable).resolve().parent / "electron" / executable_name
+    if sys.platform == "darwin":
+        executable = (
+            Path(sys.executable).resolve().parent
+            / "electron"
+            / "Vectora.app"
+            / "Contents"
+            / "MacOS"
+            / "Vectora"
+        )
+    if executable.is_file() and os.access(executable, os.X_OK):
+        return str(executable), []
+    return None
+
+
 def resolve_electron_launch() -> tuple[str, list[str]] | None:
     """Retorna ``(executável, [main.js])`` prontos para
     ``asyncio.create_subprocess_exec``, ou ``None`` se o build de dev do
@@ -137,8 +156,8 @@ def resolve_electron_launch() -> tuple[str, list[str]] | None:
     sem `path.txt`/`dist/` — o `scons frontend` não detecta isso).
     """
     packaged = _resolve_packaged_override()
-    return (
-        packaged
-        if os.environ.get("VECTORA_PACKAGED_ELECTRON_PATH", "").strip()
-        else _resolve_source_launch()
-    )
+    if os.environ.get("VECTORA_PACKAGED_ELECTRON_PATH", "").strip():
+        return packaged
+    if getattr(sys, "frozen", False):
+        return _resolve_packaged_sibling()
+    return _resolve_source_launch()
