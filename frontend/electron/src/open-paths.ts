@@ -89,7 +89,14 @@ export function pathsFromArgv(
   argv: readonly string[],
   options: PathsFromArgvOptions = {},
 ): string[] {
-  const skip = options.defaultApp ? 2 : 1;
+  let skip = 1;
+  if (options.defaultApp) {
+    // O Electron pode inserir opções antes do entrypoint (`electron --flag
+    // main.js`). O primeiro argumento posicional ainda é o app; só os
+    // argumentos posteriores podem representar arquivos abertos.
+    while (skip < argv.length && argv[skip].startsWith("-")) skip += 1;
+    skip += 1;
+  }
   const found: string[] = [];
   for (const rawArgument of argv.slice(skip)) {
     const raw = fixDriveRootArgument(rawArgument);
