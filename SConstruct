@@ -971,6 +971,7 @@ def _action_help(target, source, env):
 
   Build
     scons frontend         só o build do frontend (frontend/dist/)
+    scons build-backend    gera o executável Python empacotado com PyInstaller
     scons install          prepara tudo: detecta o sistema e a arquitetura (e a distro no
                            Linux), sincroniza Python, pnpm ci, Electron, NATS, FFmpeg e,
                            só no macOS, o helper de fala; termina com a lista do instalado
