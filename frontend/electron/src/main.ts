@@ -159,10 +159,18 @@ if (process.platform === "win32") {
 } else {
   // `VECTORA_ANGLE_BACKEND` (ex.: "gl" ou "default") troca o backend quando o
   // Vulkan não inicializa na máquina ("No suitable EGL configs").
+  const requestedAngle = process.env.VECTORA_ANGLE_BACKEND?.trim();
+  if (requestedAngle) {
+    app.commandLine.appendSwitch("use-angle", requestedAngle);
+  } else {
+    app.commandLine.appendSwitch("use-angle", "vulkan");
+  }
+  app.commandLine.appendSwitch("ignore-gpu-blocklist");
   app.commandLine.appendSwitch(
-    "use-angle",
-    process.env.VECTORA_ANGLE_BACKEND?.trim() || "vulkan",
+    "enable-features",
+    "Vulkan,VulkanFromANGLE,DefaultANGLEVulkan,VaapiVideoDecoder",
   );
+  app.commandLine.appendSwitch("disable-features", "SkiaGraphite");
   if (process.platform === "linux") {
     // Usa XWayland/X11 como protocolo de janela; Vulkan continua sendo o
     // backend gráfico. Wayland não é um backend de renderização.
@@ -275,6 +283,7 @@ let backendPidFileWrite: Promise<void> | null = null;
 let shutdownResourcesDisposed = false;
 let backendPort: number | null = null;
 let backendPipePath: string | null = null; // Windows named pipe path (\\.\pipe\vectora-<pid>)
+let backendReady = false;
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let pendingDeepLink: string | null = null;
@@ -806,6 +815,7 @@ async function restartBackend(): Promise<void> {
     backendPipePath = null;
     await startBackend();
     await waitForBackend();
+    backendReady = true;
     if (mainWindow) {
       void mainWindow.loadURL(`${APP_SCHEME}://app/`);
     } else {
@@ -1711,7 +1721,7 @@ app.on("second-instance", (_event, argv, workingDirectory) => {
     if (mainWindow.isMinimized()) mainWindow.restore();
     mainWindow.show();
     mainWindow.focus();
-  } else {
+  } else if (backendReady) {
     createWindow({ visible: process.env.VECTORA_WEB_MODE !== "1" });
   }
 });
@@ -1743,6 +1753,7 @@ app.on("open-url", (event, url) => {
 (app as unknown as { isQuitting: boolean }).isQuitting = false;
 
 app.whenReady().then(async () => {
+  if (!gotLock) return;
   if (installedTestsMode) {
     const executable = backendPath(
       process.env,
@@ -1782,6 +1793,7 @@ app.whenReady().then(async () => {
     await killStaleBackend();
     await startBackend();
     await waitForBackend();
+    backendReady = true;
     await clearPendingUpdate();
     const webMode = process.env.VECTORA_WEB_MODE === "1";
     // In `vectora web`, keep a hidden renderer alive so BrowserViews/CDP use

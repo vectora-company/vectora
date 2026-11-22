@@ -301,6 +301,83 @@ class TestOrphanPidFile:
         assert nats_sidecar._read_stale_pids(store_dir) == [12345]
 
     @pytest.mark.asyncio
+    async def test_flatpak_reuses_nats_from_url_without_trusting_namespaced_pid(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.setattr(nats_sidecar.settings, "vectora_home", tmp_path)
+        monkeypatch.setenv("FLATPAK_ID", "company.vectora.vectora")
+        store_dir = tmp_path / "nats"
+        store_dir.mkdir(parents=True)
+        registered_url = "nats://127.0.0.1:4222"
+        nats_sidecar._write_pid_list(store_dir, [9999], url=registered_url)
+        spawn_mock = AsyncMock()
+
+        with (
+            patch.object(
+                nats_sidecar, "_resolve_binary", return_value="/usr/bin/nats-server"
+            ),
+            patch.object(
+                nats_sidecar,
+                "_pid_is_alive",
+                side_effect=AssertionError("Flatpak PID is namespace-local"),
+            ),
+            patch.object(nats_sidecar, "_responds", return_value=True),
+            patch("asyncio.create_subprocess_exec", new=spawn_mock),
+        ):
+            url = await nats_sidecar.ensure_nats_sidecar()
+
+        assert url == registered_url
+        spawn_mock.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_flatpak_never_kills_a_stale_pid_from_another_namespace(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.setattr(nats_sidecar.settings, "vectora_home", tmp_path)
+        monkeypatch.setenv("FLATPAK_ID", "company.vectora.vectora")
+        store_dir = tmp_path / "nats"
+        store_dir.mkdir(parents=True)
+        nats_sidecar._write_pid_list(store_dir, [9999], url="nats://127.0.0.1:4222")
+
+        fake_proc = _fake_ready_proc()
+        fake_proc.pid = 12345
+        kill_mock = MagicMock()
+
+        with (
+            patch.object(
+                nats_sidecar, "_resolve_binary", return_value="/usr/bin/nats-server"
+            ),
+            patch.object(
+                nats_sidecar,
+                "_pid_is_alive",
+                side_effect=AssertionError("Flatpak PID is namespace-local"),
+            ),
+            patch.object(nats_sidecar, "_responds", return_value=False),
+            patch.object(nats_sidecar, "_kill_pid", kill_mock),
+            patch(
+                "asyncio.create_subprocess_exec", new=AsyncMock(return_value=fake_proc)
+            ),
+        ):
+            url = await nats_sidecar.ensure_nats_sidecar()
+
+        kill_mock.assert_not_called()
+        assert url is not None
+        assert nats_sidecar._read_stale_pids(store_dir) == [12345]
+
+    @pytest.mark.asyncio
+    async def test_stop_without_owned_sidecar_keeps_registered_pid_file(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.setattr(nats_sidecar.settings, "vectora_home", tmp_path)
+        store_dir = tmp_path / "nats"
+        store_dir.mkdir(parents=True)
+        nats_sidecar._write_pid_list(store_dir, [4242], url="nats://127.0.0.1:4222")
+
+        await nats_sidecar.stop_nats_sidecar()
+
+        assert nats_sidecar._read_stale_pids(store_dir) == [4242]
+
+    @pytest.mark.asyncio
     async def test_ensure_nats_sidecar_ignora_pid_morto_sem_tentar_matar(
         self, tmp_path, monkeypatch
     ):

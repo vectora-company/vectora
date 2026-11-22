@@ -1600,26 +1600,6 @@ export const MessageItem = memo(
                     onOpenFile={(file) => onOpenEditedFile?.(file)}
                   />
                 )}
-                {message.verification && (
-                  <p
-                    className={`mt-2 text-[11px] ${
-                      message.verification.status === "failed"
-                        ? "text-destructive"
-                        : message.verification.status === "passed"
-                          ? "text-muted-foreground"
-                          : "text-amber-500"
-                    }`}
-                    data-testid="verification-footer"
-                    data-status={message.verification.status}
-                    title={message.verification.detail}
-                  >
-                    {message.verification.status === "passed"
-                      ? m.chat_verification_passed()
-                      : message.verification.status === "failed"
-                        ? m.chat_verification_failed()
-                        : m.chat_verification_not_verified()}
-                  </p>
-                )}
                 {message.structuredQuestionPending && (
                   <StructuredQuestionPanel
                     pending={message.structuredQuestionPending}

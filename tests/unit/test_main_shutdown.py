@@ -2,10 +2,9 @@
 
 Garante que _install_terminal_signals seta server.should_exit=True e chama
 icon.stop() quando o sinal chega. `_should_install_terminal_signals` decide
-QUANDO instalar — distingue "processo dono de si mesmo" (terminal puro, ou
-o próprio backend que se autoelegeu primário e subiu o Electron como seu
-sidecar) de "Electron de produção me possui e já cuida da árvore via
-taskkill /T /F" (onde o handler custom não deve rodar)."""
+QUANDO instalar: backends desktop precisam tratar sinais do Electron e do
+terminal, enquanto `vectora web` sempre instala o handler e outros modos
+headless não o fazem."""
 
 from __future__ import annotations
 
@@ -52,6 +51,9 @@ class _FakeServer:
 
     def install_signal_handlers(self) -> None:
         pass
+
+    def capture_signals(self) -> Any:
+        return MagicMock()
 
 
 def _get_handler(signum: int) -> Any:
@@ -205,6 +207,21 @@ def test_uvicorn_does_not_replace_process_owner_signal_handler() -> None:
     original.assert_not_called()
 
 
+def test_uvicorn_capture_signals_does_not_replace_process_handlers() -> None:
+    """Uvicorn novo usa `capture_signals`: ele não pode trocar os handlers do
+    processo nem adiar o sinal para depois do shutdown."""
+    from backend.main import _disable_uvicorn_signal_capture
+
+    server = _FakeServer()
+    original_handler = signal.getsignal(signal.SIGINT)
+
+    _disable_uvicorn_signal_capture(server)
+    with server.capture_signals():
+        assert signal.getsignal(signal.SIGINT) is original_handler
+
+    assert not isinstance(server.capture_signals, MagicMock)
+
+
 def test_tray_exposes_icon_via_icon_ref() -> None:
     """run_server_with_tray preenche icon_ref[0] com o pystray.Icon criado."""
     pystray_mock = MagicMock()
@@ -243,11 +260,7 @@ def test_tray_exposes_icon_via_icon_ref() -> None:
 
 
 class TestShouldInstallTerminalSignals:
-    """`VECTORA_DESKTOP=1` sozinho não diz quem é dono do processo — só
-    `VECTORA_SPAWN_ELECTRON` (setado só quando o próprio backend sobe o
-    Electron como seu sidecar, `_run_start`) distingue o modo
-    backend-primário em dev (sem dono externo, precisa se auto-limpar) de
-    produção real (Electron possui o backend e mata a árvore sozinho)."""
+    """Os modos desktop e web processam sinais mesmo sem stdin interativo."""
 
     def test_terminal_interativo_puro_instala(self, monkeypatch):
         from backend.main import _should_install_terminal_signals
@@ -279,16 +292,14 @@ class TestShouldInstallTerminalSignals:
         env = {"VECTORA_DESKTOP": "1", "VECTORA_SPAWN_ELECTRON": "1"}
         assert _should_install_terminal_signals(env) is True
 
-    def test_producao_com_electron_dono_nao_instala(self, monkeypatch):
-        # Erro/borda: VECTORA_DESKTOP setado SEM VECTORA_SPAWN_ELECTRON é o
-        # caso de produção (Electron spawnou o backend) — o Electron já
-        # mata a árvore via taskkill /T /F; um handler custom aqui
-        # disputaria esse shutdown.
+    def test_producao_com_electron_dono_instala_handlers(self, monkeypatch):
+        # O backend também recebe SIGTERM do Electron e SIGINT do terminal;
+        # ambos devem usar o caminho gracioso para fechar lifespan e sidecars.
         from backend.main import _should_install_terminal_signals
 
-        monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+        monkeypatch.setattr("sys.stdin.isatty", lambda: False)
         env = {"VECTORA_DESKTOP": "1"}
-        assert _should_install_terminal_signals(env) is False
+        assert _should_install_terminal_signals(env) is True
 
     def test_vps_docker_sem_tty_nao_instala(self, monkeypatch):
         from backend.main import _should_install_terminal_signals

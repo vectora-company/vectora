@@ -17,7 +17,7 @@
 # artifactName), então cada instalador aponta pro seu próprio
 # /updates/<channel>/<os>/<arch>/latest.yml no Worker remoto.
 
-appId: company.vectora.desktop
+appId: company.vectora.vectora
 productName: Vectora
 copyright: Copyright © 2026 Vectora Company
 artifactName: ${productName}-${version}-${os}-${arch}.${ext}
@@ -441,6 +441,8 @@ deb:
     - libsecret-1-0
     - libdrm2
     - libgbm1
+    - libvulkan1
+    - mesa-vulkan-drivers
   recommends:
     - libappindicator3-1 | libayatana-appindicator3-1
   priority: optional
@@ -473,13 +475,19 @@ flatpak:
   # O pacote é um bundle instalável localmente; publicação no Flathub exigiria
   # um repositório e revisão próprios, fora deste pipeline de downloads.
   runtime: org.freedesktop.Platform
-  runtimeVersion: "24.08"
+  runtimeVersion: "26.08"
   sdk: org.freedesktop.Sdk
+  desktop:
+    entry:
+      Icon: company.vectora.vectora
 
 snapcraft:
   base: core22
   core22:
     confinement: strict
+    plugs:
+      - default
+      - opengl
 
 nsis:
   # ManifestDPIAware true vem de build-resources/installer.nsh (hook customHeader,

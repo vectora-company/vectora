@@ -590,6 +590,7 @@ def test_linux_release_installs_native_package_build_tools() -> None:
     content = (WORKFLOW.parent / "vectora.yml").read_text(encoding="utf-8")
 
     assert "libarchive-tools" in content
+    assert "flatpak flatpak-builder fuse3 libarchive-tools rpm snapd" in content
     assert 'image="ghcr.io/canonical/snapcraft:8_core22"' in content
     assert "cat > \"$compat_dir/snapcraft\" <<'EOF'" in content
     assert '"${args[0]:-}" == "snap"' in content
@@ -603,7 +604,51 @@ def test_linux_release_installs_native_package_build_tools() -> None:
     assert "sudo snap install lxd" not in content
     assert "sudo lxd init --auto" not in content
     assert "sudo snap install snapcraft" not in content
-    assert "snapd" not in content
+
+
+def test_dotfiles_installs_flatpak_and_snap_tools_on_supported_distributions() -> None:
+    dotfiles = (WORKFLOW.parent.parent.parent / "dotfiles.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert "flatpak-builder fuse3 libarchive-tools rpm snapd" in dotfiles
+    assert "flatpak flatpak-builder fuse3 bsdtar rpm-build snapd" in dotfiles
+    assert (
+        'if [[ "$PACKAGE_MANAGER" == apt || "$PACKAGE_MANAGER" == dnf ]]; then'
+        in dotfiles
+    )
+    assert "systemctl enable --now snapd.socket" in dotfiles
+    assert "snap install snapcraft --classic" in dotfiles
+    assert "if command_exists snap && ! command_exists snapcraft; then" in dotfiles
+    assert "snap (pacote snapd)" in dotfiles
+    assert "snapcraft (snap install snapcraft --classic)" in dotfiles
+    assert "cargo flatpak flatpak-builder fuse3" in dotfiles
+    assert "https://dl.flathub.org/repo/flathub.flatpakrepo" in dotfiles
+    assert "flathub org.flatpak.Builder" in dotfiles
+    assert "flatpak info --user org.flatpak.Builder" in dotfiles
+
+
+def test_dotfiles_installs_vulkan_runtime_and_optional_debug_tools() -> None:
+    dotfiles = (WORKFLOW.parent.parent.parent / "dotfiles.sh").read_text(
+        encoding="utf-8"
+    )
+
+    for package in (
+        "mesa-vulkan-drivers",
+        "libvulkan1",
+        "libvulkan-dev",
+        "vulkan-tools",
+        "libva-drm2",
+        "libva-wayland2",
+        "patchelf",
+        "binutils",
+    ):
+        assert package in dotfiles
+    assert "intel-media-va-driver-non-free" in dotfiles
+    assert "--gpu-tools" in dotfiles
+    assert "mangohud" in dotfiles
+    assert "vulkan-validationlayers" in dotfiles
+    assert "org.renderdoc.RenderDoc" not in dotfiles
 
 
 def test_linux_release_validates_and_uploads_electron_builder_artifact_names() -> None:
@@ -619,6 +664,37 @@ def test_linux_release_validates_and_uploads_electron_builder_artifact_names() -
     assert "/artifacts/Vectora-*-linux-amd64.deb" in content
     assert "/artifacts/Vectora-*-linux-x86_64.rpm" in content
     assert "/artifacts/Vectora-*-linux-x64.pacman" in content
+
+
+def test_scons_release_copies_all_electron_builder_artifacts() -> None:
+    sconstruct = (WORKFLOW.parent.parent.parent / "SConstruct").read_text(
+        encoding="utf-8"
+    )
+
+    for extension in (
+        "AppImage",
+        "deb",
+        "rpm",
+        "snap",
+        "pacman",
+        "flatpak",
+        "tar.gz",
+        "zip",
+    ):
+        assert f'"*.{extension}"' in sconstruct
+
+
+def test_scons_builds_snap_after_other_linux_formats() -> None:
+    sconstruct = (WORKFLOW.parent.parent.parent / "SConstruct").read_text(
+        encoding="utf-8"
+    )
+    snap_command = '_run([*cmd, "snap", output_arg], env=builder_env or None)'
+
+    assert '"tar.gz",\n                output_arg,' in sconstruct
+    assert snap_command in sconstruct
+    assert sconstruct.index(
+        '"tar.gz",\n                output_arg,'
+    ) < sconstruct.index(snap_command)
 
 
 def test_nats_release_download_retries_transient_network_failures() -> None:

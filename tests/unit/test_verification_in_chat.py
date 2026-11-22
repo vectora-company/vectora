@@ -135,3 +135,57 @@ async def test_history_verification_goes_on_the_turns_last_answer() -> None:
     assert verifications["42"].status == "passed"
     assert verifications["42"].outcome == "passed"
     assert verifications["42"].detail == "Verificação concluída com sucesso."
+
+
+def _not_run_evidence() -> list[dict]:
+    return [
+        {
+            "kind": "quality_gate_verification",
+            "status": "degraded",
+            "outcome": "not_run",
+        }
+    ]
+
+
+async def test_history_hides_not_verified_on_a_plain_chat_turn() -> None:
+    """Conversa sem edição e sem gate não ganha "Não verificado" ao recarregar."""
+    from backend.services.agent_factory import _history_verifications
+
+    chat_run = SimpleNamespace(
+        run_id="r1",
+        detail="Nenhum quality gate foi executado: a execução não foi verificada.",
+        evidence=_not_run_evidence(),
+        files_touched=[],
+    )
+
+    class _Store:
+        async def list_agent_runs(self, thread_id: str, *, limit: int = 50):
+            return [chat_run]
+
+        async def latest_assistant_message_id(self, thread_id: str, run_id: str):
+            return 42
+
+    assert await _history_verifications(_Store(), "t") == {}  # ty: ignore[invalid-argument-type]
+
+
+async def test_history_keeps_not_verified_when_the_turn_touched_files() -> None:
+    from backend.services.agent_factory import _history_verifications
+
+    edit_run = SimpleNamespace(
+        run_id="r1",
+        detail="Nenhum quality gate foi executado: a execução não foi verificada.",
+        evidence=_not_run_evidence(),
+        files_touched=["backend/main.py"],
+    )
+
+    class _Store:
+        async def list_agent_runs(self, thread_id: str, *, limit: int = 50):
+            return [edit_run]
+
+        async def latest_assistant_message_id(self, thread_id: str, run_id: str):
+            return 42
+
+    verifications = await _history_verifications(_Store(), "t")  # ty: ignore[invalid-argument-type]
+
+    assert verifications["42"].outcome == "not_run"
+    assert verifications["42"].status == "degraded"

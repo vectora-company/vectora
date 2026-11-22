@@ -38,6 +38,7 @@ import signal
 import socket
 import sys
 import threading
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -94,16 +95,11 @@ def _should_install_terminal_signals(
     shutdown gracioso do uvicorn, que aciona o `finally` do lifespan e
     limpa sidecars como o NATS) deve ser instalado.
 
-    `VECTORA_DESKTOP=1` sozinho não diz quem é dono do processo: é setado
-    tanto quando o Electron spawna o backend (produção — o Electron já
-    mata a árvore inteira via `taskkill /T /F`, um handler custom aqui
-    disputaria esse shutdown) quanto quando é o PRÓPRIO backend quem se
-    autoelege primário e sobe o Electron como seu sidecar (`_run_start`,
-    modo backend-primário em dev) — nesse segundo caso não existe nenhum
-    Electron dono cuidando da limpeza do lado de fora, e sem handler o
-    processo nunca aciona o shutdown gracioso, deixando sidecars filhos
-    (nats-server) órfãos. `VECTORA_SPAWN_ELECTRON=1` só é setado nesse
-    segundo caso — é o sinal de "este processo é dono de si mesmo".
+    Todo backend desktop instala os handlers: o Electron envia SIGTERM ao
+    sair, e um Ctrl+C no terminal também chega ao processo filho. Assim,
+    ambos os caminhos acionam o shutdown gracioso do Uvicorn e do lifespan.
+    `VECTORA_SPAWN_ELECTRON=1` identifica o modo de desenvolvimento em que o
+    próprio backend sobe o Electron, inclusive quando stdin não é um TTY.
     """
     # ``vectora web`` is the process owner even when launched by a service
     # manager, CI runner, or detached VPS shell where stdin is not a TTY.
@@ -115,8 +111,11 @@ def _should_install_terminal_signals(
 
     desktop = bool(env.get("VECTORA_DESKTOP"))
     owns_itself = bool(env.get("VECTORA_SPAWN_ELECTRON"))
-    if desktop and not owns_itself:
-        return False
+    if desktop:
+        # Electron sends SIGTERM when quitting, and terminals deliver Ctrl+C
+        # to both Electron and its backend child. Handle both through the
+        # graceful shutdown path so Uvicorn can close its lifespan cleanly.
+        return True
     if owns_itself:
         # Backend-primário em dev: sempre instala, mesmo sem tty — é o único
         # dono do processo, e sys.stdin.isatty() pode vir False dependendo
@@ -237,8 +236,16 @@ def _install_terminal_signals(server: Any, icon_ref: list[Any]) -> None:
 
 
 def _disable_uvicorn_signal_capture(server: Any) -> None:
-    """Keep the process-owner handlers active while Uvicorn serves."""
+    """Keep the process-owner handlers active while Uvicorn serves.
+
+    Versões novas do Uvicorn instalam os handlers em ``capture_signals`` (e
+    reexecutam o sinal só no fim do servidor); as antigas, em
+    ``install_signal_handlers``. Neutraliza as duas: com apenas a segunda, o
+    handler do processo só rodava depois do shutdown e o filtro de logs não
+    sabia que o encerramento era esperado.
+    """
     server.install_signal_handlers = lambda: None
+    server.capture_signals = contextlib.nullcontext
 
 
 # ---------------------------------------------------------------------------
@@ -788,8 +795,6 @@ def _run_start(args: argparse.Namespace, *, force_web: bool = False) -> None:
         sock_dir = _settings_ipc.vectora_home
         sock_dir.mkdir(parents=True, exist_ok=True)
         uds_path = str(sock_dir / "vectora.sock")
-        with contextlib.suppress(FileNotFoundError):
-            Path(uds_path).unlink()
 
     from backend.version import __version__
 
@@ -847,6 +852,29 @@ def _run_start(args: argparse.Namespace, *, force_web: bool = False) -> None:
     from backend.services.log_setup import install_uvicorn_shutdown_filter
 
     install_uvicorn_shutdown_filter()
+
+    def run_with_runtime_lock(action: Callable[[], None]) -> None:
+        from backend.runtime_lock import (
+            RuntimeHomeAlreadyRunningError,
+            lock_runtime_home,
+            unix_socket_is_active,
+        )
+
+        runtime_home = Path(os.environ["VECTORA_HOME"])
+        try:
+            with lock_runtime_home(runtime_home):
+                if uds_path:
+                    socket_path = Path(uds_path)
+                    if unix_socket_is_active(socket_path):
+                        raise RuntimeHomeAlreadyRunningError(
+                            f"Outra instância do Vectora já está ouvindo em {socket_path}."
+                        )
+                    with contextlib.suppress(FileNotFoundError):
+                        socket_path.unlink()
+                action()
+        except RuntimeHomeAlreadyRunningError as exc:
+            logger.log(logging.ERROR, "runtime já está em uso: %s", exc)
+            raise SystemExit(1) from exc
 
     # Aplicado ANTES do branch Windows named-pipe abaixo — esse branch tem um
     # `return` próprio, e sem instalar o handler aqui primeiro ele nunca seria
@@ -914,7 +942,7 @@ def _run_start(args: argparse.Namespace, *, force_web: bool = False) -> None:
                 with contextlib.suppress(asyncio.CancelledError):
                     await shutdown_pipe_task
 
-        asyncio.run(_run_win())
+        run_with_runtime_lock(lambda: asyncio.run(_run_win()))
         # Mesmo `return` cedo do ramo Windows+desktop precisa do os._exit(0)
         # abaixo — sem ele, threads não-daemon (httpx/SQLite do tracer)
         # mantêm o interpreter vivo mesmo após o shutdown gracioso
@@ -933,7 +961,7 @@ def _run_start(args: argparse.Namespace, *, force_web: bool = False) -> None:
             scheme,
             port,
         )
-        asyncio.run(server.serve())
+        run_with_runtime_lock(lambda: asyncio.run(server.serve()))
         logger.info("Vectora: server.serve retornou após shutdown")
     else:
         # Sobe o servidor e, quando há display, a bandeja do sistema (Python).
@@ -942,11 +970,13 @@ def _run_start(args: argparse.Namespace, *, force_web: bool = False) -> None:
         # thread de fundo.
         from backend.services.tray import run_server_with_tray
 
-        run_server_with_tray(
-            server,
-            f"{scheme}://localhost:{port}",
-            headless=headless,
-            icon_ref=icon_ref,
+        run_with_runtime_lock(
+            lambda: run_server_with_tray(
+                server,
+                f"{scheme}://localhost:{port}",
+                headless=headless,
+                icon_ref=icon_ref,
+            )
         )
 
     # Retorno do tray/servidor = shutdown concluído. No Windows, threads

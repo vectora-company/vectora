@@ -148,6 +148,19 @@ def test_enable_dark_mode_swallows_exception(monkeypatch: pytest.MonkeyPatch) ->
         _enable_dark_mode_win32()  # deve engolir o OSError
 
 
+def test_enable_dark_mode_delegates_to_windows_module(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(sys, "platform", "win32")
+    from backend.services import tray_win32
+    from backend.services.tray import _enable_dark_mode_win32
+
+    with patch.object(tray_win32, "enable_dark_mode") as enable_dark_mode:
+        _enable_dark_mode_win32()
+
+    enable_dark_mode.assert_called_once_with()
+
+
 # ---------------------------------------------------------------------------
 # run_server_with_tray — caminhos de degradação
 # ---------------------------------------------------------------------------

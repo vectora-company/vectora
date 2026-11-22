@@ -44,6 +44,7 @@ def test_normalize_license_maps_trove_names(raw, expected):
         ("MPL-2.0", "weak-copyleft"),
         ("GPL-3.0", "strong-copyleft"),
         ("AGPL-3.0", "strong-copyleft"),
+        ("GPL-2.0-or-later", "strong-copyleft"),
         ("GPL-2.0-only", "review"),
         ("FSL-1.1-Apache-2.0", "review"),
         ("UNKNOWN", "review"),

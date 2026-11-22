@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import subprocess
+import symtable
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
@@ -25,6 +26,18 @@ OS_RELEASE = {
     "alpine": 'NAME="Alpine Linux"\nVERSION_ID=3.20.3\nID=alpine\n',
     "gentoo": 'NAME="Gentoo"\nID=gentoo\n',
 }
+
+
+def test_sconstruct_package_action_does_not_shadow_build_env_module() -> None:
+    source = (REPO / "SConstruct").read_text(encoding="utf-8")
+    module = symtable.symtable(source, "SConstruct", "exec")
+    action = next(
+        scope
+        for scope in module.get_children()
+        if scope.get_name() == "_action_package"
+    )
+
+    assert not action.lookup("build_env").is_local()
 
 
 def _reader(files: dict[str, str]) -> Callable[[str], str]:
@@ -189,22 +202,36 @@ class TestFerramentas:
 class TestEmpacotamentoLinux:
     def test_sugere_o_comando_da_familia(self) -> None:
         missing, command = build_env.packaging_hint("debian", lambda _tool: None)
-        assert missing == ["flatpak", "flatpak-builder", "bsdtar", "fusermount3"]
+        assert missing == [
+            "flatpak",
+            "flatpak-builder",
+            "bsdtar",
+            "fusermount3",
+            "rpmbuild",
+            "snap",
+            "snapcraft",
+        ]
         assert command == (
-            "sudo apt-get install -y flatpak flatpak-builder fuse3 libarchive-tools"
+            "sudo apt-get install -y flatpak flatpak-builder fuse3 libarchive-tools rpm snapd"
+            " && sudo snap install snapcraft --classic"
         )
-        _missing, dnf = build_env.packaging_hint("rhel", lambda _tool: None)
-        assert dnf.startswith("sudo dnf install -y ") and "bsdtar" in dnf
+        rhel_missing, dnf = build_env.packaging_hint("rhel", lambda _tool: None)
+        assert {"rpmbuild", "snap", "snapcraft"} <= set(rhel_missing)
+        assert dnf.startswith("sudo dnf install -y ")
+        assert {"rpm-build", "snapd"} <= set(dnf.split())
+        assert dnf.endswith("&& sudo snap install snapcraft --classic")
         _missing, pacman = build_env.packaging_hint("arch", lambda _tool: None)
-        assert pacman.startswith("sudo pacman -S --needed ") and "libarchive" in pacman
+        assert pacman.startswith("sudo pacman -S --needed ")
+        assert {"libarchive", "rpm-tools"} <= set(pacman.split())
+        assert "snap" not in _missing
 
     def test_so_lista_o_que_falta(self) -> None:
         present = {"flatpak", "bsdtar"}
         missing, command = build_env.packaging_hint(
             "suse", lambda tool: "/usr/bin/x" if tool in present else None
         )
-        assert missing == ["flatpak-builder", "fusermount3"]
-        assert command == "sudo zypper install -y flatpak-builder fuse3"
+        assert missing == ["flatpak-builder", "fusermount3", "rpmbuild"]
+        assert command == "sudo zypper install -y flatpak-builder fuse3 rpm-build"
 
     def test_familia_desconhecida_nao_sugere_comando(self) -> None:
         missing, command = build_env.packaging_hint("desconhecida", lambda _tool: None)
@@ -343,6 +370,15 @@ class TestContratoDoSConstruct:
         assert match is not None
         assert "ignorado: este sistema é" in text
 
+    def test_fonte_do_helper_de_fala_fica_no_backend(self) -> None:
+        """O helper é parte do backend (``speech_to_text.py`` o consome); uma
+        pasta ``native/`` na raiz sugeria uma versão nativa do Vectora."""
+        text = self._text()
+        assert '"backend", "speech", "macos", "main.swift"' in text
+        assert (REPO / "backend" / "speech" / "macos" / "main.swift").is_file()
+        assert not (REPO / "native").exists()
+        assert "native/" not in text
+
     def test_release_garante_o_helper_antes_do_build_hibrido(self) -> None:
         text = self._text()
         assert '_fetch_speech  = _node("build-macos-speech"' in text
@@ -360,7 +396,7 @@ class TestCanalDeAtualizacaoDoPacote:
         text = self._text()
         assert "def _resolve_update_channel()" in text
         assert (
-            'build_env: dict[str, str] = {"VECTORA_UPDATE_CHANNEL": _resolve_update_channel()}'
+            'builder_env: dict[str, str] = {\n        "VECTORA_UPDATE_CHANNEL": _resolve_update_channel()'
             in text
         )
 
