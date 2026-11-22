@@ -513,6 +513,14 @@ jobs:
         uses: pnpm/action-setup@v6
         with:
           version: 11.5.0
+      - name: Cache Electron runtime
+        uses: actions/cache@v6
+        with:
+          path: .electron-cache
+          key: electron-${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('frontend/package.json', 'frontend/pnpm-lock.yaml') }}
+      - name: Configure Electron cache
+        shell: bash
+        run: echo "ELECTRON_CACHE=$GITHUB_WORKSPACE/.electron-cache" >> "$GITHUB_ENV"
       - name: Build frontend SPA (Vite)
         working-directory: frontend
         run: |
@@ -711,11 +719,10 @@ jobs:
             fi
             pnpm --dir frontend exec electron-builder --config "$RUNNER_TEMP/electron-builder.yml" --${{ matrix.target }} --${{ matrix.arch }} --publish never
           elif [ "${{ matrix.target }}" = "linux" ]; then
-            # O alvo snap remove o chrome-sandbox de linux-unpacked enquanto o
-            # AppImage, construído em paralelo na mesma passada, ainda o lê.
-            # O snap roda numa segunda passada, depois dos demais formatos.
-            pnpm --dir frontend exec electron-builder --config electron/electron-builder.yml --linux AppImage deb rpm pacman flatpak tar.gz --${{ matrix.arch }} --publish never
-            pnpm --dir frontend exec electron-builder --config electron/electron-builder.yml --linux snap --${{ matrix.arch }} --publish never
+            # Todos os formatos usam o mesmo linux-unpacked e a mesma cópia do
+            # Electron. Separar o Snap fazia o builder preparar o runtime duas
+            # vezes no mesmo job.
+            pnpm --dir frontend exec electron-builder --config electron/electron-builder.yml --linux AppImage deb rpm pacman flatpak snap tar.gz --${{ matrix.arch }} --publish never
           else
             pnpm --dir frontend exec electron-builder --config electron/electron-builder.yml --${{ matrix.target }} --${{ matrix.arch }} --publish never
           fi
