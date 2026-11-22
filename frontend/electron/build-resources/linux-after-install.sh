@@ -42,12 +42,6 @@ if hash update-desktop-database 2>/dev/null; then
   update-desktop-database /usr/share/applications || true
 fi
 
-# Força a atualização do cache de ícones do GTK para o ícone aparecer
-# imediatamente após a instalação, sem precisar de logout/login.
-if hash gtk-update-icon-cache 2>/dev/null; then
-  gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor || true
-fi
-
 # Perfil AppArmor (Ubuntu 24+). Só instala quando o pacote o traz e a versão
 # do AppArmor em execução sabe carregá-lo; no Ubuntu 22.04 o app roda sem ele.
 if apparmor_status --enabled >/dev/null 2>&1; then

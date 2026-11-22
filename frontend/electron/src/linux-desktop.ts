@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-export const DEVELOPMENT_DESKTOP_NAME = "company.vectora.desktop.dev.desktop";
+export const DEVELOPMENT_DESKTOP_NAME = "company.vectora.vectora.dev.desktop";
 
 export function appImageRelaunchOptions(
   appImage: string | undefined,

@@ -45,7 +45,7 @@ describe("Linux development desktop identity", () => {
       'Exec="/tools/Electron App/electron" "/repo 100%%/main.js"',
     );
     expect(entry).toContain("Icon=/repo/icon.png");
-    expect(entry).toContain("StartupWMClass=company.vectora.desktop.dev\n");
+    expect(entry).toContain("StartupWMClass=company.vectora.vectora.dev\n");
   });
 
   it("rejects path injection instead of adding another desktop key", () => {

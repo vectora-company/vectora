@@ -441,15 +441,13 @@ deb:
     - libsecret-1-0
     - libdrm2
     - libgbm1
-    - libvulkan1
-    - mesa-vulkan-drivers
   recommends:
     - libappindicator3-1 | libayatana-appindicator3-1
   priority: optional
   afterInstall: electron/build-resources/linux-after-install.sh
   afterRemove: electron/build-resources/linux-after-remove.sh
-  # Sobrescreve explicitamente: o electron-builder 26 herda o appId como Icon
-  # no .desktop do .deb mesmo com linux.desktop.entry.Icon definido.
+  # O electron-builder 26 herda o appId como Icon no .desktop do .deb mesmo
+  # quando linux.desktop.entry.Icon está definido.
   desktop:
     entry:
       Icon: vectora
@@ -482,18 +480,11 @@ flatpak:
   runtime: org.freedesktop.Platform
   runtimeVersion: "26.08"
   sdk: org.freedesktop.Sdk
-  # O ícone Flatpak usa o application ID, diferente do nome dos outros pacotes.
-  desktop:
-    entry:
-      Icon: company.vectora.vectora
 
 snapcraft:
   base: core22
   core22:
     confinement: strict
-    plugs:
-      - default
-      - opengl
 
 nsis:
   # ManifestDPIAware true vem de build-resources/installer.nsh (hook customHeader,

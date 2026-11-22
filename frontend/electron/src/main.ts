@@ -1,5 +1,5 @@
 /**
- * Vectora Desktop — main process.
+ * Vectora — main process.
  *
  * Responsabilidades:
  * - Spawn do binário do backend (``vectora-core``, PyInstaller) como sidecar (VECTORA_DESKTOP=1).
@@ -169,49 +169,24 @@ if (!installedTestsMode) {
 const angleOverride =
   graphicsCli.angleBackend ?? process.env.VECTORA_ANGLE_BACKEND?.trim();
 if (process.platform === "linux" && !graphicsCli.disableGpu) {
-  app.commandLine.appendSwitch("use-gl", "angle");
   const graphics = resolveLinuxGraphicsConfiguration({
     ...process.env,
     VECTORA_ANGLE_BACKEND: angleOverride,
     VECTORA_OZONE_PLATFORM:
       graphicsCli.ozonePlatform ?? process.env.VECTORA_OZONE_PLATFORM,
   });
-  // Aplica switches genéricos, exceto aqueles que queremos garantir como chamadas explícitas.
   for (const [name, value] of graphics.switches) {
-    if (name === "ignore-gpu-blocklist" || name === "use-angle") {
-      // Será adicionado explicitamente abaixo para que o código contenha o literal esperado.
-      continue;
-    }
     if (value === undefined) {
       app.commandLine.appendSwitch(name);
     } else {
       app.commandLine.appendSwitch(name, value);
     }
   }
-  // Garantir que os switches críticos estejam presentes como chamadas literais (necessário para os testes).
-  if (graphics.angleBackend === "vulkan") {
-    app.commandLine.appendSwitch("use-angle", "vulkan");
-    // Habilita os recursos Vulkan exigidos pelos testes.
-    app.commandLine.appendSwitch(
-      "enable-features",
-      "Vulkan,VulkanFromANGLE,DefaultANGLEVulkan,VaapiVideoDecoder",
-    );
-    // Desabilita recursos problemáticos conforme os testes.
-    app.commandLine.appendSwitch("disable-features", "SkiaGraphite");
-  }
-  // O bloco de ignore-gpu permanece sempre ativado quando o backend ANGLE não é "default".
-  if (graphics.angleBackend !== "default") {
-    app.commandLine.appendSwitch("ignore-gpu-blocklist");
-  }
   console.info("[graphics] configuração Linux do Electron", {
-    angleBackend: graphics.angleBackend,
-    ozonePlatform: graphics.ozonePlatform,
+    switches: graphics.switches,
   });
 } else if (process.platform !== "linux" && !graphicsCli.disableGpu) {
-  // Seleciona o backend ANGLE nativo da plataforma. WebGL continua disponível
-  // no renderer e é encaminhado pelo ANGLE para este backend.
-  app.commandLine.appendSwitch("use-gl", "angle");
-  // `VECTORA_ANGLE_BACKEND` troca o backend em qualquer plataforma.
+  // Sem override explícito, o Electron escolhe o backend nativo.
   if (angleOverride) {
     app.commandLine.appendSwitch("use-angle", angleOverride);
   } else if (process.platform === "win32") {
