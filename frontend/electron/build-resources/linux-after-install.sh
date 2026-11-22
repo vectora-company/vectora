@@ -38,6 +38,15 @@ if hash update-mime-database 2>/dev/null; then
   update-mime-database /usr/share/mime || true
 fi
 
+# electron-builder 26 pode regenerar o campo Icon do launcher DEB a partir do
+# appId depois de aplicar linux.desktop.entry. O pacote instala os PNGs como
+# `vectora` em hicolor; alinhe o launcher a esse nome para evitar o ícone
+# genérico do tema do desktop.
+DESKTOP_ENTRY=/usr/share/applications/vectora.desktop
+if [ -f "$DESKTOP_ENTRY" ]; then
+  sed -i 's/^Icon=.*/Icon=vectora/' "$DESKTOP_ENTRY"
+fi
+
 if hash update-desktop-database 2>/dev/null; then
   update-desktop-database /usr/share/applications || true
 fi

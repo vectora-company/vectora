@@ -28,6 +28,7 @@
     "electron:build": "tsc -p electron/tsconfig.json",
     "electron:typecheck": "tsc -p electron/tsconfig.json --noEmit",
     "electron:start": "electron electron/dist/main.js",
+    "electron:start:source-backend": "node electron/start-source-backend.mjs",
     "electron:dist": "pnpm electron:build && electron-builder --config electron/electron-builder.yml",
     "electron:dist:win": "pnpm electron:build && electron-builder --config electron/electron-builder.yml --win",
     "electron:dist:mac": "pnpm electron:build && electron-builder --config electron/electron-builder.yml --mac",

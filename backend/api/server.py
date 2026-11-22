@@ -81,6 +81,7 @@ from backend.api.handlers.workspaces import (
     workspace_scoped_router as workspace_scoped_view_router,
 )
 from backend.services.availability import require_services, services_enabled
+from backend.services.launch_handshake import verify_launch_handshake
 
 logger = logging.getLogger(__name__)
 
@@ -960,6 +961,12 @@ def create_app(serve_static: bool = True) -> FastAPI:
     async def health() -> dict:
         """Executa a operação health."""
         return {"status": "ok", "version": __version__}
+
+    @app.post("/internal/desktop/handshake")
+    async def desktop_handshake(request: Request) -> dict:
+        """Confirma pelo transporte desktop quem iniciou a sessão."""
+        handshake = await verify_launch_handshake(request)
+        return {"status": "ok", "mode": handshake.mode}
 
     @app.get("/health/live", response_model=HealthLiveResponse)
     async def health_live() -> HealthLiveResponse:

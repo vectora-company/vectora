@@ -464,13 +464,61 @@ jobs:
           CHANNEL=$(uv run --no-project --with "pydantic>=2.13.4" python utils/release.py update-channel "${{ steps.version.outputs.value }}")
           echo "value=$CHANNEL" >> "$GITHUB_OUTPUT"
 
-  # ── 6. Native package matrix (PyInstaller + Electron installers) ──────────
+  # ── 6. Prepare the Electron cache before native package matrix ────────────
+  # O runtime do Electron é específico de SO/arquitetura. Este job aquece cada
+  # cache antes de os jobs de build começarem; os builds não competem pelo
+  # primeiro download durante a execução da matriz principal.
+  prepare-electron:
+    name: Prepare Electron (${{ matrix.target }}/${{ matrix.arch }})
+    needs: [release-channel, release-trigger]
+    if: >-
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/master') ||
+      (github.event_name == 'push' &&
+      github.ref == 'refs/heads/master' &&
+      needs.release-trigger.outputs.is_release == 'true')
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"os":"ubuntu-22.04","arch":"x64","target":"linux"}]' || '[{"os":"ubuntu-22.04","arch":"x64","target":"linux"},{"os":"ubuntu-22.04-arm","arch":"arm64","target":"linux"},{"os":"macos-26","arch":"arm64","target":"mac"},{"os":"windows-latest","arch":"x64","target":"win"},{"os":"windows-11-arm","arch":"arm64","target":"win"}]') }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.5.0
+      - name: Restore Electron cache
+        uses: actions/cache@v6
+        with:
+          path: .electron-cache
+          key: electron-${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('frontend/package.json', 'frontend/pnpm-lock.yaml') }}
+      - name: Configure Electron cache
+        shell: bash
+        run: echo "ELECTRON_CACHE=$GITHUB_WORKSPACE/.electron-cache" >> "$GITHUB_ENV"
+      - name: Download Electron into cache
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+  # ── 7. Native package matrix (PyInstaller + Electron installers) ──────────
   # Pull requests build and verify every native package without production
   # credentials. R2/KV publication and tagging remain release-only and happen
   # after the complete matrix succeeds.
   release-native:
     name: Release native (${{ matrix.target }}/${{ matrix.arch }})
-    needs: [test-unit, test-external, release-channel, release-trigger]
+    needs:
+      [
+        test-unit,
+        test-external,
+        release-channel,
+        release-trigger,
+        prepare-electron,
+      ]
     if: >-
       github.event_name == 'pull_request' ||
       (github.event_name == 'workflow_dispatch' &&
@@ -513,6 +561,14 @@ jobs:
         uses: pnpm/action-setup@v6
         with:
           version: 11.5.0
+      - name: Cache Electron runtime
+        uses: actions/cache@v6
+        with:
+          path: .electron-cache
+          key: electron-${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('frontend/package.json', 'frontend/pnpm-lock.yaml') }}
+      - name: Configure Electron cache
+        shell: bash
+        run: echo "ELECTRON_CACHE=$GITHUB_WORKSPACE/.electron-cache" >> "$GITHUB_ENV"
       - name: Build frontend SPA (Vite)
         working-directory: frontend
         run: |
@@ -711,11 +767,10 @@ jobs:
             fi
             pnpm --dir frontend exec electron-builder --config "$RUNNER_TEMP/electron-builder.yml" --${{ matrix.target }} --${{ matrix.arch }} --publish never
           elif [ "${{ matrix.target }}" = "linux" ]; then
-            # O alvo snap remove o chrome-sandbox de linux-unpacked enquanto o
-            # AppImage, construído em paralelo na mesma passada, ainda o lê.
-            # O snap roda numa segunda passada, depois dos demais formatos.
-            pnpm --dir frontend exec electron-builder --config electron/electron-builder.yml --linux AppImage deb rpm pacman flatpak tar.gz --${{ matrix.arch }} --publish never
-            pnpm --dir frontend exec electron-builder --config electron/electron-builder.yml --linux snap --${{ matrix.arch }} --publish never
+            # Todos os formatos usam o mesmo linux-unpacked e a mesma cópia do
+            # Electron. Separar o Snap fazia o builder preparar o runtime duas
+            # vezes no mesmo job.
+            pnpm --dir frontend exec electron-builder --config electron/electron-builder.yml --linux AppImage deb rpm pacman flatpak snap tar.gz --${{ matrix.arch }} --publish never
           else
             pnpm --dir frontend exec electron-builder --config electron/electron-builder.yml --${{ matrix.target }} --${{ matrix.arch }} --publish never
           fi

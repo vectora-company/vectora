@@ -31,6 +31,26 @@ def _patch_dirs(monkeypatch, frontend_dir: Path, electron_dir: Path) -> None:
 
 
 class TestResolveElectronLaunch:
+    def test_resolve_electron_empacotado_por_override(
+        self, tmp_path: Path, monkeypatch
+    ):
+        executable = tmp_path / "vectora-electron"
+        executable.write_bytes(b"fake electron")
+        executable.chmod(0o755)
+        monkeypatch.setenv("VECTORA_PACKAGED_ELECTRON_PATH", str(executable))
+
+        assert electron_launcher.resolve_electron_launch() == (str(executable), [])
+
+    def test_override_empacotado_invalido_retorna_none(
+        self, tmp_path: Path, monkeypatch, caplog
+    ):
+        monkeypatch.setenv(
+            "VECTORA_PACKAGED_ELECTRON_PATH", str(tmp_path / "missing-electron")
+        )
+        with caplog.at_level("WARNING"):
+            assert electron_launcher.resolve_electron_launch() is None
+        assert "VECTORA_PACKAGED_ELECTRON_PATH" in caplog.text
+
     def test_sem_main_js_retorna_none(self, tmp_path: Path, monkeypatch, caplog):
         _patch_dirs(monkeypatch, tmp_path, tmp_path)
         with caplog.at_level("WARNING"):
@@ -49,6 +69,27 @@ class TestResolveElectronLaunch:
         # nunca baixou o binário — o log precisa apontar o comando de reparo.
         assert "postinstall" in caplog.text
         assert "pnpm rebuild electron" in caplog.text
+
+    def test_build_desatualizado_em_relacao_ao_fonte_retorna_none(
+        self, tmp_path: Path, monkeypatch, caplog
+    ):
+        src_dir = tmp_path / "src"
+        src_dir.mkdir()
+        source = src_dir / "main.ts"
+        source.write_text("// source", encoding="utf-8")
+        dist_dir = tmp_path / "dist"
+        dist_dir.mkdir()
+        main_js = dist_dir / "main.js"
+        main_js.write_text("// stale build", encoding="utf-8")
+        os.utime(main_js, ns=(1_000_000_000, 1_000_000_000))
+        os.utime(source, ns=(2_000_000_000, 2_000_000_000))
+        _patch_dirs(monkeypatch, tmp_path, tmp_path)
+
+        with caplog.at_level("WARNING"):
+            assert electron_launcher.resolve_electron_launch() is None
+
+        assert "desatualizado" in caplog.text
+        assert "electron:build" in caplog.text
 
     def test_path_txt_vazio_retorna_none(self, tmp_path: Path, monkeypatch, caplog):
         (tmp_path / "dist").mkdir()
@@ -96,6 +137,25 @@ class TestResolveElectronLaunch:
         result = electron_launcher.resolve_electron_launch()
 
         assert result == (str(exe), [str(main_js)])
+
+
+@pytest.mark.parametrize(
+    ("requested", "expected"),
+    [
+        (None, "--ozone-platform=x11"),
+        ("x11", "--ozone-platform=x11"),
+        ("wayland", "--ozone-platform=wayland"),
+        ("cosmic", "--ozone-platform=wayland"),
+        ("auto", None),
+    ],
+)
+def test_resolve_linux_ozone_argument(requested: str | None, expected: str | None):
+    assert electron_launcher.resolve_linux_ozone_argument(requested) == expected
+
+
+def test_resolve_linux_ozone_argument_rejects_unknown_platform():
+    with pytest.raises(ValueError, match="VECTORA_OZONE_PLATFORM inválido"):
+        electron_launcher.resolve_linux_ozone_argument("mir")
 
 
 @pytest.mark.skipif(

@@ -30,7 +30,7 @@ sentido com a stack inteira de pé:
 
 ## Pré-requisitos
 
-1. **Vectora desktop de desenvolvimento rodando** com o renderer atualizado,
+1. **Vectora de desenvolvimento rodando** com o renderer atualizado,
    Electron e CDP restrito ao loopback. Compile e inicie o app com porta
    conhecida:
    ```sh

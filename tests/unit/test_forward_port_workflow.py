@@ -684,17 +684,14 @@ def test_scons_release_copies_all_electron_builder_artifacts() -> None:
         assert f'"*.{extension}"' in sconstruct
 
 
-def test_scons_builds_snap_after_other_linux_formats() -> None:
+def test_scons_builds_all_linux_formats_in_one_electron_builder_call() -> None:
     sconstruct = (WORKFLOW.parent.parent.parent / "SConstruct").read_text(
         encoding="utf-8"
     )
-    snap_command = '_run([*cmd, "snap", output_arg], env=builder_env or None)'
-
-    assert '"tar.gz",\n                output_arg,' in sconstruct
-    assert snap_command in sconstruct
-    assert sconstruct.index(
-        '"tar.gz",\n                output_arg,'
-    ) < sconstruct.index(snap_command)
+    assert (
+        '"flatpak",\n                "snap",\n                "tar.gz",' in sconstruct
+    )
+    assert '_run([*cmd, "snap", output_arg], env=builder_env or None)' not in sconstruct
 
 
 def test_nats_release_download_retries_transient_network_failures() -> None:
@@ -721,7 +718,7 @@ def test_app_release_is_built_before_tag_and_tags_do_not_start_the_app_pipeline(
     # ou merge de PR da branch release/X.Y da série), nunca da mensagem solta.
     assert "release-trigger:" in content
     assert "contains(github.event.head_commit.message" not in content
-    assert content.count("needs.release-trigger.outputs.is_release == 'true'") == 4
+    assert content.count("needs.release-trigger.outputs.is_release == 'true'") == 5
     assert "tag-release:" in content
     tag_job = content.split("  tag-release:", 1)[1].split(
         "\n  publish-update-channel:", 1

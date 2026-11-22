@@ -3,7 +3,7 @@ import { defineConfig } from "@playwright/test";
 /**
  * Playwright — testes E2E no Chromium que acompanha o Electron do Vectora.
  *
- * Pré-requisitos: Vectora desktop rodando com CDP habilitado e as credenciais
+ * Pré-requisitos: Vectora rodando com CDP habilitado e as credenciais
  * E2E disponíveis via E2E_EMAIL / E2E_PASSWORD.
  *
  * Playwright conecta via CDP ao Electron já iniciado e navega pela origem

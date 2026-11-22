@@ -836,6 +836,13 @@
     "methods": [
       "POST"
     ],
+    "name": "desktop_handshake_internal_desktop_handshake_post",
+    "path": "/internal/desktop/handshake"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
     "name": "license_connect_license_connect_post",
     "path": "/license/connect"
   },

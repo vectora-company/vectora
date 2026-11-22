@@ -123,7 +123,10 @@ async def test_ensure_electron_sidecar_retorna_none_sem_build_resolvido():
 
 
 @pytest.mark.asyncio
-async def test_ensure_electron_sidecar_spawna_e_guarda_o_processo():
+async def test_ensure_electron_sidecar_spawna_e_guarda_o_processo(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.delenv("VECTORA_OZONE_PLATFORM", raising=False)
     fake_proc = MagicMock()
     fake_proc.pid = 4242
     fake_proc.returncode = None
@@ -155,6 +158,64 @@ async def test_ensure_electron_sidecar_spawna_e_guarda_o_processo():
     # dá um tick pro _log_task (pipe_to_logger com stdout=None) rodar e
     # retornar de imediato, sem deixar task/warning pendurado.
     await asyncio.sleep(0)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("ozone_platform", "expected_args"),
+    [
+        ("wayland", ("electron.exe", "--ozone-platform=wayland", "main.js")),
+        ("cosmic", ("electron.exe", "--ozone-platform=wayland", "main.js")),
+        ("auto", ("electron.exe", "main.js")),
+    ],
+)
+async def test_ensure_electron_sidecar_usa_plataforma_ozone_configurada(
+    monkeypatch: pytest.MonkeyPatch,
+    ozone_platform: str,
+    expected_args: tuple[str, ...],
+):
+    monkeypatch.setattr(electron_sidecar.sys, "platform", "linux")
+    monkeypatch.setenv("VECTORA_OZONE_PLATFORM", ozone_platform)
+    fake_proc = MagicMock()
+    fake_proc.pid = 4242
+    fake_proc.returncode = None
+    fake_proc.stdout = None
+
+    with (
+        patch(
+            "backend.services.electron_sidecar.resolve_electron_launch",
+            return_value=("electron.exe", ["main.js"]),
+        ),
+        patch(
+            "asyncio.create_subprocess_exec",
+            new=AsyncMock(return_value=fake_proc),
+        ) as spawn_mock,
+    ):
+        await electron_sidecar.ensure_electron_sidecar()
+
+    assert spawn_mock.call_args is not None
+    assert spawn_mock.call_args.args == expected_args
+    assert spawn_mock.call_args.kwargs["env"]["VECTORA_EXTERNAL_BACKEND"] == "1"
+    await asyncio.sleep(0)
+
+
+@pytest.mark.asyncio
+async def test_ensure_electron_sidecar_rejeita_plataforma_ozone_desconhecida(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(electron_sidecar.sys, "platform", "linux")
+    monkeypatch.setenv("VECTORA_OZONE_PLATFORM", "mir")
+
+    with (
+        patch(
+            "backend.services.electron_sidecar.resolve_electron_launch",
+            return_value=("electron.exe", ["main.js"]),
+        ),
+        patch("asyncio.create_subprocess_exec", new=AsyncMock()) as spawn_mock,
+    ):
+        assert await electron_sidecar.ensure_electron_sidecar() is None
+
+    spawn_mock.assert_not_called()
 
 
 @pytest.mark.asyncio

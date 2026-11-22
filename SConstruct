@@ -36,6 +36,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from pathlib import Path
 import time
 import urllib.error
 import urllib.request
@@ -208,6 +209,39 @@ def _action_build_backend(target, source, env):
     print(f">> executável do backend pronto em {binary}")
 
 
+def _action_build_python(target, source, env):
+    """Gera o bundle alternativo Python → Electron para o SO atual."""
+    platform = {"linux": "linux", "win32": "win", "darwin": "mac"}[sys.platform]
+    _run(
+        [
+            PNPM,
+            "--dir",
+            "frontend",
+            "run",
+            f"electron:dist:{platform}",
+            "--",
+            "--dir",
+        ],
+        cwd=ROOT,
+        env={
+            "VECTORA_UPDATE_CHANNEL": _resolve_update_channel(),
+            "CSC_IDENTITY_AUTO_DISCOVERY": "false",
+        },
+    )
+    unpacked_name = {
+        "linux": "linux-unpacked",
+        "win": "win-unpacked",
+        "mac": "mac",
+    }[platform]
+    source_dir = os.path.join(ROOT, "frontend", "dist-electron", unpacked_name)
+    destination = os.path.join(ROOT, "dist", "vectora", "electron")
+    if not os.path.isdir(source_dir):
+        raise SystemExit(f"ERRO: Electron unpacked não gerado em {source_dir}")
+    shutil.rmtree(destination, ignore_errors=True)
+    shutil.copytree(source_dir, destination)
+    print(f">> bundle Python → Electron pronto em {destination}")
+
+
 def _action_smoke(target, source, env):
     """Sobe o binário híbrido empacotado de verdade (não o source interpretado)
     e confirma que `/health` responde 200.
@@ -221,7 +255,9 @@ def _action_smoke(target, source, env):
     binary_name = "vectora.exe" if sys.platform == "win32" else "vectora"
     binary = os.path.join(ROOT, "dist", "vectora", binary_name)
     if not os.path.isfile(binary):
-        raise SystemExit(f"ERRO: {binary} não existe -- rode `scons release` primeiro.")
+        raise SystemExit(
+            f"ERRO: {binary} não existe -- rode `scons build-python` ou `scons release` primeiro."
+        )
 
     port = 8781  # porta alta, fora do default (8080) para não colidir com um dev server local
     home_dir = tempfile.mkdtemp(prefix="vectora-smoke-")
@@ -631,7 +667,12 @@ def _action_package(target, source, env, platform=""):
     output_arg = f"-c.directories.output={out_dir}"
 
     builder_env: dict[str, str] = {
-        "VECTORA_UPDATE_CHANNEL": _resolve_update_channel()
+        "VECTORA_UPDATE_CHANNEL": _resolve_update_channel(),
+        # Mantém o zip do Electron entre execuções locais do SCons. Sem isso,
+        # cada processo do electron-builder pode resolver um cache diferente.
+        "ELECTRON_CACHE": os.environ.get(
+            "ELECTRON_CACHE", os.path.join(Path.home(), ".cache", "electron")
+        ),
     }
     has_signing_creds = any(
         os.environ.get(k)
@@ -649,8 +690,9 @@ def _action_package(target, source, env, platform=""):
         else:
             builder_env["CSC_IDENTITY_AUTO_DISCOVERY"] = "false"
     if is_linux:
-        # Snap pode alterar linux-unpacked enquanto o AppImage lê seus arquivos.
-        # Gere os demais formatos primeiro e Snap em uma segunda passada.
+        # Uma única execução prepara linux-unpacked e reutiliza a mesma cópia
+        # do Electron para todos os instaladores Linux. Separar o Snap em outra
+        # execução fazia o builder extrair/preparar o Electron novamente.
         _run(
             [
                 *cmd,
@@ -659,12 +701,12 @@ def _action_package(target, source, env, platform=""):
                 "rpm",
                 "pacman",
                 "flatpak",
+                "snap",
                 "tar.gz",
                 output_arg,
             ],
             env=builder_env or None,
         )
-        _run([*cmd, "snap", output_arg], env=builder_env or None)
     else:
         _run([*cmd, output_arg], env=builder_env or None)
 
@@ -971,6 +1013,8 @@ def _action_help(target, source, env):
 
   Build
     scons frontend         só o build do frontend (frontend/dist/)
+    scons build-python     gera o bundle executável Python → Electron
+                           para o fluxo alternativo
     scons install          prepara tudo: detecta o sistema e a arquitetura (e a distro no
                            Linux), sincroniza Python, pnpm ci, Electron, NATS, FFmpeg e,
                            só no macOS, o helper de fala; termina com a lista do instalado
@@ -1259,6 +1303,12 @@ _build_backend = _node(
     _action_build_backend,
     deps=[_build_chat, _fetch_nats, _fetch_ffmpeg, _fetch_speech],
 )
+_build_python = _node(
+    "build-python",
+    _action_build_python,
+    deps=[_build_backend],
+)
+env.Alias("build-python", _build_python)
 _build_desktop = _node(
     "build-desktop",
     _action_build_desktop,
@@ -1272,7 +1322,7 @@ _cmd("release", lambda target, source, env: _action_package(target, source, env)
 # forçaria um novo empacotamento inteiro (caro) toda vez que `scons smoke`
 # rodasse -- inclusive em CI, logo depois do binário já ter sido construído
 # no passo anterior do workflow. `_action_smoke` já checa se o binário
-# existe e falha com uma mensagem clara ("rode scons build-backend/release
+# existe e falha com uma mensagem clara ("rode scons build-python/release
 # primeiro") se não existir.
 _cmd("smoke", _action_smoke)
 

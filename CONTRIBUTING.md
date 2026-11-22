@@ -178,3 +178,28 @@ A simulação confere a lógica do job: a ordem e os argumentos das chamadas, o 
 ## O que o CI executa em PRs
 
 Os workflows de PR rodam a versão do próprio PR. Eles validam título (Conventional Commits), ausência de referências proibidas no texto do PR, milestone, labels, lint, tipos, testes, varredura de segurança (gitleaks) e o build dos instaladores. PRs de fork rodam sem segredos: rotulagem, milestone e comentários automáticos só valem para branches do próprio repositório.
+
+## Modos alternativos do Electron
+
+O fluxo padrão de desenvolvimento continua sendo `uv run vectora start`: o
+Python inicia o Electron de desenvolvimento. Para testar a direção inversa
+com o backend fonte, compile o Electron e execute, a partir da raiz:
+
+```bash
+pnpm --dir frontend run electron:start:source-backend
+```
+
+Nesse modo o Electron inicia `uv run vectora start` no checkout atual. Para
+aproximar o teste do release, gere primeiro o backend PyInstaller e um pacote
+Electron não instalado (`linux-unpacked`, `win-unpacked` ou equivalente), e
+aponte o backend para o executável Electron empacotado:
+
+```bash
+uv run scons build-python
+./dist/vectora/vectora start
+```
+
+O alvo `build-python` coloca o Electron empacotado em `dist/vectora/electron/`;
+o Python empacotado o descobre automaticamente e permanece como processo
+principal, iniciando o Electron. O workflow de release não usa esse modo:
+ele continua com o Electron empacotado iniciando `vectora-core`.

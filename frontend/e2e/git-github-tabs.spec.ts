@@ -20,7 +20,7 @@ import workflowsFixture from "./fixtures/github/workflows.json";
  * não inventa um formato: a interface real do Vectora recebe o que o backend
  * realmente entregaria.
  *
- * Requer o Vectora desktop rodando com CDP (ver README.md desta pasta).
+ * Requer o Vectora rodando com CDP (ver README.md desta pasta).
  */
 
 const WORKSPACE_FOLDER_NAME = `vectora-e2e-github-${Date.now()}`;

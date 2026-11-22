@@ -107,6 +107,19 @@ def test_linux_packages_declare_vulkan_runtime_and_snap_opengl_plug() -> None:
     assert "- opengl" in snap["body"]
 
 
+def test_linux_desktop_entries_use_the_installed_vectora_icon() -> None:
+    linux = re.search(r"^linux:\n(?P<body>(?:[ \\t].*\n|\n)+)", BUILDER, re.MULTILINE)
+    deb = re.search(r"^deb:\n(?P<body>(?:[ \\t].*\n|\n)+)", BUILDER, re.MULTILINE)
+    assert linux and deb
+    assert "icon: electron/build-resources/linux-icons" in linux["body"]
+    assert "Icon: vectora" in linux["body"]
+    assert "Icon: vectora" in deb["body"]
+    after_install = (
+        ROOT / "frontend/electron/build-resources/linux-after-install.sh"
+    ).read_text(encoding="utf-8")
+    assert "Icon=vectora" in after_install
+
+
 def test_linux_electron_uses_angle_vulkan_without_forcing_vulkan_compositor() -> None:
     assert 'appendSwitch("ignore-gpu-blocklist")' in ELECTRON_MAIN
     assert 'appendSwitch("use-angle", "vulkan")' in ELECTRON_MAIN

@@ -1,21 +1,52 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { spawn, ChildProcess } from "child_process";
+import * as net from "net";
 import * as path from "path";
+import { Writable } from "stream";
 import treeKill from "tree-kill";
 import {
   getFreePort,
+  ignoreBrokenPipe,
   IpcPipeParser,
   parseIpcPipeFromText,
   pingBackendHttp,
   waitForBackendReady,
   killBackendTree,
   stopBackendProcess,
+  backendLaunch,
   backendPath,
   isInstalledTestsMode,
   natsBinaryPath,
   resolveExternalBackendConnection,
   backendTransportOptions,
+  unixSocketIsActive,
 } from "../backend-lifecycle.js";
+
+describe("backendLaunch", () => {
+  it("inicia o backend fonte pelo uv no modo alternativo de dev", () => {
+    expect(
+      backendLaunch(
+        { VECTORA_DEV_BACKEND: "source" },
+        "linux",
+        "/resources",
+        "/workspace/vectora",
+      ),
+    ).toEqual({
+      executable: "uv",
+      args: ["run", "vectora", "start"],
+      cwd: "/workspace/vectora",
+    });
+  });
+
+  it("mantém o backend empacotado como padrão", () => {
+    expect(
+      backendLaunch({}, "linux", "/resources", "/workspace/vectora"),
+    ).toEqual({
+      executable: "/resources/vectora-core/vectora",
+      args: ["start"],
+    });
+  });
+});
 
 // .cjs (não .js): frontend/package.json declara "type": "module" — sem a
 // extensão explícita, Node tentaria parsear este require() puro como ESM.
@@ -87,6 +118,27 @@ describe("isInstalledTestsMode", () => {
     expect(isInstalledTestsMode(["/app/Vectora", "--tests"])).toBe(true);
     expect(isInstalledTestsMode(["/app/Vectora", "--version"])).toBe(false);
     expect(isInstalledTestsMode(["/app/Vectora", "start"])).toBe(false);
+  });
+});
+
+describe("ignoreBrokenPipe", () => {
+  it("ignora EPIPE ao escrever e continua expondo outros erros", async () => {
+    const stream = new Writable({
+      write: (_chunk, _encoding, callback) =>
+        callback(Object.assign(new Error("pipe fechado"), { code: "EPIPE" })),
+    });
+    ignoreBrokenPipe(stream);
+    await new Promise<void>((resolve, reject) => {
+      stream.write("dados", (error) => {
+        if (error && (error as NodeJS.ErrnoException).code === "EPIPE")
+          resolve();
+        else reject(error ?? new Error("esperava EPIPE"));
+      });
+    });
+
+    const unexpected = new Error("falha inesperada de escrita");
+    expect(() => stream.emit("error", unexpected)).toThrow(unexpected);
+    stream.destroy();
   });
 });
 
@@ -219,6 +271,32 @@ describe("backendTransportOptions", () => {
         webMode: true,
       }),
     ).toEqual({ host: "127.0.0.1", port: 8080 });
+  });
+});
+
+describe("unixSocketIsActive", () => {
+  it("detecta um backend ouvindo e ignora caminho sem listener", async () => {
+    if (process.platform === "win32") return;
+    const socketPath = path.join(
+      process.env.TMPDIR ?? "/tmp",
+      `vectora-test-${process.pid}-${Date.now()}.sock`,
+    );
+    const server = net.createServer((connection) => {
+      connection.on("data", () =>
+        connection.end(
+          "HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+        ),
+      );
+    });
+    await new Promise<void>((resolve) => server.listen(socketPath, resolve));
+    try {
+      await expect(unixSocketIsActive(socketPath)).resolves.toBe(true);
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      );
+    }
+    await expect(unixSocketIsActive(socketPath)).resolves.toBe(false);
   });
 });
 
