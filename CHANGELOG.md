@@ -1,10 +1,74 @@
-## [0.1.25] (2026-11-13)
+# Changelog
+
+Este arquivo registra as alterações do Vectora, organizadas por versão.
+
+## [0.1.25] (2026-11-22)
 
 Esta seção reúne as alterações publicadas nesta versão.
 
 ### Features
 
 Os recursos incluídos nesta versão são listados abaixo.
+
+- feat(perfil): configurar a identidade local do cliente (#589)
+- feat(context-graph): resolver símbolos no workbench (#585)
+- feat(context-graph): agrupar comunidades no workbench (#583)
+- feat(infra): validar padrões de ignore na ingestão (#581)
+- feat(infra): listar nomes de credenciais (#580)
+- feat(infra): conectar arquivos remotos ao Codespaces (#579)
+- feat(context-graph): enviar grafo ao FalkorDB (#578)
+- feat(context-graph): exportar SVG e vault Obsidian (#577)
+- feat(sandbox): vincular credenciais a destinos do jail (#574)
+- feat(admin): consultar e limpar spans do tracer (#573)
+- feat(workspace): iniciar Codespace antes do transporte (#572)
+- feat(infra): registrar ciclo de telemetria do harness (#571)
+- feat(plan): aprovar e executar etapas persistidas (#569)
+- feat(chat): deduplicar alertas pelo run_id (#567)
+- feat(context-graph): exportar o grafo pelo workbench (#566)
+- feat(rbac): aplicar permissões nos handlers e scopes de serviço (#564)
+- feat(chat): compactação de contexto de reserva e interruptor nas preferências (#562)
+- feat(workbench): badge de git, prévia ampliada de markdown, busca e queries ligados à interface (#560)
+- feat(sandbox): isolar MCP, limitar recursos e testar escapes (#557)
+- feat(sandbox): estado, auditoria e prévia do jail, com tela (#556)
+- feat(sandbox): rede do jail filtrada por proxy de saída (#555)
+- feat(sandbox): política confiável fora do repositório (#554)
+- feat(chat): abre a conversa pela página mais recente e carrega as anteriores ao rolar (#553)
+- feat(sandbox): jail que executa, com ambiente mínimo e .git protegido (#552)
+- feat(git): escolher o repositório do workspace no Git workbench (#550)
+- feat(desktop): abrir com Vectora os arquivos e pastas que o app entende (#546)
+- feat(integracoes): página de integrações alcançável pela navegação (#544)
+- feat(conversa): compartilhar conversa pela interface (#540)
+- feat(tarefas): aviso de run em segundo plano idempotente por run e estado (#532)
+- feat(sidebar): carrega mais conversas pelo cursor da lista de threads (#531)
+- feat(chat): alerta do sistema idempotente por thread, turno e evento (#529)
+- feat(threads): histórico paginado com cursor estável por message_id (#528)
+- feat(threads): contrato de criação, listagem e contagem de threads (#527)
+- feat(chat): retomada do stream por cursor, envio cancelado e rascunho preservado (#522)
+- feat(chat): indicador de desfecho do run e fila com altura limitada (#520)
+- feat(chat): fila do composer com estados, reenvio idempotente e remoção (#518)
+- feat(chat): o cliente descarta evento repetido, reordenado ou posterior ao done (#517)
+- feat(chat): eventos do stream com seq e event_id, e o desfecho no evento done (#516)
+- feat(harness): digest cobre post_file_write e o hook é encerrado em árvore no Windows (#515)
+- feat(workspace): tela para revisar e aprovar as regras de hook do workspace (#511)
+- feat(cli): vectora hooks list e hooks test para ver e testar as regras do workspace (#510)
+- feat(harness): hook pre_response que devolve a resposta negada ao modelo para revisão (#509)
+- feat(harness): aprovação das regras de hook presa ao digest do vectora.toml (#505)
+- feat(harness): hooks determinísticos pre_tool e post_tool configuráveis no workspace (#503)
+- feat(mcp): transcreve localmente o áudio devolvido por ferramentas MCP (#501)
+- feat(contexto): aprende o custo em tokens de uma imagem por modelo (#500)
+- feat(midia): tela para configurar os limites de imagens de PDF e vídeo (#499)
+- feat(build): scons install completo, com detecção do ambiente (#496)
+- feat(midia): limites configuráveis e ferramentas de PDF e vídeo com opções (#494)
+- feat(midia): configuração da transcrição local nas configurações do app (#492)
+- feat(midia): reconhecimento de fala nativo do macOS para transcrição local (#491)
+- feat(midia): transcrição local-first de áudio e vídeo e PDF em imagens (#490)
+- feat(chat): envia PDF e vídeo como imagens a modelos que só leem imagem (#488)
+- feat(chat): imagens devolvidas por ferramentas MCP chegam ao modelo (#487)
+- feat(chat): envia PDF, áudio e vídeo nativos pelo OpenRouter e 9router (#486)
+- feat(chat): screenshots de ferramentas chegam ao modelo como imagem (#483)
+- feat(chat): composer aceita qualquer arquivo e mostra como cada anexo chegou ao modelo (#482)
+- feat(chat): envia PDF, áudio e vídeo nativos aos modelos que aceitam (#481)
+- feat(chat): aceita qualquer arquivo anexado e classifica pelos bytes (#480)
 
 - feat(mcp): transcreve localmente o áudio devolvido por ferramentas MCP (#501)
 - feat(contexto): aprende o custo em tokens de uma imagem por modelo (#500)
@@ -26,13 +90,21 @@ Os recursos incluídos nesta versão são listados abaixo.
 
 As correções incluídas nesta versão são listadas abaixo.
 
+- fix(shell): corrigir navegação em telas compactas (#586)
+- fix(desktop): menu do clique direito com recortar, copiar, colar e selecionar tudo (#548)
+- fix(convites): schemas tipados, link do convite no endereço certo e erros visíveis (#542)
+- fix(ci): permitir pilhas longas na validação de milestone (#575)
+- fix(chat): resumable-stream sem avisos do oxlint (#525)
+- fix(chat): anexos não enviados sobrevivem à troca de conversa e ao remontar (#519)
+- fix(ci): trata avisos do oxlint como erros e remove os avisos do CI (#524)
+- fix(deps): opentelemetry-api 1.45.2 corrige ReDoS no TraceContextTextMapPropagator (#521)
+- fix(contracts): info.version do OpenAPI acompanha a versão do contrato (#508)
 - fix(ci): lê o epoch da última tag anotada pelo commit (#484)
 - fix(contexto): estimativa de tokens conta as imagens de PDF e vídeo (#493)
 - fix(chat): imagens anexadas chegam ao modelo depois de gravadas no histórico (#479)
-
-# Changelog
-
-Este arquivo registra as alterações do Vectora, organizadas por versão.
+- fix(ci): lê o epoch da última tag anotada pelo commit (#484)
+- fix(contexto): estimativa de tokens conta as imagens de PDF e vídeo (#493)
+- fix(chat): imagens anexadas chegam ao modelo depois de gravadas no histórico (#479)
 
 ## [0.1.24] (2026-11-04)
 
@@ -176,19 +248,11 @@ O trabalho de abertura do código e de infraestrutura incluído nesta versão é
 - ci: add Snyk dependency and code scanning (#422)
 - ci: corrigir automação de releases e assinatura de artefatos (#421)
 
-## Capacidades da versão 0.1.23
+## Capacidades da versão 0.1.23 e anteriores
 
 As entradas abaixo descrevem funcionalidades do produto sem reconstruir a origem histórica por commits.
 
-### Features
-
-Registra as capacidades incluídas na versão 0.1.23.
-
-#### Vectora App
-
-Esta seção reúne as capacidades do aplicativo, organizadas por área funcional.
-
-##### ReAct e execução
+### ReAct e execução
 
 O aplicativo executa conversas com um motor nativo orientado a streaming e ferramentas.
 
@@ -200,7 +264,7 @@ O aplicativo executa conversas com um motor nativo orientado a streaming e ferra
 - Oferece uma ferramenta de raciocínio sequencial que registra etapas numeradas, revisões e ramificações antes da ação e sinaliza ao frontend quando a análise foi concluída.
 - Reutiliza agentes nativos por usuário, modo e workspace, inicializa e encerra a infraestrutura de persistência no lifecycle do servidor e invalida caches quando o conjunto de tools, a política ou as Skills mudam.
 
-##### Streaming, metas e retomada
+### Streaming, metas e retomada
 
 O motor mantém o estado da execução observável e permite continuar objetivos e aprovações sem perder o contexto persistido.
 
@@ -210,7 +274,7 @@ O motor mantém o estado da execução observável e permite continuar objetivos
 - Retoma objetivos interrompidos depois de uma aprovação humana, mantendo os turnos restantes, os gates e a avaliação do objetivo.
 - Permite interromper subagentes em execução com token de capacidade autenticado e acompanha liveness por heartbeat antes de encerrá-los por falta de progresso.
 
-##### Provedores LLM e multimodalidade
+### Provedores LLM e multimodalidade
 
 O motor usa clientes nativos com fallback e adapta capacidades de texto, imagem, áudio e vídeo ao provider escolhido.
 
@@ -220,7 +284,7 @@ O motor usa clientes nativos com fallback e adapta capacidades de texto, imagem,
 - Suporta geração e análise de imagens, geração de vídeo, transcrição de áudio e texto-para-fala pelos providers que oferecem cada capacidade.
 - Expõe busca web nativa e integra resultados ao contexto da conversa com tratamento de falhas e limites de provider.
 
-##### Storage e mensageria
+### Storage e mensageria
 
 Os backends de persistência e transporte atendem tanto instalações locais quanto ambientes distribuídos.
 
@@ -238,7 +302,7 @@ Os backends de persistência e transporte atendem tanto instalações locais qua
 - Sobe e derruba a stack local de PostgreSQL, Redis e Qdrant por Docker Compose ou `docker run`, reutiliza volumes, verifica readiness e expõe URLs e comandos de conexão.
 - Monta e testa configurações para Neon, Supabase direto ou via pooler e Qdrant Cloud, incluindo health checks e normalização dos DSNs.
 
-##### RAG e embeddings
+### RAG e embeddings
 
 A camada de conhecimento combina ingestão assíncrona, indexação vetorial e busca híbrida.
 
@@ -265,7 +329,7 @@ A camada de conhecimento combina ingestão assíncrona, indexação vetorial e b
 - Protege buckets em uso com exclusão adiada e mantém o estado de ativação por workspace.
 - Unifica a busca entre fatos, Skills e buckets RAG.
 
-##### Memória e contexto
+### Memória e contexto
 
 Memória persistente e contexto de workspace mantêm continuidade entre sessões e tarefas.
 
@@ -277,7 +341,7 @@ Memória persistente e contexto de workspace mantêm continuidade entre sessões
 - Monta o prompt de cada sessão com identidade comum, contexto do workspace, manifesto, documentação de projeto e Skills validadas.
 - Lista, cria, edita, remove e limpa memórias persistentes do usuário na interface, com confirmação para exclusão total e estados de carregamento e erro localizados.
 
-##### SubAgents e perfis
+### SubAgents e perfis
 
 Delegação especializada usa agentes isolados, escopos explícitos e rastreabilidade da conversa pai.
 
@@ -292,7 +356,7 @@ Delegação especializada usa agentes isolados, escopos explícitos e rastreabil
 - Permite criar, listar, editar, pausar e remover perfis de agente com escopo de ferramentas, modelo, orçamento e instruções reutilizáveis.
 - Valida perfis contra os nomes reais do registry, restringe estados e orçamentos inválidos e persiste título, ícone, cor e instruções por usuário para que a configuração aplicada seja reproduzível entre sessões.
 
-##### Aprovação, segurança e observabilidade
+### Aprovação, segurança e observabilidade
 
 As ações sensíveis passam por políticas de aprovação, proteção de contexto e telemetria persistente.
 
@@ -325,7 +389,7 @@ As ações sensíveis passam por políticas de aprovação, proteção de contex
 - Gera debug dumps assíncronos com metadados sanitizados, logs selecionados, configuração não secreta e relatório de QA para investigar instalações sem expor credenciais.
 - Suspende operações de storage em janelas de manutenção, aguarda disponibilidade e oferece bypass explícito apenas para rotinas internas autorizadas.
 
-##### Workspaces e Git
+### Workspaces e Git
 
 O aplicativo oferece isolamento e recuperação para alterações feitas durante uma conversa.
 
@@ -339,7 +403,7 @@ O aplicativo oferece isolamento e recuperação para alterações feitas durante
 - Gerencia stash, conflitos de merge, preview e atualização de `.gitignore`, além de transmitir eventos de alteração do workspace.
 - Detecta a stack do projeto e expõe configurações de launch, estado, logs e portas dos servidores de desenvolvimento.
 
-##### Interface e workbenches
+### Interface e workbenches
 
 O aplicativo organiza o trabalho em painéis persistentes que podem ser alternados e redimensionados durante a sessão.
 
@@ -361,7 +425,7 @@ O aplicativo organiza o trabalho em painéis persistentes que podem ser alternad
 - Mostra tarefas em background, execuções, status, resultados, aprovações pendentes e ações de resolução.
 - Exibe a Library com busca e seções para conectores MCP, Skills e memory buckets.
 
-##### Contratos de dados e histórico
+### Contratos de dados e histórico
 
 Os contratos tipados mantêm o mesmo formato entre o loop, a persistência, a API e a interface.
 
@@ -374,7 +438,7 @@ Os contratos tipados mantêm o mesmo formato entre o loop, a persistência, a AP
 - Mantém tipos de artifacts para planos, especificações, listas de tarefas, guias, arquitetura, implementação, conhecimento aprendido e mídia, permitindo que a interface reconheça o conteúdo mesmo quando sidecars antigos não possuem o tipo.
 - Captura o estado inicial do workspace por turno, calcula alterações limitadas ao escopo confiável, reconhece inclusões, remoções, renomes e commits e conserva limites de arquivos, tamanho e runs retidos.
 
-##### Chat e sessões
+### Chat e sessões
 
 O chat combina streaming, continuidade de sessões e controles para diferentes modelos e modos de execução.
 
@@ -401,7 +465,7 @@ O chat combina streaming, continuidade de sessões e controles para diferentes m
 - Mantém ramificações de conversa selecionáveis, compara uma ramificação com outra e permite voltar uma mensagem ao checkpoint do workspace para continuar a partir daquele estado.
 - Oferece retry para mensagens que falharam, cópia de respostas e partes de código, renderização Markdown com sintaxe destacada e avaliação positiva ou negativa com comentário.
 
-##### Navegação, sincronização e entrada
+### Navegação, sincronização e entrada
 
 A interface reduz o atrito entre sessões, abas e formas de entrada sem perder o estado local do usuário.
 
@@ -412,7 +476,7 @@ A interface reduz o atrito entre sessões, abas e formas de entrada sem perder o
 - Aceita entrada de voz com estados de escuta e interrupção, além de reprodução de respostas por síntese de fala quando habilitada.
 - Permite escolher uma pasta local, navegar por diretórios e discos, criar diretórios, confiar no workspace, iniciar Git e testar conexões SSH ou Codespaces antes de ativar o ambiente.
 
-##### Context Graph e Kanban
+### Context Graph e Kanban
 
 Ferramentas visuais transformam o workspace e as tarefas em superfícies navegáveis dentro da sessão.
 
@@ -428,7 +492,7 @@ Ferramentas visuais transformam o workspace e as tarefas em superfícies navegá
 - Calcula nós afetados por uma alteração, diferenças entre snapshots, ciclos de importação, conexões surpreendentes e perguntas para explorar lacunas.
 - Exporta snapshots, relatórios e índices do grafo com cache, ingestão incremental e validação de caminhos e conteúdo.
 
-##### Configurações, temas e acessibilidade
+### Configurações, temas e acessibilidade
 
 As configurações do aplicativo são organizadas por categorias e aplicadas sem deixar o fluxo principal.
 
@@ -454,7 +518,7 @@ As configurações do aplicativo são organizadas por categorias e aplicadas sem
 - Persiste preferências não secretas em SQLite com cache em memória, atualização thread-safe, rollback em falha e sincronização apenas das chaves de frontend autorizadas.
 - Aplica alterações de chaves de LLM, busca, conectores e tools no arquivo `.env`, no ambiente do processo e nas settings em uma única operação, fazendo a próxima chamada usar a nova configuração sem reiniciar o backend.
 
-##### Autenticação e integrações
+### Autenticação e integrações
 
 O aplicativo conduz a entrada do usuário e a configuração de serviços externos com estados explícitos e credenciais protegidas.
 
@@ -466,7 +530,7 @@ O aplicativo conduz a entrada do usuário e a configuração de serviços extern
 - Permite criar variáveis customizadas para providers não catalogados, mantém valores mascarados e oferece remoção, verificação e links de configuração por integração.
 - Exibe os estados nunca conectado, conectado e erro do gateway, repete a consulta após falha transitória e atualiza a tela depois de callbacks OAuth.
 
-##### CLI e administração local
+### CLI e administração local
 
 O CLI oferece operações de diagnóstico, configuração e manutenção sem depender da interface gráfica.
 
@@ -480,7 +544,7 @@ O CLI oferece operações de diagnóstico, configuração e manutenção sem dep
 - Expõe migrações de schema com status, histórico, plano, checksum e upgrade, além de migrações de dados de SQLite para Postgres, LanceDB para Qdrant ou pgvector e memória para o store nativo.
 - Detecta e encerra sidecars NATS órfãos por plataforma e informa a disponibilidade de WSL2, bwrap, Seatbelt ou Singularity para o sandbox antes da execução.
 
-##### Workspaces, Skills e plugins
+### Workspaces, Skills e plugins
 
 O ambiente de trabalho mantém isolamento, confiança e extensões com escopo explícito.
 
@@ -497,7 +561,7 @@ O ambiente de trabalho mantém isolamento, confiança e extensões com escopo ex
 - Resolve arquivos de contexto do workspace por nomes reconhecidos e `.vectora/*.md`, interpreta frontmatter com título, tipo, peso, tags, ativação e momento de injeção, limita o tamanho total e ordena o conteúdo por prioridade.
 - Bloqueia um arquivo de contexto quando encontra padrões de prompt injection e mantém diretórios internos, caches e manifestos fora da coleta de contexto livre.
 
-##### Sandbox e segurança de execução
+### Sandbox e segurança de execução
 
 Comandos e ferramentas de sistema podem ser executados em ambientes isolados conforme a política do workspace.
 
@@ -513,7 +577,7 @@ Comandos e ferramentas de sistema podem ser executados em ambientes isolados con
 - Reutiliza transporte SSH para sandboxes remotos, cria processos auxiliares jailados e oferece montagem de comandos em dry-run para auditoria sem executar o processo.
 - Mantém isolamento por workspace, quota independente de execuções simultâneas e encerramento por timeout sem bloquear outros ambientes.
 
-##### API, autenticação e provedores
+### API, autenticação e provedores
 
 A API expõe contratos REST e streaming para o aplicativo, integrações e clientes externos.
 
@@ -559,7 +623,7 @@ A API expõe contratos REST e streaming para o aplicativo, integrações e clien
 - Mantém o controle de mouse e teclado separado do sandbox comum: exige opt-in por workspace, janela previamente descoberta e aprovação humana mesmo quando o modo geral permite execução automática.
 - Permite listar, selecionar e focar janelas locais, capturar screenshots e enviar cliques ou texto com validação de coordenadas, limite de tamanho, rate limit, foco confirmado e auditoria sem armazenar conteúdo sensível.
 
-##### Administração e diagnóstico
+### Administração e diagnóstico
 
 Administradores controlam o ambiente, os acessos e a saúde dos serviços sem editar arquivos manualmente.
 
@@ -571,7 +635,7 @@ Administradores controlam o ambiente, os acessos e a saúde dos serviços sem ed
 - Inspeciona a saúde de checkpointer, store, LanceDB e PostgreSQL, mostra defaults de conexão, testa backends e alterna entre os modos de storage.
 - Cria, lista e revoga tokens de serviço com escopo root.
 
-##### Conta, privacidade e distribuição
+### Conta, privacidade e distribuição
 
 A conta e o aplicativo possuem controles de assinatura, privacidade e entrega de versões para preservar o acesso e a continuidade do usuário.
 
@@ -582,7 +646,7 @@ A conta e o aplicativo possuem controles de assinatura, privacidade e entrega de
 - Distribui atualizações desktop por canal, sistema operacional e arquitetura exatos, com downloads iniciais sem login, rollout gradual, fallback para versão estável e quarentena automática após falhas repetidas.
 - Mantém manifestos e instaladores versionados em armazenamento de objetos e expõe a versão estável do canal para o site e para o atualizador nativo.
 
-##### Backup, compartilhamento e continuidade
+### Backup, compartilhamento e continuidade
 
 Sessões e resultados podem ser preservados, recuperados ou compartilhados com controles explícitos.
 
@@ -597,7 +661,7 @@ Sessões e resultados podem ser preservados, recuperados ou compartilhados com c
 - Protege a restauração local por token efêmero do bridge desktop, confirmação explícita, lock de operação e janela de manutenção antes de alterar banco ou snapshots.
 - Serve artifacts Markdown e mídia gerada com autenticação de proprietário, nomes de caminho sanitizados, previews limitados e bloqueio de traversal.
 
-##### Tools, integrações e automações
+### Tools, integrações e automações
 
 O catálogo nativo conecta o agente a serviços externos, tarefas recorrentes e fluxos operacionais.
 
@@ -622,7 +686,7 @@ O catálogo nativo conecta o agente a serviços externos, tarefas recorrentes e 
 - Oferece web search, fetch, crawl e map com Tavily ou fallback sem chave, preservando limites, proteção SSRF e detecção de conteúdo suspeito.
 - Obtém transcrições de YouTube por legendas e recorre a áudio transcrito quando elas não existem, além de extrair frames curtos em timestamps.
 
-##### Agendamento e execução em segundo plano
+### Agendamento e execução em segundo plano
 
 O runtime executa tarefas autônomas com agenda, filas persistentes, orçamento e retomada controlada.
 
@@ -637,7 +701,7 @@ O runtime executa tarefas autônomas com agenda, filas persistentes, orçamento 
 - Observa alterações do workspace com debounce, publica eventos no KV e mantém um watcher independente por workspace.
 - Gerencia o sidecar NATS com JetStream, arquivo de PID/URL, detecção de processos órfãos, readiness, reuso e encerramento multiplataforma.
 
-##### Browser, mídia e desktop
+### Browser, mídia e desktop
 
 As ferramentas de interação permitem verificar páginas, operar ambientes locais e trabalhar com arquivos multimídia.
 
@@ -663,7 +727,7 @@ As ferramentas de interação permitem verificar páginas, operar ambientes loca
 - Pesquisa temas de cor no marketplace do VS Code, filtra extensões de ícones, baixa apenas pacotes permitidos e extrai temas de arquivos VSIX sem instalar conteúdo arbitrário.
 - Cria snapshots rotativos do estado do usuário antes de atualizações, valida manifestos e hashes, ignora dados voláteis, limita tamanho dos arquivos e restaura de forma transacional com rollback.
 
-##### Mídia, assets e arquivos gerados
+### Mídia, assets e arquivos gerados
 
 O fluxo multimídia valida os arquivos, controla consumo e entrega os resultados diretamente na sessão que os produziu.
 
@@ -676,7 +740,7 @@ O fluxo multimídia valida os arquivos, controla consumo e entrega os resultados
 - Identifica a origem BYOK de uma operação de mídia apenas quando a credencial do usuário para o provider está realmente configurada, removendo marcas antigas do contexto e separando consumo próprio de quota compartilhada.
 - Calcula custos por operação com estimativa versionada, reserva unidades de forma idempotente por chamada, libera débitos em falhas ou cancelamentos, permite reativar reservas encerradas e oferece o resumo mensal usado, limite e restante para cada tier.
 
-##### Extensibilidade e Library
+### Extensibilidade e Library
 
 A Library amplia o agente por conectores MCP, Skills e buckets de memória instaláveis.
 
@@ -688,7 +752,7 @@ A Library amplia o agente por conectores MCP, Skills e buckets de memória insta
 - Permite aprender fatos de uma sessão, revisar a consolidação e instalar Skills derivadas do conhecimento aprovado.
 - Expõe planejamento com listas de tarefas estruturadas e atualizações de progresso no fluxo da conversa.
 
-##### Conectores de conversa e aprendizado
+### Conectores de conversa e aprendizado
 
 O agente pode ser acessado por canais externos e transformar conhecimento aprovado em memória ou extensões reutilizáveis.
 
@@ -708,7 +772,7 @@ O agente pode ser acessado por canais externos e transformar conhecimento aprova
 - Mantém um gateway WebSocket persistente para webhooks, callbacks OAuth e requisições externas, com registro por fingerprint, segredo separado do token, reconexão com backoff e limite de fila e concorrência para aplicar backpressure.
 - Executa revisões self-hosted de pull requests em workers isolados do túnel principal, com deduplicação por entrega, fila limitada, callbacks autenticados com tentativas e encerramento gracioso.
 
-##### MCP, catálogos e eventos externos
+### MCP, catálogos e eventos externos
 
 As extensões e integrações externas são validadas, instaladas e observadas por contratos próprios antes de alcançarem o agente.
 
@@ -723,7 +787,7 @@ As extensões e integrações externas são validadas, instaladas e observadas p
 - Revisa diffs de terceiros usando o loop nativo com um registry de ferramentas vazio, impedindo que instruções maliciosas no conteúdo acionem filesystem, rede ou subagentes, e exige um modelo local configurado.
 - Protege tokens e segredos persistidos do gateway contra leitura ou gravação por outros usuários e nunca inclui corpos ou cabeçalhos sensíveis nos logs de encaminhamento.
 
-##### Transportes remotos e desktop
+### Transportes remotos e desktop
 
 O mesmo workspace pode operar localmente, por SSH ou em GitHub Codespaces, enquanto o aplicativo desktop mantém seus processos auxiliares sob controle do backend.
 
@@ -738,7 +802,7 @@ O mesmo workspace pode operar localmente, por SSH ou em GitHub Codespaces, enqua
 - No Windows, mantém o Uvicorn restrito ao loopback e expõe ao Electron uma named pipe por processo que faz proxy bidirecional transparente, inclusive para respostas SSE longas, encerrando cada conexão quando o lado correspondente cai.
 - Expõe um servidor MCP local por stdio para as ferramentas nativas de mídia; a identidade vem do launcher confiável e o transporte não autentica processos remotos arbitrários.
 
-##### Onboarding, atualizações e instalação
+### Onboarding, atualizações e instalação
 
 A inicialização orienta a configuração local ou remota e preserva o ambiente durante atualizações do aplicativo desktop.
 
@@ -753,7 +817,3 @@ A inicialização orienta a configuração local ou remota e preserva o ambiente
 - Cria backups rotativos do diretório de dados antes da atualização, verifica manifestos e hashes e restaura automaticamente após falhas de inicialização.
 - Mantém até cinco snapshots rotativos com manifestos SHA-256, exclui caches, tokens e segredos, rejeita symlinks e arquivos acima do limite e restaura com validação de caminho, lock e rollback transacional.
 - Mantém perfis de navegador Chromium isolados, com armazenamento persistente por perfil, limpeza de dados e validação de esquemas e destinos navegáveis.
-
-### Bug Fixes
-
-### Reverts
