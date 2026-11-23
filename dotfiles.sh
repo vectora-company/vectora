@@ -255,29 +255,51 @@ if [[ "$MODE" != check ]]; then
     bun add --global "pnpm@$PNPM_VERSION"
   fi
 
-  if ! has_pyenv; then
-    git clone https://github.com/pyenv/pyenv.git "$HOME/.pyenv"
-  fi
-  export PATH="$HOME/.pyenv/bin:$HOME/.pyenv/shims:$PATH"
-  eval "$(pyenv init - bash)"
   PYTHON_VERSION=$(cat "$ROOT_DIR/.python-version")
-  if ! has_pyenv_version "$PYTHON_VERSION"; then
-    pyenv install --skip-existing "$PYTHON_VERSION"
-  fi
-  export PYENV_VERSION="$PYTHON_VERSION"
-
   if ! command_exists uv; then curl -LsSf https://astral.sh/uv/install.sh | sh; fi
   export PATH="$HOME/.local/bin:$PATH"
   uv python install "$PYTHON_VERSION"
-  uv tool install --upgrade pre-commit
-  uv tool install --upgrade pyright
-  uv tool install --upgrade mypy
-  uv tool install --upgrade ruff
-  uv tool install --upgrade ty
-  uv tool install --upgrade deptry
-  uv tool install --upgrade pip-check-reqs
-  uv tool install --upgrade scons
-  uv tool install --upgrade tavily-cli
+
+  # Arch Linux rolling OpenSSL 4 removed TLSv1_method, which Python 3.13
+  # still references. Use uv's compatible managed interpreter instead of
+  # compiling that Python against the system OpenSSL through pyenv.
+  USE_PYENV_PYTHON=1
+  if [[ "$PACKAGE_MANAGER" == pacman ]] && command_exists openssl; then
+    OPENSSL_MAJOR=$(openssl version | awk '{ split($2, version, "."); print version[1] }')
+    if [[ "$OPENSSL_MAJOR" =~ ^[0-9]+$ ]] && (( OPENSSL_MAJOR >= 4 )) && [[ "$PYTHON_VERSION" == 3.13* ]]; then
+      USE_PYENV_PYTHON=0
+      printf '  OpenSSL %s incompatível com Python %s via pyenv; usando Python gerenciado pelo uv.\n' \
+        "$OPENSSL_MAJOR" "$PYTHON_VERSION"
+    fi
+  fi
+
+  if (( USE_PYENV_PYTHON )); then
+    if ! has_pyenv; then
+      git clone https://github.com/pyenv/pyenv.git "$HOME/.pyenv"
+    fi
+    export PATH="$HOME/.pyenv/bin:$HOME/.pyenv/shims:$PATH"
+    eval "$(pyenv init - bash)"
+    if ! has_pyenv_version "$PYTHON_VERSION"; then
+      pyenv install --skip-existing "$PYTHON_VERSION"
+    fi
+    export PYENV_VERSION="$PYTHON_VERSION"
+    PYTHON_EXECUTABLE=$(pyenv which python)
+  else
+    PYTHON_EXECUTABLE=$(uv python find "$PYTHON_VERSION")
+  fi
+
+  install_python_tool() {
+    uv tool install --upgrade --python "$PYTHON_EXECUTABLE" "$1"
+  }
+  install_python_tool pre-commit
+  install_python_tool pyright
+  install_python_tool mypy
+  install_python_tool ruff
+  install_python_tool ty
+  install_python_tool deptry
+  install_python_tool pip-check-reqs
+  install_python_tool scons
+  install_python_tool tavily-cli
 
   if ! command_exists go; then
     case "$(uname -m)" in x86_64) go_arch=amd64 ;; aarch64|arm64) go_arch=arm64 ;; *) printf 'Arquitetura sem bootstrap Go: %s\n' "$(uname -m)" >&2; exit 1 ;; esac
