@@ -69,6 +69,8 @@ async def test_pulls_are_listed_with_review_and_without_checks_payload(
 
     assert response.state == "loaded"
     assert len(response.items) == 1
+    assert response.status == "ok"
+    assert response.pulls == response.items
     pull = response.items[0]
     assert (pull.number, pull.author, pull.is_draft) == (7, "ana", True)
     assert pull.review_decision == "APPROVED"
@@ -96,6 +98,8 @@ async def test_issues_are_listed_with_labels_and_comment_count(monkeypatch) -> N
     response = await github.list_issues(_request(), state="open", workspace_id=None)
 
     assert response.state == "loaded"
+    assert response.status == "ok"
+    assert response.issues == response.items
     assert response.items[0].labels == ["bug", "frontend"]
     assert response.items[0].comments == 2
 
@@ -107,6 +111,8 @@ async def test_empty_repository_list_is_distinct_from_unknown(monkeypatch) -> No
 
     assert response.state == "empty"
     assert response.items == []
+    assert response.status == "ok"
+    assert response.pulls == []
 
 
 @pytest.mark.parametrize(
@@ -125,6 +131,8 @@ async def test_gh_failures_are_classified(monkeypatch, message, expected) -> Non
     assert response.state == "unknown"
     assert response.error == message
     assert response.items == []
+    assert response.status == expected
+    assert response.message == message
 
 
 async def test_invalid_gh_output_is_an_error(monkeypatch) -> None:
