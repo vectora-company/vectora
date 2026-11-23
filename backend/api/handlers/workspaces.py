@@ -23,9 +23,9 @@ import hashlib
 import json
 import logging
 import re
-from collections.abc import AsyncGenerator, Mapping
+from collections.abc import AsyncGenerator, Callable, Mapping
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Any, Literal
+from typing import TYPE_CHECKING, Annotated, Any, Literal, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import StreamingResponse
@@ -927,8 +927,13 @@ async def create_worktree(body: CreateWorktreeRequest) -> StatusResponse:
         return StatusResponse(
             status="error", message=json.loads(err).get("message", "")
         )
-    result = _git_worktree_impl(
-        repo, body.workspace_id, action="add", name=body.name, branch=body.branch
+    result = await _execute_workspace_git_write(
+        body.workspace_id,
+        repo,
+        "worktree_add",
+        lambda: _git_worktree_impl(
+            repo, body.workspace_id, action="add", name=body.name, branch=body.branch
+        ),
     )
     return StatusResponse(
         status=result.get("status", "error"), message=result.get("message", "")
@@ -2505,6 +2510,30 @@ def _open_workspace_repo(workspace_id: str) -> Any | None:
         return None
 
 
+async def _execute_workspace_git_write(
+    workspace_id: str,
+    repo: Any,
+    operation: str,
+    callback: Callable[[], object],
+) -> dict[str, Any]:
+    """Run every workbench Git mutation under the shared repository lock."""
+    from backend.services.git import GitOperationError, git_service
+
+    try:
+        _operation, result = await git_service.execute(
+            workspace_id, repo, operation, callback
+        )
+        return (
+            cast("dict[str, Any]", result)
+            if isinstance(result, dict)
+            else {"status": "ok"}
+        )
+    except GitOperationError as exc:
+        return {"status": "error", "message": str(exc)}
+    except Exception as exc:
+        return {"status": "error", "message": str(exc)}
+
+
 @workspace_scoped_router.get("/git/log/file", response_model=FileLogResponse)
 async def git_log_file(
     workspace_id: str,
@@ -2836,7 +2865,9 @@ async def git_stage(workspace_id: str, body: GitPathRequest) -> StatusResponse:
     repo = _open_workspace_repo(workspace_id)
     if repo is None:
         return StatusResponse(status="error", message="Repositório git não encontrado.")
-    result = _git_stage_impl(repo, body.path)
+    result = await _execute_workspace_git_write(
+        workspace_id, repo, "stage", lambda: _git_stage_impl(repo, body.path)
+    )
     return StatusResponse(status=result["status"], message=result.get("message", ""))
 
 
@@ -2848,7 +2879,9 @@ async def git_unstage(workspace_id: str, body: GitPathRequest) -> StatusResponse
     repo = _open_workspace_repo(workspace_id)
     if repo is None:
         return StatusResponse(status="error", message="Repositório git não encontrado.")
-    result = _git_unstage_impl(repo, body.path)
+    result = await _execute_workspace_git_write(
+        workspace_id, repo, "unstage", lambda: _git_unstage_impl(repo, body.path)
+    )
     return StatusResponse(status=result["status"], message=result.get("message", ""))
 
 
@@ -2860,7 +2893,9 @@ async def git_discard(workspace_id: str, body: GitPathRequest) -> StatusResponse
     repo = _open_workspace_repo(workspace_id)
     if repo is None:
         return StatusResponse(status="error", message="Repositório git não encontrado.")
-    result = _git_restore_impl(repo, body.path)
+    result = await _execute_workspace_git_write(
+        workspace_id, repo, "discard", lambda: _git_restore_impl(repo, body.path)
+    )
     return StatusResponse(status=result["status"], message=result.get("message", ""))
 
 
@@ -2880,7 +2915,16 @@ async def git_commit_inline(
     if repo is None:
         return StatusResponse(status="error", message="Repositório git não encontrado.")
     if body.dry_run_hooks:
-        hook_result = await asyncio.to_thread(_run_pre_commit_hooks, repo)
+        hook_result = await _execute_workspace_git_write(
+            workspace_id,
+            repo,
+            "pre_commit_hooks",
+            lambda: _run_pre_commit_hooks(repo),
+        )
+        hook_result = {
+            "passed": hook_result.get("passed", False),
+            "output": hook_result.get("output", hook_result.get("message", "")),
+        }
         if hook_result["passed"]:
             return StatusResponse(
                 status="hooks_ok", message=hook_result.get("output", "")
@@ -2893,20 +2937,33 @@ async def git_commit_inline(
     # duas vezes. O dry-run continua explícito; no amend deixamos o Git
     # executar exatamente uma vez.
     if body.run_hooks and not body.bypass and not body.amend:
-        hook_result = await asyncio.to_thread(_run_pre_commit_hooks, repo)
+        hook_result = await _execute_workspace_git_write(
+            workspace_id,
+            repo,
+            "pre_commit_hooks",
+            lambda: _run_pre_commit_hooks(repo),
+        )
+        hook_result = {
+            "passed": hook_result.get("passed", False),
+            "output": hook_result.get("output", hook_result.get("message", "")),
+        }
         if not hook_result["passed"]:
             return StatusResponse(
                 status="hooks_failed", message=hook_result.get("output", "")
             )
-    result = await asyncio.to_thread(
-        _git_commit_impl,
+    result = await _execute_workspace_git_write(
+        workspace_id,
         repo,
-        body.message,
-        body.all,
-        body=body.body,
-        amend=body.amend,
-        signoff=body.signoff,
-        bypass=body.bypass,
+        "commit",
+        lambda: _git_commit_impl(
+            repo,
+            body.message,
+            body.all,
+            body=body.body,
+            amend=body.amend,
+            signoff=body.signoff,
+            bypass=body.bypass,
+        ),
     )
     return StatusResponse(status=result["status"], message=result.get("message", ""))
 
@@ -2921,7 +2978,12 @@ async def git_squash_inline(
     repo = _open_workspace_repo(workspace_id)
     if repo is None:
         return StatusResponse(status="error", message="Repositório git não encontrado.")
-    result = _git_squash_impl(repo, body.base_ref, body.message, body=body.body)
+    result = await _execute_workspace_git_write(
+        workspace_id,
+        repo,
+        "squash",
+        lambda: _git_squash_impl(repo, body.base_ref, body.message, body=body.body),
+    )
     return StatusResponse(status=result["status"], message=result.get("message", ""))
 
 
@@ -2935,7 +2997,12 @@ async def git_reorder_inline(
     repo = _open_workspace_repo(workspace_id)
     if repo is None:
         return StatusResponse(status="error", message="Repositório git não encontrado.")
-    result = _git_reorder_impl(repo, body.commits)
+    result = await _execute_workspace_git_write(
+        workspace_id,
+        repo,
+        "reorder",
+        lambda: _git_reorder_impl(repo, body.commits),
+    )
     return StatusResponse(status=result["status"], message=result.get("message", ""))
 
 
@@ -2949,7 +3016,12 @@ async def git_cherry_pick_inline(
     repo = _open_workspace_repo(workspace_id)
     if repo is None:
         return StatusResponse(status="error", message="Repositório git não encontrado.")
-    result = _git_cherry_pick_impl(repo, body.sha, no_commit=body.no_commit)
+    result = await _execute_workspace_git_write(
+        workspace_id,
+        repo,
+        "cherry_pick",
+        lambda: _git_cherry_pick_impl(repo, body.sha, no_commit=body.no_commit),
+    )
     return StatusResponse(status=result["status"], message=result.get("message", ""))
 
 
@@ -2994,8 +3066,13 @@ async def create_workspace_worktree(
         return StatusResponse(
             status="error", message=json.loads(err).get("message", "")
         )
-    result = _git_worktree_impl(
-        repo, workspace_id, action="add", name=body.name, branch=body.branch
+    result = await _execute_workspace_git_write(
+        workspace_id,
+        repo,
+        "worktree_add",
+        lambda: _git_worktree_impl(
+            repo, workspace_id, action="add", name=body.name, branch=body.branch
+        ),
     )
     return StatusResponse(
         status=result.get("status", "error"), message=result.get("message", "")
@@ -3139,7 +3216,17 @@ async def git_revert_commit(
         if body.no_commit:
             args.append("--no-commit")
         args.append(body.sha)
-        repo.git.execute(args)
+        result = await _execute_workspace_git_write(
+            workspace_id,
+            repo,
+            "revert",
+            lambda: repo.git.execute(args) and {"status": "ok"},
+        )
+        if result.get("status") != "ok":
+            return StatusResponse(
+                status=str(result.get("status", "error")),
+                message=str(result.get("message", "")),
+            )
         msg = f"Revert de {body.sha[:7]} aplicado ao worktree. Revise as mudanças e faça commit."
         return StatusResponse(status="ok", message=msg)
     except Exception as exc:
@@ -3354,11 +3441,17 @@ async def git_checkout(workspace_id: str, body: GitCheckoutRequest) -> StatusRes
     repo = _open_workspace_repo(workspace_id)
     if repo is None:
         return StatusResponse(status="error", message="Repositório git não encontrado.")
-    if body.create:
-        created = _git_branch_impl(repo, "create", name=body.ref)
-        if created.get("status") != "ok":
-            return StatusResponse(status="error", message=created.get("message", ""))
-    result = _git_checkout_impl(repo, body.ref)
+
+    def checkout() -> dict[str, object]:
+        if body.create:
+            created = _git_branch_impl(repo, "create", name=body.ref)
+            if created.get("status") != "ok":
+                return created
+        return _git_checkout_impl(repo, body.ref)
+
+    result = await _execute_workspace_git_write(
+        workspace_id, repo, "checkout", checkout
+    )
     return StatusResponse(
         status=result.get("status", "error"), message=result.get("message", "")
     )
@@ -3474,8 +3567,28 @@ async def git_merge(workspace_id: str, body: GitMergeRequest) -> GitMergeRespons
             status="error", message="Repositório git não encontrado."
         )
     try:
-        repo.git.merge(body.branch)
-        return GitMergeResponse(status="ok", message=f"merge {body.branch}")
+
+        def merge() -> dict[str, object]:
+            try:
+                repo.git.merge(body.branch)
+                return {"status": "ok"}
+            except Exception as exc:
+                raw = repo.git.diff("--name-only", "--diff-filter=U") or ""
+                conflicts = [line.strip() for line in raw.splitlines() if line.strip()]
+                if conflicts:
+                    return {
+                        "status": "conflict",
+                        "message": f"merge {body.branch}: conflitos em {len(conflicts)} arquivo(s)",
+                        "conflicts": conflicts,
+                    }
+                return {"status": "error", "message": str(exc)}
+
+        result = await _execute_workspace_git_write(workspace_id, repo, "merge", merge)
+        return GitMergeResponse(
+            status=str(result.get("status", "error")),
+            message=str(result.get("message", f"merge {body.branch}")),
+            conflicts=list(result.get("conflicts", [])),
+        )
     except Exception as exc:
         conflicts: list[str] = []
         try:
@@ -3926,20 +4039,33 @@ async def resolve_conflict(  # noqa: PLR0911
     git_pathspec = f":(literal){safe_path}"
 
     try:
-        if body.resolution in ("ours", "theirs"):
-            repo.git.checkout(f"--{body.resolution}", "--", git_pathspec)
-        elif body.resolution == "content":
-            if body.content is None:
-                return StatusResponse(
-                    status="error",
-                    message="Conteúdo obrigatório para resolution=content.",
-                )
-            Path(full_path).write_text(body.content, encoding="utf-8")
-        else:
+
+        def resolve() -> dict[str, str]:
+            if body.resolution in ("ours", "theirs"):
+                repo.git.checkout(f"--{body.resolution}", "--", git_pathspec)
+            elif body.resolution == "content":
+                if body.content is None:
+                    return {
+                        "status": "error",
+                        "message": "Conteúdo obrigatório para resolution=content.",
+                    }
+                Path(full_path).write_text(body.content, encoding="utf-8")
+            else:
+                return {
+                    "status": "error",
+                    "message": f"Resolução inválida: {body.resolution}",
+                }
+            repo.git.add("--", git_pathspec)
+            return {"status": "ok"}
+
+        result = await _execute_workspace_git_write(
+            workspace_id, repo, "resolve_conflict", resolve
+        )
+        if result.get("status") != "ok":
             return StatusResponse(
-                status="error", message=f"Resolução inválida: {body.resolution}"
+                status=str(result.get("status", "error")),
+                message=str(result.get("message", "")),
             )
-        repo.git.add("--", git_pathspec)
         return StatusResponse(status="ok", message=f"Conflito resolvido: {body.path}")
     except Exception as exc:
         return StatusResponse(status="error", message=str(exc))
@@ -3978,15 +4104,16 @@ async def git_stash(workspace_id: str, body: StashRequest) -> StashResponse:
             action=body.action, message="Workspace sem repositório git."
         )
 
-    if body.action == "drop" and body.index is not None:
-        # drop de entrada específica
-        try:
+    def stash() -> dict:
+        if body.action == "drop" and body.index is not None:
             repo.git.stash("drop", f"stash@{{{body.index}}}")
-            result: dict = {"status": "ok", "action": "drop"}
-        except Exception as exc:
-            result = {"status": "error", "message": str(exc)}
+            return {"status": "ok", "action": "drop"}
+        return _git_stash_impl(repo, body.action, body.name)
+
+    if body.action == "list":
+        result = stash()
     else:
-        result = _git_stash_impl(repo, body.action, body.name)
+        result = await _execute_workspace_git_write(workspace_id, repo, "stash", stash)
 
     if result.get("status") == "error":
         return StashResponse(action=body.action, message=result.get("message", ""))
