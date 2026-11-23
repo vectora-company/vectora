@@ -29,6 +29,12 @@ ContributionKind = Literal[
 ]
 
 
+def _validate_extension_id(value: str) -> str:
+    if not _ID_PATTERN.match(value):
+        raise ValueError("id de extensão inválido")
+    return value
+
+
 class ExtensionState(StrEnum):
     """Estado do ciclo de vida de uma extensão no host."""
 
@@ -142,9 +148,7 @@ class ExtensionRecord(BaseModel):
     @field_validator("id")
     @classmethod
     def _valid_id(cls, value: str) -> str:
-        if not _ID_PATTERN.match(value):
-            raise ValueError("id de extensão inválido")
-        return value
+        return _validate_extension_id(value)
 
 
 def effective_contribution_id(extension_id: str, contribution: Contribution) -> str:

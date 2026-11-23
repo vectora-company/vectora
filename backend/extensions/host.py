@@ -18,7 +18,7 @@ from collections.abc import Callable
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, Final
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from backend.extensions.models import (
     HOST_API_VERSION,
@@ -27,6 +27,7 @@ from backend.extensions.models import (
     ExtensionRelease,
     ExtensionState,
     Grants,
+    _validate_extension_id,
     effective_contribution_id,
 )
 from backend.extensions.store import ExtensionStore
@@ -57,6 +58,11 @@ class InstallRequest(BaseModel):
     name: str
     publisher: str
     release: ExtensionRelease
+
+    @field_validator("id")
+    @classmethod
+    def _valid_id(cls, value: str) -> str:
+        return _validate_extension_id(value)
 
 
 class GrantsUpdate(BaseModel):

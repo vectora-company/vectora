@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 from fastapi import HTTPException
+from pydantic import ValidationError
 
 import backend.extensions.host as host_module
 from backend.api.handlers import extensions as api
@@ -80,6 +81,17 @@ def _install_body(host: ExtensionHost) -> InstallRequest:
             ],
         ),
     )
+
+
+@pytest.mark.parametrize("extension_id", ["../escape", "with/slash", "UPPERCASE"])
+def test_install_request_rejects_invalid_extension_ids(
+    host: ExtensionHost, extension_id: str
+) -> None:
+    body = _install_body(host).model_dump()
+    body["id"] = extension_id
+
+    with pytest.raises(ValidationError, match="id de extensão inválido"):
+        InstallRequest.model_validate(body)
 
 
 async def test_summary_never_exposes_paths_or_commands(host: ExtensionHost) -> None:
