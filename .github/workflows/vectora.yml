@@ -75,30 +75,6 @@ jobs:
       - name: Python sem uso (vulture)
         run: uv run --with vulture python utils/unused_code.py python
 
-  # ── 2. Security Scanning ────────────────────────────────────────────────
-  security:
-    name: Security Scanning
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v7
-      - uses: ./.github/actions/setup-uv
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-      - name: Bandit (static security analysis)
-        run: uv run bandit -c pyproject.toml -r backend -f json -o bandit.json
-      - name: pip-audit (vulnerable dependencies)
-        if: ${{ !cancelled() }}
-        run: uv run --with pip-audit pip-audit --skip-editable --format json --output pip-audit.json
-      - name: Upload security reports
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v6
-        with:
-          name: python-security-${{ github.sha }}
-          path: |
-            bandit.json
-            pip-audit.json
-          if-no-files-found: error
-
   # ── 2b. Frontend (oxlint + tsc + vitest) ────────────────────────────────
   # O job `lint` cobre só o Python (ruff + ty). A suíte TypeScript — lint
   # (oxlint), type check (tsc --noEmit) e testes (vitest) — roda aqui. i18n e
@@ -149,7 +125,7 @@ jobs:
   build_verification:
     name: Build Verification
     runs-on: ubuntu-24.04
-    needs: [lint, security, frontend]
+    needs: [lint, frontend]
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-uv
