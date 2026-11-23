@@ -6002,12 +6002,26 @@
             ],
             "title": "Error"
           },
+          "issues": {
+            "deprecated": true,
+            "items": {
+              "$ref": "#/components/schemas/IssueSummary"
+            },
+            "title": "Issues",
+            "type": "array"
+          },
           "items": {
             "items": {
               "$ref": "#/components/schemas/IssueSummary"
             },
             "title": "Items",
             "type": "array"
+          },
+          "message": {
+            "default": "",
+            "deprecated": true,
+            "title": "Message",
+            "type": "string"
           },
           "reset_at": {
             "anyOf": [
@@ -6028,10 +6042,21 @@
             ],
             "title": "State",
             "type": "string"
+          },
+          "status": {
+            "deprecated": true,
+            "enum": [
+              "ok",
+              "unavailable",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
           }
         },
         "required": [
-          "state"
+          "state",
+          "status"
         ],
         "title": "IssueListResponse",
         "type": "object"
@@ -8558,6 +8583,20 @@
             "title": "Items",
             "type": "array"
           },
+          "message": {
+            "default": "",
+            "deprecated": true,
+            "title": "Message",
+            "type": "string"
+          },
+          "pulls": {
+            "deprecated": true,
+            "items": {
+              "$ref": "#/components/schemas/PullSummary"
+            },
+            "title": "Pulls",
+            "type": "array"
+          },
           "reset_at": {
             "anyOf": [
               {
@@ -8577,10 +8616,21 @@
             ],
             "title": "State",
             "type": "string"
+          },
+          "status": {
+            "deprecated": true,
+            "enum": [
+              "ok",
+              "unavailable",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
           }
         },
         "required": [
-          "state"
+          "state",
+          "status"
         ],
         "title": "PullListResponse",
         "type": "object"

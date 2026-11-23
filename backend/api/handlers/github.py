@@ -267,6 +267,13 @@ class PullListResponse(BaseModel):
     error: str | None = None
     code: str | None = None
     reset_at: int | None = None
+    status: Literal["ok", "unavailable", "error"] = Field(
+        json_schema_extra={"deprecated": True}
+    )
+    message: str = Field(default="", json_schema_extra={"deprecated": True})
+    pulls: list[PullSummary] = Field(
+        default_factory=list, json_schema_extra={"deprecated": True}
+    )
 
 
 class IssueListResponse(BaseModel):
@@ -275,6 +282,13 @@ class IssueListResponse(BaseModel):
     error: str | None = None
     code: str | None = None
     reset_at: int | None = None
+    status: Literal["ok", "unavailable", "error"] = Field(
+        json_schema_extra={"deprecated": True}
+    )
+    message: str = Field(default="", json_schema_extra={"deprecated": True})
+    issues: list[IssueSummary] = Field(
+        default_factory=list, json_schema_extra={"deprecated": True}
+    )
 
 
 class GithubComment(BaseModel):
@@ -425,6 +439,8 @@ def _list_error(result: dict) -> dict:
         "error": message,
         "code": result.get("code", status),
         "reset_at": result.get("reset_at"),
+        "status": status,
+        "message": message,
     }
 
 
@@ -460,7 +476,12 @@ async def list_pulls(
         for item in raw
         if isinstance(item, dict) and "number" in item
     ]
-    return PullListResponse(state="loaded" if pulls else "empty", items=pulls)
+    return PullListResponse(
+        state="loaded" if pulls else "empty",
+        items=pulls,
+        status="ok",
+        pulls=pulls,
+    )
 
 
 @router.get("/issues", response_model=IssueListResponse)
@@ -494,7 +515,12 @@ async def list_issues(
         for item in raw
         if isinstance(item, dict) and "number" in item
     ]
-    return IssueListResponse(state="loaded" if issues else "empty", items=issues)
+    return IssueListResponse(
+        state="loaded" if issues else "empty",
+        items=issues,
+        status="ok",
+        issues=issues,
+    )
 
 
 def _names(items: object, *keys: str) -> list[str]:
