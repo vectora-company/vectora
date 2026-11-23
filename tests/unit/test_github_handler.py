@@ -362,3 +362,10 @@ async def test_cache_expira_depois_do_ttl(monkeypatch):
     await github._gh_read(["pr", "list"], cwd="/w", user_id="u1")
 
     assert len(calls) == 2
+
+
+def test_failure_uses_structured_gh_unavailable_code() -> None:
+    assert github._failure({"code": "gh_unavailable", "message": "gh missing"}) == (
+        "unavailable",
+        "gh missing",
+    )

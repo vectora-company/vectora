@@ -160,7 +160,7 @@ def _request_for_user(user_id: str) -> Request:
 async def test_pr_list_propagates_authenticated_user_to_gh(
     ws_repo: tuple[git.Repo, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from backend.tools import gh
+    from backend.services import github_cli
 
     captured: dict[str, str | None] = {}
 
@@ -169,7 +169,7 @@ async def test_pr_list_propagates_authenticated_user_to_gh(
         captured["user_id"] = value if isinstance(value, str) else None
         return {"status": "ok", "output": "[]"}
 
-    monkeypatch.setattr(gh, "_gh_run", fake_gh_run)
+    monkeypatch.setattr(github_cli, "run_gh_command", fake_gh_run)
     result = await pr_list("ws-git", _request_for_user("user-42"))
 
     assert result.available is True
@@ -180,7 +180,7 @@ async def test_pr_list_propagates_authenticated_user_to_gh(
 async def test_pr_create_propagates_authenticated_user_to_gh(
     ws_repo: tuple[git.Repo, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from backend.tools import gh
+    from backend.services import github_cli
 
     captured: dict[str, str | None] = {}
 
@@ -189,7 +189,7 @@ async def test_pr_create_propagates_authenticated_user_to_gh(
         captured["user_id"] = value if isinstance(value, str) else None
         return {"status": "ok", "output": "https://github.com/o/r/pull/1"}
 
-    monkeypatch.setattr(gh, "_gh_run", fake_gh_run)
+    monkeypatch.setattr(github_cli, "run_gh_command", fake_gh_run)
     result = await pr_create(
         "ws-git",
         PullRequestCreateRequest(title="feat: teste"),

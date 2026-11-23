@@ -15,7 +15,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, HTTPException, Path, Query, Request
 from pydantic import BaseModel, Field
 
-from backend.tools.gh import _gh_run
+from backend.services.github_cli import run_gh_command as _gh_run
 
 router = APIRouter(prefix="/github", tags=["github"])
 
@@ -258,7 +258,9 @@ def _author(raw: object) -> str:
 def _failure(result: dict) -> tuple[Literal["unavailable", "error"], str]:
     message = str(result.get("message", "")).strip()
     lowered = message.lower()
-    if "not found in path" in lowered or "auth" in lowered:
+    if result.get("code") in {"gh_unavailable", "gh_unauthenticated"} or (
+        "not found in path" in lowered or "auth" in lowered
+    ):
         return "unavailable", message
     return "error", message
 
