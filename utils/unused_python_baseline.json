@@ -54,7 +54,6 @@
   "backend/context_graph/symbol_resolution.py::function::resolve_python_import_guided_calls",
   "backend/context_graph/validate.py::function::assert_valid",
   "backend/embedding/__init__.py::function::__getattr__",
-  "backend/embedding/queue.py::method::mark_failed",
   "backend/engine/guardrails.py::method::record_aitl_call",
   "backend/engine/hitl.py::function::list_non_tool_review_requests",
   "backend/engine/hitl.py::function::record_non_tool_review_request",

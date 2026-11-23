@@ -443,6 +443,17 @@ class BackgroundEmbeddingWorker:
                     self.failed_count += 1
                     dlq_reason = f"{e!s}\n\nStack trace:\n{error_trace}"
                     try:
+                        # Persiste primeiro como falha recuperável. Se a escrita
+                        # da DLQ falhar, o endpoint administrativo ainda pode
+                        # exibir e reenfileirar o item em vez de deixá-lo preso
+                        # em processing.
+                        await queue.mark_failed(queue_id, dlq_reason)
+                    except Exception:
+                        logger.exception(
+                            "Erro ao registrar falha de embedding",
+                            extra={"queue_id": queue_id},
+                        )
+                    try:
                         await queue.mark_dlq(queue_id, dlq_reason)
                     except Exception:
                         logger.exception(
