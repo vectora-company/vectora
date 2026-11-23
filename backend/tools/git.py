@@ -121,6 +121,31 @@ def _safe_call(fn: Callable[[], object]) -> dict:
         return {"status": "error", "message": str(exc)}
 
 
+async def _execute_git_write(
+    ctx: ToolContext,
+    workspace_id: str | None,
+    repo: git.Repo,
+    operation: str,
+    callback: Callable[[], object],
+) -> dict[str, object]:
+    """Serialize an agent Git mutation with every other write to the repo."""
+    from backend.services.git import GitOperationError, git_service
+
+    workspace = _resolve_workspace(workspace_id, ctx)
+    if workspace is None:
+        return {"status": "error", "message": "Workspace não encontrado."}
+    try:
+        _operation, result = await git_service.execute(
+            workspace.id,
+            repo,
+            operation,
+            lambda: _safe_call(callback),
+        )
+        return cast("dict[str, object]", result or {})
+    except GitOperationError as exc:
+        return {"status": exc.code, "message": str(exc)}
+
+
 # ---------------------------------------------------------------------------
 # Funções-helper públicas (testáveis diretamente)
 # ---------------------------------------------------------------------------
@@ -953,8 +978,18 @@ async def git_branch(
     repo, err = _open_repo(workspace_id, ctx)
     if err:
         return err
+    if action == "list":
+        return json.dumps(
+            _safe_call(lambda: _git_branch_impl(repo, action=action, name=name))
+        )
     return json.dumps(
-        _safe_call(lambda: _git_branch_impl(repo, action=action, name=name))
+        await _execute_git_write(
+            ctx,
+            workspace_id,
+            repo,
+            "branch",
+            lambda: _git_branch_impl(repo, action=action, name=name),
+        )
     )
 
 
@@ -990,7 +1025,13 @@ async def git_checkout(
     if not ref:
         return json.dumps({"status": "error", "message": "ref é obrigatório."})
     return json.dumps(
-        _safe_call(lambda: _git_checkout_impl(repo, ref=ref, create=create))
+        await _execute_git_write(
+            ctx,
+            workspace_id,
+            repo,
+            "checkout",
+            lambda: _git_checkout_impl(repo, ref=ref, create=create),
+        )
     )
 
 
@@ -1031,10 +1072,14 @@ async def git_commit(
             {"status": "error", "message": "Mensagem de commit é obrigatória."}
         )
     return json.dumps(
-        _safe_call(
+        await _execute_git_write(
+            ctx,
+            workspace_id,
+            repo,
+            "commit",
             lambda: _git_commit_impl(
                 repo, message=message, all=all, body=body, amend=amend
-            )
+            ),
         )
     )
 
@@ -1071,10 +1116,14 @@ async def git_squash(
             {"status": "error", "message": "base_ref e message são obrigatórios."}
         )
     return json.dumps(
-        _safe_call(
+        await _execute_git_write(
+            ctx,
+            workspace_id,
+            repo,
+            "squash",
             lambda: _git_squash_impl(
                 repo, base_ref=base_ref, message=message, body=body
-            )
+            ),
         )
     )
 
@@ -1103,7 +1152,13 @@ async def git_reorder(
     if err:
         return err
     return json.dumps(
-        _safe_call(lambda: _git_reorder_impl(repo, commits=commits or []))
+        await _execute_git_write(
+            ctx,
+            workspace_id,
+            repo,
+            "reorder",
+            lambda: _git_reorder_impl(repo, commits=commits or []),
+        )
     )
 
 
@@ -1135,7 +1190,13 @@ async def git_cherry_pick(
     if not sha:
         return json.dumps({"status": "error", "message": "sha é obrigatório."})
     return json.dumps(
-        _safe_call(lambda: _git_cherry_pick_impl(repo, sha=sha, no_commit=no_commit))
+        await _execute_git_write(
+            ctx,
+            workspace_id,
+            repo,
+            "cherry_pick",
+            lambda: _git_cherry_pick_impl(repo, sha=sha, no_commit=no_commit),
+        )
     )
 
 
@@ -1161,7 +1222,15 @@ async def git_fetch(
     repo, err = _open_repo(workspace_id, ctx)
     if err:
         return err
-    return json.dumps(_safe_call(lambda: _git_fetch_impl(repo, remote=remote)))
+    return json.dumps(
+        await _execute_git_write(
+            ctx,
+            workspace_id,
+            repo,
+            "fetch",
+            lambda: _git_fetch_impl(repo, remote=remote),
+        )
+    )
 
 
 @vtool(
@@ -1193,7 +1262,13 @@ async def git_merge(
     if not branch:
         return json.dumps({"status": "error", "message": "branch é obrigatório."})
     return json.dumps(
-        _safe_call(lambda: _git_merge_impl(repo, branch=branch, no_ff=no_ff))
+        await _execute_git_write(
+            ctx,
+            workspace_id,
+            repo,
+            "merge",
+            lambda: _git_merge_impl(repo, branch=branch, no_ff=no_ff),
+        )
     )
 
 
@@ -1226,7 +1301,13 @@ async def git_revert(
     if not sha:
         return json.dumps({"status": "error", "message": "sha é obrigatório."})
     return json.dumps(
-        _safe_call(lambda: _git_revert_impl(repo, sha=sha, no_commit=no_commit))
+        await _execute_git_write(
+            ctx,
+            workspace_id,
+            repo,
+            "revert",
+            lambda: _git_revert_impl(repo, sha=sha, no_commit=no_commit),
+        )
     )
 
 
@@ -1296,8 +1377,12 @@ async def git_resolve_conflict(
     if err:
         return err
     return json.dumps(
-        _safe_call(
-            lambda: _git_resolve_conflict_impl(repo, path=path, strategy=strategy)
+        await _execute_git_write(
+            ctx,
+            workspace_id,
+            repo,
+            "resolve_conflict",
+            lambda: _git_resolve_conflict_impl(repo, path=path, strategy=strategy),
         )
     )
 
@@ -1371,8 +1456,12 @@ async def git_push(
     if err:
         return err
     return json.dumps(
-        _safe_call(
-            lambda: _git_push_impl(repo, remote=remote, branch=branch, force=force)
+        await _execute_git_write(
+            ctx,
+            workspace_id,
+            repo,
+            "push",
+            lambda: _git_push_impl(repo, remote=remote, branch=branch, force=force),
         )
     )
 
@@ -1403,7 +1492,13 @@ async def git_pull(
     if err:
         return err
     return json.dumps(
-        _safe_call(lambda: _git_pull_impl(repo, remote=remote, branch=branch))
+        await _execute_git_write(
+            ctx,
+            workspace_id,
+            repo,
+            "pull",
+            lambda: _git_pull_impl(repo, remote=remote, branch=branch),
+        )
     )
 
 
@@ -1433,8 +1528,18 @@ async def git_stash(
     repo, err = _open_repo(workspace_id, ctx)
     if err:
         return err
+    if action == "list":
+        return json.dumps(
+            _safe_call(lambda: _git_stash_impl(repo, action=action, name=name))
+        )
     return json.dumps(
-        _safe_call(lambda: _git_stash_impl(repo, action=action, name=name))
+        await _execute_git_write(
+            ctx,
+            workspace_id,
+            repo,
+            "stash",
+            lambda: _git_stash_impl(repo, action=action, name=name),
+        )
     )
 
 
@@ -1491,11 +1596,23 @@ async def git_worktree(
     repo, err = _open_repo(workspace_id, ctx)
     if err:
         return err
+    if action == "list":
+        return json.dumps(
+            _safe_call(
+                lambda: _git_worktree_impl(
+                    repo, ws.id, action=action, name=name, branch=branch
+                )
+            )
+        )
     return json.dumps(
-        _safe_call(
+        await _execute_git_write(
+            ctx,
+            workspace_id,
+            repo,
+            "worktree",
             lambda: _git_worktree_impl(
                 repo, ws.id, action=action, name=name, branch=branch
-            )
+            ),
         )
     )
 
@@ -1527,7 +1644,15 @@ async def git_stage(
         return err
     if not path:
         return json.dumps({"status": "error", "message": "path é obrigatório."})
-    return json.dumps(_safe_call(lambda: _git_stage_impl(repo, path=path)))
+    return json.dumps(
+        await _execute_git_write(
+            ctx,
+            workspace_id,
+            repo,
+            "stage",
+            lambda: _git_stage_impl(repo, path=path),
+        )
+    )
 
 
 @vtool(
@@ -1555,7 +1680,15 @@ async def git_unstage(
         return err
     if not path:
         return json.dumps({"status": "error", "message": "path é obrigatório."})
-    return json.dumps(_safe_call(lambda: _git_unstage_impl(repo, path=path)))
+    return json.dumps(
+        await _execute_git_write(
+            ctx,
+            workspace_id,
+            repo,
+            "unstage",
+            lambda: _git_unstage_impl(repo, path=path),
+        )
+    )
 
 
 @vtool(
@@ -1588,7 +1721,15 @@ async def git_discard(
         return err
     if not path:
         return json.dumps({"status": "error", "message": "path é obrigatório."})
-    return json.dumps(_safe_call(lambda: _git_restore_impl(repo, path=path)))
+    return json.dumps(
+        await _execute_git_write(
+            ctx,
+            workspace_id,
+            repo,
+            "discard",
+            lambda: _git_restore_impl(repo, path=path),
+        )
+    )
 
 
 # ---------------------------------------------------------------------------
