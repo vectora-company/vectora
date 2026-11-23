@@ -1,0 +1,40 @@
+name: Security Scanning
+
+# A auditoria precisa rodar em todo PR, mesmo quando os arquivos alterados não
+# acionam o pipeline mais amplo de build e testes definido em vectora.yml.
+on:
+  pull_request:
+    branches: ["**"]
+  push:
+    branches: [master, "release/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.13"
+
+jobs:
+  security:
+    name: Security Scanning
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-uv
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Bandit (static security analysis)
+        run: uv run bandit -c pyproject.toml -r backend -f json -o bandit.json
+      - name: pip-audit (vulnerable dependencies)
+        if: ${{ !cancelled() }}
+        run: uv run --with pip-audit pip-audit --skip-editable --format json --output pip-audit.json
+      - name: Upload security reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: python-security-${{ github.sha }}
+          path: |
+            bandit.json
+            pip-audit.json
+          if-no-files-found: error
