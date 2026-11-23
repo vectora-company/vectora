@@ -11,7 +11,10 @@ from pathlib import Path
 import pytest
 
 from utils import build_env
-from utils.package_build import electron_builder_output_dir
+from utils.package_build import (
+    electron_builder_output_dir,
+    electron_builder_temp_dir,
+)
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -417,6 +420,24 @@ class TestDiretorioDeEmpacotamento:
         )
 
         assert result == Path("/appdata/local/Vectora/dist-electron")
+
+    def test_temporarios_linux_ficam_ao_lado_do_cache_de_build(self) -> None:
+        result = electron_builder_temp_dir(
+            is_linux=True,
+            environ={},
+            output_dir=Path("/home/user/.cache/vectora/dist-electron"),
+        )
+
+        assert result == Path("/home/user/.cache/vectora/tmp")
+
+    def test_diretorio_temporario_linux_pode_ser_configurado(self) -> None:
+        result = electron_builder_temp_dir(
+            is_linux=True,
+            environ={"VECTORA_DIST_ELECTRON_TMPDIR": "/mnt/build/tmp"},
+            output_dir=Path("/home/user/.cache/vectora/dist-electron"),
+        )
+
+        assert result == Path("/mnt/build/tmp")
 
 
 class TestCanalDeAtualizacaoDoPacote:
