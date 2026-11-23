@@ -178,8 +178,8 @@ async def test_run_gh_uses_separate_read_and_write_timeouts(
 ) -> None:
     seen: list[float] = []
 
-    async def wait_for(_awaitable: object, *, timeout: float) -> tuple[bytes, bytes]:
-        seen.append(timeout)
+    async def wait_for(_awaitable: object, **kwargs: float) -> tuple[bytes, bytes]:
+        seen.append(kwargs["timeout"])
         return b"", b""
 
     async def create_process(*_args: object, **_kwargs: object) -> _Process:
@@ -208,7 +208,7 @@ async def test_run_gh_kills_process_after_timeout(
     async def create_process(*_args: object, **_kwargs: object) -> _Process:
         return process
 
-    async def timeout(_awaitable: object, *, timeout: float) -> tuple[bytes, bytes]:
+    async def timeout(_awaitable: object, **_kwargs: float) -> tuple[bytes, bytes]:
         raise TimeoutError
 
     monkeypatch.setattr(
