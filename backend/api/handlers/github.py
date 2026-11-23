@@ -47,12 +47,6 @@ _gh_cache: dict[tuple, tuple[float, dict]] = {}
 _gh_inflight: dict[tuple, asyncio.Future] = {}
 
 
-def clear_gh_cache() -> None:
-    """Esvazia o cache de leituras (usado nos testes)."""
-    _gh_cache.clear()
-    _gh_inflight.clear()
-
-
 async def _gh_read(
     args: list[str], cwd: str | None = None, user_id: str | None = None
 ) -> dict:
