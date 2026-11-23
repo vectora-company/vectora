@@ -25,7 +25,13 @@ def _fake_gh(monkeypatch, result: dict):
 
     monkeypatch.setattr(github, "_gh_run", fake)
     monkeypatch.setattr(github, "_workspace_cwd", lambda _w: "/tmp/ws")
+    monkeypatch.setattr(github, "_github_repository", lambda _cwd: "o/r")
+    monkeypatch.setattr(github, "github_auth_epoch", lambda _user_id: _epoch())
     return calls
+
+
+async def _epoch(_user_id: str | None = None) -> str:
+    return "epoch-1"
 
 
 def test_checks_summary_counts_each_outcome() -> None:
@@ -51,15 +57,13 @@ async def test_pulls_are_listed_with_review_and_without_checks_payload(
         {
             "number": 7,
             "title": "feat: algo",
-            "state": "OPEN",
-            "isDraft": True,
-            "author": {"login": "ana"},
-            "headRefName": "feat/x",
-            "baseRefName": "master",
-            "updatedAt": "2026-11-19T10:00:00Z",
-            "url": "https://github.com/o/r/pull/7",
-            "reviewDecision": "APPROVED",
-            "statusCheckRollup": [{"conclusion": "SUCCESS"}],
+            "state": "open",
+            "draft": True,
+            "user": {"login": "ana"},
+            "head": {"ref": "feat/x"},
+            "base": {"ref": "master"},
+            "updated_at": "2026-11-19T10:00:00Z",
+            "html_url": "https://github.com/o/r/pull/7",
         },
         {"sem": "numero"},
     ]
@@ -71,11 +75,11 @@ async def test_pulls_are_listed_with_review_and_without_checks_payload(
     assert len(response.items) == 1
     pull = response.items[0]
     assert (pull.number, pull.author, pull.is_draft) == (7, "ana", True)
-    assert pull.review_decision == "APPROVED"
+    assert pull.review_decision == ""
     assert pull.checks.passed == 0
     # A lista não pede o rollup de checks (payload pesado); só o detalhe pede.
-    assert "statusCheckRollup" not in calls[0][0][calls[0][0].index("--json") + 1]
-    assert calls[0][0][:4] == ["pr", "list", "--state", "all"]
+    assert "statusCheckRollup" not in " ".join(calls[0][0])
+    assert calls[0][0][:3] == ["api", "--include", "repos/o/r/pulls"]
     assert calls[0][1] == "alice"
 
 
@@ -84,20 +88,22 @@ async def test_issues_are_listed_with_labels_and_comment_count(monkeypatch) -> N
         {
             "number": 3,
             "title": "bug",
-            "state": "OPEN",
-            "author": {"login": "bia"},
+            "state": "open",
+            "user": {"login": "bia"},
             "labels": [{"name": "bug"}, {"name": "frontend"}],
-            "comments": [{}, {}],
-            "url": "u",
+            "comments": 2,
+            "html_url": "u",
         }
     ]
-    _fake_gh(monkeypatch, {"status": "ok", "output": json.dumps(payload)})
+    calls = _fake_gh(monkeypatch, {"status": "ok", "output": json.dumps(payload)})
 
     response = await github.list_issues(_request(), state="open", workspace_id=None)
 
     assert response.state == "loaded"
     assert response.items[0].labels == ["bug", "frontend"]
     assert response.items[0].comments == 2
+    assert calls[0][0][2] == "search/issues"
+    assert "q=repo:o/r is:issue state:open" in calls[0][0]
 
 
 async def test_empty_repository_list_is_distinct_from_unknown(monkeypatch) -> None:
@@ -404,3 +410,93 @@ def test_failure_uses_structured_gh_unavailable_code() -> None:
         "unavailable",
         "gh missing",
     )
+
+
+async def test_github_list_sends_etag_and_reuses_body_on_not_modified(
+    monkeypatch,
+) -> None:
+    calls: list[list[str]] = []
+    responses = [
+        {
+            "status": "ok",
+            "http_status": 200,
+            "etag": '"v1"',
+            "output": 'HTTP/2.0 200 OK\r\nETag: "v1"\r\n\r\n[{"number": 4}]',
+        },
+        {
+            "status": "error",
+            "code": "gh_command_failed",
+            "http_status": 304,
+            "output": "HTTP/2.0 304 Not Modified",
+        },
+    ]
+
+    async def fake(args, cwd=None, input_data=None, user_id=None):
+        calls.append(args)
+        return responses.pop(0)
+
+    monkeypatch.setattr(github, "_gh_run", fake)
+    monkeypatch.setattr(github, "_github_repository", lambda _cwd: "o/r")
+    monkeypatch.setattr(github, "github_auth_epoch", _epoch)
+
+    first, first_error = await github._github_api_list("pulls", "open", "/ws", "alice")
+    second, second_error = await github._github_api_list(
+        "pulls", "open", "/ws", "alice"
+    )
+
+    assert first_error is second_error is None
+    assert first == second == [{"number": 4}]
+    assert "--header" not in calls[0]
+    assert calls[1][-2:] == ["--header", 'If-None-Match: "v1"']
+
+
+async def test_github_etag_cache_is_isolated_by_credential_epoch(monkeypatch) -> None:
+    epochs = iter(["first", "second"])
+    calls: list[list[str]] = []
+
+    async def changing_epoch(_user_id):
+        return next(epochs)
+
+    async def fake(args, cwd=None, input_data=None, user_id=None):
+        calls.append(args)
+        return {
+            "status": "ok",
+            "etag": '"v1"',
+            "output": '[{"number": 4}]',
+        }
+
+    monkeypatch.setattr(github, "_gh_run", fake)
+    monkeypatch.setattr(github, "_github_repository", lambda _cwd: "o/r")
+    monkeypatch.setattr(github, "github_auth_epoch", changing_epoch)
+
+    await github._github_api_list("pulls", "open", "/ws", "alice")
+    await github._github_api_list("pulls", "open", "/ws", "alice")
+
+    assert all("--header" not in args for args in calls)
+
+
+async def test_github_api_rate_gate_uses_reset_time(monkeypatch) -> None:
+    calls = 0
+
+    async def limited(*_args, **_kwargs):
+        nonlocal calls
+        calls += 1
+        return {
+            "status": "error",
+            "code": "rate_limited",
+            "message": "API rate limit exceeded",
+            "reset_at": int(github.time.time()) + 180,
+        }
+
+    monkeypatch.setattr(github, "_gh_run", limited)
+    monkeypatch.setattr(github, "_github_repository", lambda _cwd: "o/r")
+    monkeypatch.setattr(github, "github_auth_epoch", _epoch)
+
+    _items, first_error = await github._github_api_list("pulls", "open", "/ws", "alice")
+    _items, second_error = await github._github_api_list(
+        "issues", "open", "/ws", "alice"
+    )
+
+    assert calls == 1
+    assert first_error is not None and second_error is not None
+    assert first_error["reset_at"] == second_error["reset_at"]
