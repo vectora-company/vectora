@@ -12,6 +12,8 @@ name: Vectora (app)
 on:
   push:
     branches: [master, "release/**"]
+    # Os pushes de release na master precisam ser detectados mesmo quando só
+    # atualizam changelog e arquivos de versão, que não estão nos paths do app.
     paths:
       - "backend/**"
       - "frontend/**"
@@ -23,6 +25,10 @@ on:
       - "build-hybrid.py"
       - ".github/workflows/vectora.yml"
       - ".github/actions/**"
+      # Releases alteram changelog e arquivos de versão, então também precisam
+      # disparar este workflow mesmo sem mudanças no código do app.
+      - "CHANGELOG.md"
+      - ".github/release-lines.json"
   pull_request:
     branches: ["**"]
     paths:
