@@ -55,8 +55,8 @@ class InstallRequest(BaseModel):
     """O que o host precisa para instalar uma versão já verificada pelo Vext."""
 
     id: str
-    name: str
-    publisher: str
+    name: str = Field(min_length=1, max_length=120)
+    publisher: str = Field(min_length=1, max_length=120)
     release: ExtensionRelease
 
     @field_validator("id")

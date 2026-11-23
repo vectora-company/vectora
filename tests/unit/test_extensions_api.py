@@ -83,14 +83,24 @@ def _install_body(host: ExtensionHost) -> InstallRequest:
     )
 
 
-@pytest.mark.parametrize("extension_id", ["../escape", "with/slash", "UPPERCASE"])
-def test_install_request_rejects_invalid_extension_ids(
-    host: ExtensionHost, extension_id: str
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("id", "../escape"),
+        ("id", "with/slash"),
+        ("id", "UPPERCASE"),
+        ("name", ""),
+        ("publisher", ""),
+        ("publisher", "p" * 121),
+    ],
+)
+def test_install_request_rejects_invalid_metadata(
+    host: ExtensionHost, field: str, value: str
 ) -> None:
     body = _install_body(host).model_dump()
-    body["id"] = extension_id
+    body[field] = value
 
-    with pytest.raises(ValidationError, match="id de extensão inválido"):
+    with pytest.raises(ValidationError):
         InstallRequest.model_validate(body)
 
 
