@@ -143,7 +143,7 @@ async def _execute_git_write(
         )
         return cast("dict[str, object]", result or {})
     except GitOperationError as exc:
-        return {"status": exc.code, "message": str(exc)}
+        return {"status": "error", "code": exc.code, "message": str(exc)}
 
 
 # ---------------------------------------------------------------------------
