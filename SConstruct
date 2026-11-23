@@ -43,6 +43,7 @@ import urllib.request
 from typing import TextIO
 
 from utils import build_env
+from utils.package_build import electron_builder_output_dir
 from utils.subprocess_compat import command_for_execution
 
 AddOption(
@@ -647,10 +648,13 @@ def _action_package(target, source, env, platform=""):
             )
 
     _free_desktop_dist()
-    out_dir = os.path.join(
-        os.environ.get("LOCALAPPDATA") or tempfile.gettempdir(),
-        "Vectora",
-        "dist-electron",
+    out_dir = str(
+        electron_builder_output_dir(
+            is_linux=is_linux,
+            environ=os.environ,
+            home_dir=Path.home(),
+            temp_dir=Path(tempfile.gettempdir()),
+        )
     )
     shutil.rmtree(out_dir, ignore_errors=True)
     os.makedirs(out_dir, exist_ok=True)

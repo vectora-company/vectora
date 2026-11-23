@@ -26,6 +26,8 @@ uv run --locked scons install
 cp .env.example .env
 ```
 
+No Linux, `scons release` grava os pacotes temporários em `~/.cache/vectora/dist-electron`, evitando o limite de espaço comum em `/tmp` montado como `tmpfs`. Defina `VECTORA_DIST_ELECTRON_DIR` para escolher outro destino com espaço suficiente.
+
 `pnpm ci` remove e recria `frontend/node_modules` usando o lockfile congelado. O Chromium de execução vem do pacote Electron; Playwright é usado como cliente CDP e o bootstrap não baixa browsers Playwright. Para reinstalar manualmente só o workspace frontend: `pnpm --dir frontend ci`.
 
 Para subir o backend em desenvolvimento: `uv run vectora start`.

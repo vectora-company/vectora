@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from utils import build_env
+from utils.package_build import electron_builder_output_dir
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -384,6 +385,38 @@ class TestContratoDoSConstruct:
         assert '_fetch_speech  = _node("build-macos-speech"' in text
         backend = re.search(r"_build_backend = _node\((.*?)\n\)", text, re.DOTALL)
         assert backend is not None and "_fetch_speech" in backend.group(1)
+
+
+class TestDiretorioDeEmpacotamento:
+    def test_linux_usa_cache_persistente_em_vez_de_tmpfs(self) -> None:
+        result = electron_builder_output_dir(
+            is_linux=True,
+            environ={},
+            home_dir=Path("/home/user"),
+            temp_dir=Path("/tmp"),
+        )
+
+        assert result == Path("/home/user/.cache/vectora/dist-electron")
+
+    def test_destino_pode_ser_configurado_explicitamente(self) -> None:
+        result = electron_builder_output_dir(
+            is_linux=True,
+            environ={"VECTORA_DIST_ELECTRON_DIR": "/mnt/build/vectora"},
+            home_dir=Path("/home/user"),
+            temp_dir=Path("/tmp"),
+        )
+
+        assert result == Path("/mnt/build/vectora")
+
+    def test_outros_sistemas_preservam_destino_existente(self) -> None:
+        result = electron_builder_output_dir(
+            is_linux=False,
+            environ={"LOCALAPPDATA": "/appdata/local"},
+            home_dir=Path("/home/user"),
+            temp_dir=Path("/tmp"),
+        )
+
+        assert result == Path("/appdata/local/Vectora/dist-electron")
 
 
 class TestCanalDeAtualizacaoDoPacote:
