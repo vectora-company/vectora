@@ -1,7 +1,6 @@
 {
-  "status": "ok",
-  "message": "",
-  "issues": [
+  "state": "loaded",
+  "items": [
     {
       "number": 802,
       "title": "feat: aba Actions na workbench Git, somente leitura",
@@ -12,5 +11,8 @@
       "url": "https://github.com/vectora-company/vectora/issues/802",
       "comments": 1
     }
-  ]
+  ],
+  "error": null,
+  "code": null,
+  "reset_at": null
 }

@@ -7,6 +7,7 @@ import logging
 import os
 import re
 import shutil
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -136,6 +137,26 @@ def _is_unauthenticated(message: str) -> bool:
     )
 
 
+def _rate_limit_details(message: str) -> dict[str, int | str] | None:
+    lowered = message.casefold()
+    if not any(
+        marker in lowered
+        for marker in ("rate limit", "secondary rate", "abuse detection")
+    ):
+        return None
+    reset_match = re.search(
+        r"(?:reset|resets)\s+(?:at\s+)?(\d{10})", message, re.IGNORECASE
+    )
+    retry_match = re.search(r"retry[- ]after[: ]+(\d+)", message, re.IGNORECASE)
+    if reset_match:
+        reset_at = int(reset_match.group(1))
+    elif retry_match:
+        reset_at = int(time.time()) + max(60, int(retry_match.group(1)))
+    else:
+        reset_at = int(time.time()) + 60
+    return {"code": "rate_limited", "reset_at": reset_at}
+
+
 def _error(code: str, message: str, *, exit_code: int | None = None) -> dict:
     result = {
         "status": "error",
@@ -247,6 +268,9 @@ async def run_gh_command(
                 },
             )
             result = _error(error.code, str(error), exit_code=process.returncode)
+            rate_limit = _rate_limit_details(message)
+            if rate_limit is not None:
+                result.update(rate_limit)
         else:
             logger.info(
                 "github_cli_command_completed",

@@ -5980,30 +5980,58 @@
       },
       "IssueListResponse": {
         "properties": {
-          "issues": {
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "items": {
             "items": {
               "$ref": "#/components/schemas/IssueSummary"
             },
-            "title": "Issues",
+            "title": "Items",
             "type": "array"
           },
-          "message": {
-            "default": "",
-            "title": "Message",
-            "type": "string"
-          },
-          "status": {
-            "enum": [
-              "ok",
-              "unavailable",
-              "error"
+          "reset_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
             ],
-            "title": "Status",
+            "title": "Reset At"
+          },
+          "state": {
+            "enum": [
+              "loaded",
+              "empty",
+              "unknown"
+            ],
+            "title": "State",
             "type": "string"
           }
         },
         "required": [
-          "status"
+          "state"
         ],
         "title": "IssueListResponse",
         "type": "object"
@@ -8501,30 +8529,58 @@
       },
       "PullListResponse": {
         "properties": {
-          "message": {
-            "default": "",
-            "title": "Message",
-            "type": "string"
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
           },
-          "pulls": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "items": {
             "items": {
               "$ref": "#/components/schemas/PullSummary"
             },
-            "title": "Pulls",
+            "title": "Items",
             "type": "array"
           },
-          "status": {
-            "enum": [
-              "ok",
-              "unavailable",
-              "error"
+          "reset_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
             ],
-            "title": "Status",
+            "title": "Reset At"
+          },
+          "state": {
+            "enum": [
+              "loaded",
+              "empty",
+              "unknown"
+            ],
+            "title": "State",
             "type": "string"
           }
         },
         "required": [
-          "status"
+          "state"
         ],
         "title": "PullListResponse",
         "type": "object"

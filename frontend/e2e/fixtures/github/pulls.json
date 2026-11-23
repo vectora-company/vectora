@@ -1,7 +1,6 @@
 {
-  "status": "ok",
-  "message": "",
-  "pulls": [
+  "state": "loaded",
+  "items": [
     {
       "number": 803,
       "title": "feat: aba Actions na workbench Git, somente leitura",
@@ -19,5 +18,8 @@
         "pending": 0
       }
     }
-  ]
+  ],
+  "error": null,
+  "code": null,
+  "reset_at": null
 }

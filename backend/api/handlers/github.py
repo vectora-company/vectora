@@ -45,6 +45,33 @@ _GH_CACHE_TTL_S = 4.0
 _GH_CACHE_MAX = 64
 _gh_cache: dict[tuple, tuple[float, dict]] = {}
 _gh_inflight: dict[tuple, asyncio.Future] = {}
+_rate_gate_until: dict[tuple[str | None, str | None], float] = {}
+
+
+def _rate_gate_result(key: tuple[str | None, str | None]) -> dict | None:
+    reset_at = _rate_gate_until.get(key)
+    if reset_at is None:
+        return None
+    if reset_at <= time.time():
+        _rate_gate_until.pop(key, None)
+        return None
+    return {
+        "status": "error",
+        "code": "rate_limited",
+        "message": "Limite da API do GitHub atingido.",
+        "reset_at": int(reset_at),
+    }
+
+
+def _remember_rate_limit(result: dict, key: tuple[str | None, str | None]) -> dict:
+    if result.get("code") != "rate_limited":
+        return result
+    reset_at = result.get("reset_at")
+    if not isinstance(reset_at, (int, float)):
+        reset_at = time.time() + 60
+    _rate_gate_until[key] = max(time.time() + 1, float(reset_at))
+    result["reset_at"] = int(_rate_gate_until[key])
+    return result
 
 
 async def _gh_read(
@@ -55,6 +82,10 @@ async def _gh_read(
     A chave inclui usuário e diretório, então um usuário nunca recebe a
     resposta de outro. Chamadas simultâneas idênticas esperam a mesma execução.
     """
+    rate_key = (user_id, cwd)
+    gated = _rate_gate_result(rate_key)
+    if gated is not None:
+        return gated
     key = (user_id, cwd, tuple(args))
     now = time.monotonic()
     hit = _gh_cache.get(key)
@@ -75,6 +106,7 @@ async def _gh_read(
         future.set_result(result)
     finally:
         _gh_inflight.pop(key, None)
+    result = _remember_rate_limit(result, rate_key)
     if result.get("status") == "ok":
         if len(_gh_cache) >= _GH_CACHE_MAX:
             _gh_cache.pop(next(iter(_gh_cache)))
@@ -116,15 +148,19 @@ class IssueSummary(BaseModel):
 
 
 class PullListResponse(BaseModel):
-    status: Literal["ok", "unavailable", "error"]
-    message: str = ""
-    pulls: list[PullSummary] = Field(default_factory=list)
+    state: Literal["loaded", "empty", "unknown"]
+    items: list[PullSummary] = Field(default_factory=list)
+    error: str | None = None
+    code: str | None = None
+    reset_at: int | None = None
 
 
 class IssueListResponse(BaseModel):
-    status: Literal["ok", "unavailable", "error"]
-    message: str = ""
-    issues: list[IssueSummary] = Field(default_factory=list)
+    state: Literal["loaded", "empty", "unknown"]
+    items: list[IssueSummary] = Field(default_factory=list)
+    error: str | None = None
+    code: str | None = None
+    reset_at: int | None = None
 
 
 class GithubComment(BaseModel):
@@ -262,7 +298,20 @@ def _failure(result: dict) -> tuple[Literal["unavailable", "error"], str]:
         "not found in path" in lowered or "auth" in lowered
     ):
         return "unavailable", message
+    if result.get("code") == "rate_limited":
+        return "error", "rate_limited"
     return "error", message
+
+
+def _list_error(result: dict) -> dict:
+    status, message = _failure(result)
+    return {
+        "state": "unknown",
+        "items": [],
+        "error": message,
+        "code": result.get("code", status),
+        "reset_at": result.get("reset_at"),
+    }
 
 
 @router.get("/pulls", response_model=PullListResponse)
@@ -292,12 +341,13 @@ async def list_pulls(
         user_id=user_id,
     )
     if result["status"] != "ok":
-        status, message = _failure(result)
-        return PullListResponse(status=status, message=message)
+        return PullListResponse(**_list_error(result))
     try:
         raw = json.loads(result["output"])
     except json.JSONDecodeError:
-        return PullListResponse(status="error", message="Resposta inválida do gh.")
+        return PullListResponse(
+            state="unknown", error="Resposta inválida do gh.", code="invalid_response"
+        )
     pulls = [
         PullSummary(
             number=int(item["number"]),
@@ -314,7 +364,7 @@ async def list_pulls(
         for item in raw
         if isinstance(item, dict) and "number" in item
     ]
-    return PullListResponse(status="ok", pulls=pulls)
+    return PullListResponse(state="loaded" if pulls else "empty", items=pulls)
 
 
 @router.get("/issues", response_model=IssueListResponse)
@@ -340,12 +390,13 @@ async def list_issues(
         user_id=user_id,
     )
     if result["status"] != "ok":
-        status, message = _failure(result)
-        return IssueListResponse(status=status, message=message)
+        return IssueListResponse(**_list_error(result))
     try:
         raw = json.loads(result["output"])
     except json.JSONDecodeError:
-        return IssueListResponse(status="error", message="Resposta inválida do gh.")
+        return IssueListResponse(
+            state="unknown", error="Resposta inválida do gh.", code="invalid_response"
+        )
     issues = [
         IssueSummary(
             number=int(item["number"]),
@@ -364,7 +415,7 @@ async def list_issues(
         for item in raw
         if isinstance(item, dict) and "number" in item
     ]
-    return IssueListResponse(status="ok", issues=issues)
+    return IssueListResponse(state="loaded" if issues else "empty", items=issues)
 
 
 def _names(items: object, *keys: str) -> list[str]:

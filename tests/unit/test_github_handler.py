@@ -67,9 +67,9 @@ async def test_pulls_are_listed_with_review_and_without_checks_payload(
 
     response = await github.list_pulls(_request(), state="all", workspace_id=None)
 
-    assert response.status == "ok"
-    assert len(response.pulls) == 1
-    pull = response.pulls[0]
+    assert response.state == "loaded"
+    assert len(response.items) == 1
+    pull = response.items[0]
     assert (pull.number, pull.author, pull.is_draft) == (7, "ana", True)
     assert pull.review_decision == "APPROVED"
     assert pull.checks.passed == 0
@@ -95,8 +95,18 @@ async def test_issues_are_listed_with_labels_and_comment_count(monkeypatch) -> N
 
     response = await github.list_issues(_request(), state="open", workspace_id=None)
 
-    assert response.issues[0].labels == ["bug", "frontend"]
-    assert response.issues[0].comments == 2
+    assert response.state == "loaded"
+    assert response.items[0].labels == ["bug", "frontend"]
+    assert response.items[0].comments == 2
+
+
+async def test_empty_repository_list_is_distinct_from_unknown(monkeypatch) -> None:
+    _fake_gh(monkeypatch, {"status": "ok", "output": "[]"})
+
+    response = await github.list_pulls(_request(), state="open", workspace_id=None)
+
+    assert response.state == "empty"
+    assert response.items == []
 
 
 @pytest.mark.parametrize(
@@ -112,9 +122,9 @@ async def test_gh_failures_are_classified(monkeypatch, message, expected) -> Non
 
     response = await github.list_pulls(_request(), state="open", workspace_id=None)
 
-    assert response.status == expected
-    assert response.message == message
-    assert response.pulls == []
+    assert response.state == "unknown"
+    assert response.error == message
+    assert response.items == []
 
 
 async def test_invalid_gh_output_is_an_error(monkeypatch) -> None:
@@ -122,7 +132,8 @@ async def test_invalid_gh_output_is_an_error(monkeypatch) -> None:
 
     response = await github.list_issues(_request(), state="open", workspace_id=None)
 
-    assert response.status == "error"
+    assert response.state == "unknown"
+    assert response.code == "invalid_response"
 
 
 async def test_requires_an_authenticated_user() -> None:
@@ -130,6 +141,30 @@ async def test_requires_an_authenticated_user() -> None:
         await github.list_pulls(_request(None), state="open", workspace_id=None)
 
     assert error.value.status_code == 401
+
+
+async def test_rate_gate_stops_repeated_github_cli_reads(monkeypatch) -> None:
+    calls = 0
+
+    async def rate_limited(*_args, **_kwargs):
+        nonlocal calls
+        calls += 1
+        return {
+            "status": "error",
+            "code": "rate_limited",
+            "message": "rate limit exceeded",
+            "reset_at": int(github.time.time()) + 120,
+        }
+
+    monkeypatch.setattr(github, "_gh_run", rate_limited)
+    monkeypatch.setattr(github, "_workspace_cwd", lambda _w: "/tmp/rate-limit")
+
+    first = await github._gh_read(["pr", "list"], "/tmp/rate-limit", "rate-user")
+    second = await github._gh_read(["issue", "list"], "/tmp/rate-limit", "rate-user")
+
+    assert calls == 1
+    assert first["code"] == second["code"] == "rate_limited"
+    assert second["reset_at"] == first["reset_at"]
 
 
 PULL_VIEW = {

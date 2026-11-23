@@ -151,8 +151,8 @@ async def test_pull_list_real_without_checks_payload(gh_output) -> None:
 
     response = await github.list_pulls(_request(), "all", None)
 
-    assert response.status == "ok" and response.pulls
-    pull = response.pulls[0]
+    assert response.state == "loaded" and response.items
+    pull = response.items[0]
     assert pull.author and pull.head_ref and pull.base_ref
     # A lista não pede o rollup de checks (payload pesado); só o detalhe pede.
     assert (
@@ -182,8 +182,8 @@ async def test_pull_detail_real_maps_commits_files_comments_and_milestone(
 async def test_issue_list_and_detail_real(gh_output) -> None:
     gh_output("gh_issue_list.json")
     listed = await github.list_issues(_request(), "all", None)
-    assert listed.status == "ok" and listed.issues
-    assert listed.issues[0].author
+    assert listed.state == "loaded" and listed.items
+    assert listed.items[0].author
 
     gh_output("gh_issue_view.json")
     number = json.loads(_raw("gh_issue_view.json"))["number"]
