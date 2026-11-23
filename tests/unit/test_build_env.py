@@ -224,10 +224,20 @@ class TestEmpacotamentoLinux:
         assert dnf.startswith("sudo dnf install -y ")
         assert {"rpm-build", "snapd"} <= set(dnf.split())
         assert dnf.endswith("&& sudo snap install snapcraft --classic")
-        _missing, pacman = build_env.packaging_hint("arch", lambda _tool: None)
+        _missing, pacman = build_env.packaging_hint(
+            "arch", lambda _tool: None, lambda _path: True
+        )
         assert pacman.startswith("sudo pacman -S --needed ")
         assert {"libarchive", "rpm-tools"} <= set(pacman.split())
         assert "snap" not in _missing
+
+    def test_arch_sugere_libxcrypt_compat_quando_falta_soname_do_fpm(self) -> None:
+        missing, command = build_env.packaging_hint(
+            "arch", lambda _tool: "/usr/bin/tool", lambda _path: False
+        )
+
+        assert missing == ["libcrypt.so.1"]
+        assert command == "sudo pacman -S --needed libxcrypt-compat"
 
     def test_so_lista_o_que_falta(self) -> None:
         present = {"flatpak", "bsdtar"}

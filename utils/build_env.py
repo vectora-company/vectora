@@ -115,6 +115,12 @@ PACKAGING_TOOLS: dict[str, dict[str, str]] = {
     },
 }
 
+# O FPM distribuído pelo electron-builder ainda liga dinamicamente contra o
+# soname legado, que não vem no pacote base atual do Arch.
+PACKAGING_LIBRARIES: dict[str, dict[str, str]] = {
+    "libcrypt.so.1": {"arch": "libxcrypt-compat"},
+}
+
 _INSTALL_COMMANDS = {
     "debian": "sudo apt-get install -y",
     "rhel": "sudo dnf install -y",
@@ -339,7 +345,9 @@ def missing_prerequisites(versions: Mapping[str, str | None]) -> list[str]:
 
 
 def packaging_hint(
-    family: str, which: Callable[[str], str | None] = shutil.which
+    family: str,
+    which: Callable[[str], str | None] = shutil.which,
+    exists: Callable[[str], bool] = os.path.isfile,
 ) -> tuple[list[str], str]:
     """Ferramentas de empacotamento Linux ausentes e o comando para instalá-las."""
     command = _INSTALL_COMMANDS.get(family)
@@ -348,12 +356,21 @@ def packaging_hint(
     available = [tool for tool in PACKAGING_TOOLS if family in PACKAGING_TOOLS[tool]]
     missing = [tool for tool in available if which(tool) is None]
     if not missing:
+        missing = []
+    missing_libraries = [
+        library
+        for library, distributions in PACKAGING_LIBRARIES.items()
+        if family in distributions and not exists(f"/usr/lib/{library}")
+    ]
+    if not missing and not missing_libraries:
         return [], ""
-    packages = sorted({PACKAGING_TOOLS[tool][family] for tool in missing})
-    install_command = f"{command} {' '.join(packages)}"
+    packages = {PACKAGING_TOOLS[tool][family] for tool in missing} | {
+        PACKAGING_LIBRARIES[library][family] for library in missing_libraries
+    }
+    install_command = f"{command} {' '.join(sorted(packages))}"
     if "snapcraft" in missing:
         install_command += " && sudo snap install snapcraft --classic"
-    return missing, install_command
+    return [*missing, *missing_libraries], install_command
 
 
 def describe_system(host: HostInfo) -> str:
