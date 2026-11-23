@@ -14,19 +14,19 @@ GH_READ_TIMEOUT_S = 30.0
 GH_WRITE_TIMEOUT_S = 120.0
 
 
-class GhUnavailable(RuntimeError):
+class GhUnavailableError(RuntimeError):
     """The GitHub CLI executable is unavailable."""
 
     code = "gh_unavailable"
 
 
-class GhUnauthenticated(RuntimeError):
+class GhUnauthenticatedError(RuntimeError):
     """The GitHub CLI rejected the active credentials."""
 
     code = "gh_unauthenticated"
 
 
-class GhCommandFailed(RuntimeError):
+class GhCommandFailedError(RuntimeError):
     """The GitHub CLI command failed for a reason other than authentication."""
 
     code = "gh_command_failed"
@@ -166,14 +166,12 @@ async def run_gh_command(
             "Texto de escrita precisa ser enviado por stdin com --body-file -.",
         )
 
-    try:
-        executable = shutil.which("gh", path=os.environ.get("PATH"))
-        if executable is None:
-            raise GhUnavailable(
-                "GitHub CLI não encontrado no PATH. Instale o gh: https://cli.github.com"
-            )
-    except GhUnavailable as exc:
-        return _error(exc.code, str(exc))
+    executable = shutil.which("gh", path=os.environ.get("PATH"))
+    if executable is None:
+        error = GhUnavailableError(
+            "GitHub CLI não encontrado no PATH. Instale o gh: https://cli.github.com"
+        )
+        return _error(error.code, str(error))
 
     env = await _user_environment(user_id)
     operation = " ".join(args[:2]) or "gh"
@@ -195,7 +193,7 @@ async def run_gh_command(
             env=env,
         )
     except FileNotFoundError:
-        error = GhUnavailable("GitHub CLI não encontrado no PATH.")
+        error = GhUnavailableError("GitHub CLI não encontrado no PATH.")
         return _error(error.code, str(error))
     except OSError as exc:
         return _error("gh_spawn_failed", str(exc))
@@ -205,6 +203,7 @@ async def run_gh_command(
         if _is_write_operation(args, input_data)
         else GH_READ_TIMEOUT_S
     )
+    result: dict
     try:
         stdout_bytes, stderr_bytes = await asyncio.wait_for(
             process.communicate(
@@ -215,7 +214,7 @@ async def run_gh_command(
     except TimeoutError:
         process.kill()
         await process.wait()
-        return _error("gh_timeout", f"Comando gh excedeu {timeout:g} s.")
+        result = _error("gh_timeout", f"Comando gh excedeu {timeout:g} s.")
     except asyncio.CancelledError:
         process.kill()
         await process.wait()
@@ -223,35 +222,41 @@ async def run_gh_command(
     except Exception as exc:
         process.kill()
         await process.wait()
-        return _error("gh_process_failed", str(exc))
-
-    stdout = redact_github_credentials(stdout_bytes.decode(errors="replace").strip())
-    stderr = redact_github_credentials(stderr_bytes.decode(errors="replace").strip())
-    if process.returncode != 0:
-        message = stderr or stdout or "Comando gh falhou."
-        error = (
-            GhUnauthenticated(message)
-            if _is_unauthenticated(message)
-            else GhCommandFailed(message)
+        result = _error("gh_process_failed", str(exc))
+    else:
+        stdout = redact_github_credentials(
+            stdout_bytes.decode(errors="replace").strip()
         )
-        logger.warning(
-            "github_cli_command_failed",
-            extra={
-                "tool": "gh_cli",
-                "operation": redact_github_credentials(operation),
-                "exit_code": process.returncode,
-                "code": error.code,
-            },
+        stderr = redact_github_credentials(
+            stderr_bytes.decode(errors="replace").strip()
         )
-        return _error(error.code, str(error), exit_code=process.returncode)
+        if process.returncode != 0:
+            message = stderr or stdout or "Comando gh falhou."
+            error = (
+                GhUnauthenticatedError(message)
+                if _is_unauthenticated(message)
+                else GhCommandFailedError(message)
+            )
+            logger.warning(
+                "github_cli_command_failed",
+                extra={
+                    "tool": "gh_cli",
+                    "operation": redact_github_credentials(operation),
+                    "exit_code": process.returncode,
+                    "code": error.code,
+                },
+            )
+            result = _error(error.code, str(error), exit_code=process.returncode)
+        else:
+            logger.info(
+                "github_cli_command_completed",
+                extra={
+                    "tool": "gh_cli",
+                    "operation": redact_github_credentials(operation),
+                    "exit_code": process.returncode,
+                    "output_length": len(stdout),
+                },
+            )
+            result = {"status": "ok", "output": stdout}
 
-    logger.info(
-        "github_cli_command_completed",
-        extra={
-            "tool": "gh_cli",
-            "operation": redact_github_credentials(operation),
-            "exit_code": process.returncode,
-            "output_length": len(stdout),
-        },
-    )
-    return {"status": "ok", "output": stdout}
+    return result
