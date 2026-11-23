@@ -26,6 +26,10 @@ uv run --locked scons install
 cp .env.example .env
 ```
 
+No Linux, `scons release` grava os pacotes em `~/.cache/vectora/dist-electron` e os arquivos temporários em `~/.cache/vectora/tmp`, evitando limites de espaço de `/tmp` montado como `tmpfs`. Defina `VECTORA_DIST_ELECTRON_DIR` e `VECTORA_DIST_ELECTRON_TMPDIR` para escolher outros destinos com espaço suficiente.
+
+No Arch Linux, o comando de pré-requisitos também verifica `libcrypt.so.1`, exigido pelo FPM incluído no electron-builder, e sugere `libxcrypt-compat` quando ausente.
+
 `pnpm ci` remove e recria `frontend/node_modules` usando o lockfile congelado. O Chromium de execução vem do pacote Electron; Playwright é usado como cliente CDP e o bootstrap não baixa browsers Playwright. Para reinstalar manualmente só o workspace frontend: `pnpm --dir frontend ci`.
 
 Para subir o backend em desenvolvimento: `uv run vectora start`.

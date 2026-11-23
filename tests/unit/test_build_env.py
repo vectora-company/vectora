@@ -11,6 +11,10 @@ from pathlib import Path
 import pytest
 
 from utils import build_env
+from utils.package_build import (
+    electron_builder_output_dir,
+    electron_builder_temp_dir,
+)
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -220,10 +224,20 @@ class TestEmpacotamentoLinux:
         assert dnf.startswith("sudo dnf install -y ")
         assert {"rpm-build", "snapd"} <= set(dnf.split())
         assert dnf.endswith("&& sudo snap install snapcraft --classic")
-        _missing, pacman = build_env.packaging_hint("arch", lambda _tool: None)
+        _missing, pacman = build_env.packaging_hint(
+            "arch", lambda _tool: None, lambda _path: True
+        )
         assert pacman.startswith("sudo pacman -S --needed ")
         assert {"libarchive", "rpm-tools"} <= set(pacman.split())
         assert "snap" not in _missing
+
+    def test_arch_sugere_libxcrypt_compat_quando_falta_soname_do_fpm(self) -> None:
+        missing, command = build_env.packaging_hint(
+            "arch", lambda _tool: "/usr/bin/tool", lambda _path: False
+        )
+
+        assert missing == ["libcrypt.so.1"]
+        assert command == "sudo pacman -S --needed libxcrypt-compat"
 
     def test_so_lista_o_que_falta(self) -> None:
         present = {"flatpak", "bsdtar"}
@@ -384,6 +398,56 @@ class TestContratoDoSConstruct:
         assert '_fetch_speech  = _node("build-macos-speech"' in text
         backend = re.search(r"_build_backend = _node\((.*?)\n\)", text, re.DOTALL)
         assert backend is not None and "_fetch_speech" in backend.group(1)
+
+
+class TestDiretorioDeEmpacotamento:
+    def test_linux_usa_cache_persistente_em_vez_de_tmpfs(self) -> None:
+        result = electron_builder_output_dir(
+            is_linux=True,
+            environ={},
+            home_dir=Path("/home/user"),
+            temp_dir=Path("/tmp"),
+        )
+
+        assert result == Path("/home/user/.cache/vectora/dist-electron")
+
+    def test_destino_pode_ser_configurado_explicitamente(self) -> None:
+        result = electron_builder_output_dir(
+            is_linux=True,
+            environ={"VECTORA_DIST_ELECTRON_DIR": "/mnt/build/vectora"},
+            home_dir=Path("/home/user"),
+            temp_dir=Path("/tmp"),
+        )
+
+        assert result == Path("/mnt/build/vectora")
+
+    def test_outros_sistemas_preservam_destino_existente(self) -> None:
+        result = electron_builder_output_dir(
+            is_linux=False,
+            environ={"LOCALAPPDATA": "/appdata/local"},
+            home_dir=Path("/home/user"),
+            temp_dir=Path("/tmp"),
+        )
+
+        assert result == Path("/appdata/local/Vectora/dist-electron")
+
+    def test_temporarios_linux_ficam_ao_lado_do_cache_de_build(self) -> None:
+        result = electron_builder_temp_dir(
+            is_linux=True,
+            environ={},
+            output_dir=Path("/home/user/.cache/vectora/dist-electron"),
+        )
+
+        assert result == Path("/home/user/.cache/vectora/tmp")
+
+    def test_diretorio_temporario_linux_pode_ser_configurado(self) -> None:
+        result = electron_builder_temp_dir(
+            is_linux=True,
+            environ={"VECTORA_DIST_ELECTRON_TMPDIR": "/mnt/build/tmp"},
+            output_dir=Path("/home/user/.cache/vectora/dist-electron"),
+        )
+
+        assert result == Path("/mnt/build/tmp")
 
 
 class TestCanalDeAtualizacaoDoPacote:

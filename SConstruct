@@ -43,6 +43,7 @@ import urllib.request
 from typing import TextIO
 
 from utils import build_env
+from utils.package_build import electron_builder_output_dir, electron_builder_temp_dir
 from utils.subprocess_compat import command_for_execution
 
 AddOption(
@@ -647,10 +648,18 @@ def _action_package(target, source, env, platform=""):
             )
 
     _free_desktop_dist()
-    out_dir = os.path.join(
-        os.environ.get("LOCALAPPDATA") or tempfile.gettempdir(),
-        "Vectora",
-        "dist-electron",
+    out_dir = str(
+        electron_builder_output_dir(
+            is_linux=is_linux,
+            environ=os.environ,
+            home_dir=Path.home(),
+            temp_dir=Path(tempfile.gettempdir()),
+        )
+    )
+    build_tmp_dir = electron_builder_temp_dir(
+        is_linux=is_linux,
+        environ=os.environ,
+        output_dir=Path(out_dir),
     )
     shutil.rmtree(out_dir, ignore_errors=True)
     os.makedirs(out_dir, exist_ok=True)
@@ -674,6 +683,10 @@ def _action_package(target, source, env, platform=""):
             "ELECTRON_CACHE", os.path.join(Path.home(), ".cache", "electron")
         ),
     }
+    if build_tmp_dir is not None:
+        build_tmp_dir.mkdir(parents=True, exist_ok=True)
+        for key in ("TMPDIR", "TMP", "TEMP"):
+            builder_env[key] = str(build_tmp_dir)
     has_signing_creds = any(
         os.environ.get(k)
         for k in ("CSC_LINK", "WIN_CSC_LINK", "CSC_KEY_PASSWORD", "MAC_CSC_LINK")
