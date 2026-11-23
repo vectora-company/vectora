@@ -662,8 +662,9 @@ def test_linux_release_validates_and_uploads_electron_builder_artifact_names() -
     assert '"Vectora-*-linux-*.tar.gz"' in content
     assert "frontend/dist-electron/*.tar.gz" in content
     assert "/artifacts/Vectora-*-linux-amd64.deb" in content
-    assert "/artifacts/Vectora-*-linux-x86_64.rpm" in content
-    assert "/artifacts/Vectora-*-linux-x64.pacman" in content
+    assert "ubuntu:24.04 sh -euc" in content
+    assert "fedora:latest" not in content
+    assert "archlinux:latest" not in content
 
 
 def test_scons_release_copies_all_electron_builder_artifacts() -> None:
@@ -934,12 +935,18 @@ def _matrix_sets(job: str) -> tuple[list[dict], list[dict]]:
     return json.loads(found.group(1)), json.loads(found.group(2))
 
 
-def test_pull_requests_build_only_linux_x64_and_full_runs_keep_every_platform() -> None:
-    """Em PR roda um pacote, uma distribuição e um .deb; o disparo manual e o
-    master seguem com cinco plataformas, sete distribuições e oito instaladores."""
+def test_linux_package_smoke_reuses_native_build_runner() -> None:
+    """O pacote Linux é testado no runner do build; desktop smoke cobre Windows/macOS."""
     native_pr, native_full = _matrix_sets("release-native")
-    distro_pr, distro_full = _matrix_sets("linux-package-install")
-    smoke_pr, smoke_full = _matrix_sets("desktop-install-smoke")
+    content = (WORKFLOW.parent / "vectora.yml").read_text(encoding="utf-8")
+    assert "linux-package-install:" not in content
+    assert "name: Install Linux package and verify runtime" in content
+    assert "if: matrix.target == 'linux' && matrix.arch == 'x64'" in content
+    assert "ubuntu:24.04 sh -euc" in content
+    assert (
+        "linux-package-install"
+        not in content.split("  tag-release:", 1)[1].split("    if:", 1)[0]
+    )
 
     assert [(e["target"], e["arch"]) for e in native_pr] == [("linux", "x64")]
     assert {(e["target"], e["arch"]) for e in native_full} == {
@@ -949,11 +956,9 @@ def test_pull_requests_build_only_linux_x64_and_full_runs_keep_every_platform() 
         ("win", "x64"),
         ("win", "arm64"),
     }
-    assert [e["distro"] for e in distro_pr] == ["Ubuntu 24.04"]
-    assert len(distro_full) == 7
-    assert [(e["platform"], e["arch"], e["format"]) for e in smoke_pr] == [
-        ("Linux", "x64", "deb")
-    ]
-    assert len(smoke_full) == 8
-    # O que a PR instala é um subconjunto do que ela constrói.
-    assert smoke_pr[0]["arch"] == native_pr[0]["arch"]
+    desktop_job = content.split("\n  desktop-install-smoke:\n", 1)[1].split(
+        "\n  tag-release:", 1
+    )[0]
+    assert "github.event_name != 'pull_request'" in desktop_job
+    assert '"platform":"Linux"' not in desktop_job
+    assert len(re.findall(r'"platform":"(?:Windows|macOS)"', desktop_job)) == 6
