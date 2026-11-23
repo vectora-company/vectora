@@ -91,6 +91,10 @@ import {
 } from "@/lib/queries/threads";
 import { useWindowsStore } from "@/lib/stores/windows-store";
 import { isCanvasDocumentVisible } from "@/lib/canvas-document-visibility";
+import {
+  renderCanvasDocument as renderRegisteredCanvasDocument,
+  type CanvasDocumentRegistry,
+} from "@/lib/canvas/document-registry";
 import type { CanvasDocumentDescriptor } from "@/lib/stores/windows-store";
 import type { PlanItem } from "@/lib/stores/workbench-store";
 import type { EditedFile } from "@/lib/types";
@@ -909,20 +913,19 @@ function SessionPage() {
     },
     [activeWorkspaceId, openCanvasDocument, threadId, updateCanvasDocument],
   );
-  const renderCanvasDocument = useCallback(
-    (document: CanvasDocumentDescriptor) => {
-      if (document.kind === "file" && document.workspaceId && document.path) {
-        return (
+  const canvasDocumentRegistry = useMemo<CanvasDocumentRegistry>(
+    () => ({
+      file: (document) =>
+        document.workspaceId && document.path ? (
           <FileEditor workspaceId={document.workspaceId} path={document.path} />
-        );
-      }
-      if (document.kind === "file-diff" && document.editedFile) {
-        return <CanvasFileDiff editedFile={document.editedFile} />;
-      }
-      if (document.kind === "mcp-preview" && document.mcp) {
-        return <LibraryMcpPreview mcp={document.mcp} />;
-      }
-      if (document.kind === "commit-details") {
+        ) : null,
+      "file-diff": (document) =>
+        document.editedFile ? (
+          <CanvasFileDiff editedFile={document.editedFile} />
+        ) : null,
+      "mcp-preview": (document) =>
+        document.mcp ? <LibraryMcpPreview mcp={document.mcp} /> : null,
+      "commit-details": (document) => {
         const details =
           document.commitDetails ?? gitCommitDetailsById[document.id];
         return details ? (
@@ -948,15 +951,11 @@ function SessionPage() {
             loading
           />
         );
-      }
-      if (
-        document.kind === "pull-request" ||
-        document.kind === "issue" ||
-        document.kind === "workflow-run"
-      ) {
-        return renderGithubDocument(document);
-      }
-      if (document.kind === "plan") {
+      },
+      "pull-request": renderGithubDocument,
+      issue: renderGithubDocument,
+      "workflow-run": renderGithubDocument,
+      plan: (document) => {
         const plan = document.plan ?? planDocumentsById[document.id];
         return (
           <div className="h-full overflow-auto p-5">
@@ -971,10 +970,14 @@ function SessionPage() {
             )}
           </div>
         );
-      }
-      return null;
-    },
+      },
+    }),
     [gitCommitDetailsById, planDocumentsById],
+  );
+  const renderCanvasDocument = useCallback(
+    (document: CanvasDocumentDescriptor) =>
+      renderRegisteredCanvasDocument(document, canvasDocumentRegistry),
+    [canvasDocumentRegistry],
   );
   const wsThreads = useMemo(
     () =>

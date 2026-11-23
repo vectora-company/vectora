@@ -1991,6 +1991,7 @@
   "workbench_diff_worktree_create": "Add",
   "workbench_diff_worktree_empty": "No worktrees.",
   "workbench_diff_worktree_name_placeholder": "Name (e.g. feature)",
+  "workbench_document_renderer_unavailable": "No renderer is registered for document type {kind}.",
   "workbench_files_add_context": "Add to context",
   "workbench_files_autosave_help": "Save the active file after a quiet editing interval.",
   "workbench_files_autosave_label": "Auto-save",
