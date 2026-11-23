@@ -491,9 +491,9 @@ snapcraft:
   base: core22
   core22:
     confinement: strict
+    # electron-builder já inclui opengl no conjunto de plugs default.
     plugs:
       - default
-      - opengl
 
 nsis:
   # ManifestDPIAware true vem de build-resources/installer.nsh (hook customHeader,

@@ -961,4 +961,24 @@ def test_linux_package_smoke_reuses_native_build_runner() -> None:
     )[0]
     assert "github.event_name != 'pull_request'" in desktop_job
     assert '"platform":"Linux"' not in desktop_job
-    assert len(re.findall(r'"platform":"(?:Windows|macOS)"', desktop_job)) == 6
+    assert len(re.findall(r'"platform":"Windows"', desktop_job)) == 4
+
+
+def test_macos_installer_smokes_reuse_the_single_native_arm64_runner() -> None:
+    """A preparação e a validação do DMG/ZIP não pedem runners macOS extras."""
+    content = (WORKFLOW.parent / "vectora.yml").read_text(encoding="utf-8")
+    prepare_job = content.split("\n  prepare-electron:\n", 1)[1].split(
+        "\n  release-native:", 1
+    )[0]
+    native_job = content.split("\n  release-native:\n", 1)[1].split(
+        "\n  desktop-install-smoke:", 1
+    )[0]
+    desktop_job = content.split("\n  desktop-install-smoke:\n", 1)[1].split(
+        "\n  tag-release:", 1
+    )[0]
+
+    assert '"target":"mac"' not in prepare_job
+    assert '"os":"macos-26","arch":"arm64","target":"mac"' in native_job
+    assert "Install and launch macOS packages" in native_job
+    assert "for format in dmg zip" in native_job
+    assert '"platform":"macOS"' not in desktop_job
