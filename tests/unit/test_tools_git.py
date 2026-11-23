@@ -104,6 +104,7 @@ async def test_git_stage_git_error(mock_ws):
         )
     result = json.loads(result_raw)
     assert result["status"] == "error"
+    assert result["code"] == "git_command_failed"
 
 
 # ---------------------------------------------------------------------------
@@ -157,6 +158,7 @@ async def test_git_unstage_git_error(mock_ws):
         )
     result = json.loads(result_raw)
     assert result["status"] == "error"
+    assert result["code"] == "git_command_failed"
 
 
 # ---------------------------------------------------------------------------
