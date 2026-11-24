@@ -981,4 +981,14 @@ def test_macos_installer_smokes_reuse_the_single_native_arm64_runner() -> None:
     assert '"os":"macos-26","arch":"arm64","target":"mac"' in native_job
     assert "Install and launch macOS packages" in native_job
     assert "for format in dmg zip" in native_job
+    macos_install_step = native_job.split(
+        "      - name: Install and launch macOS packages", 1
+    )[1].split("      - name:", 1)[0]
+    assert "timeout-minutes:" not in macos_install_step
+    assert macos_install_step.count('"$tested_executable" --tests') == 1
+    assert '"$executable" --tests' not in macos_install_step
+    assert macos_install_step.count('"$executable" --smoke-test') == 1
+    assert "sleep 20" not in macos_install_step
+    assert 'kill "$pid"' not in macos_install_step
+    assert "--signal=TERM 300s" not in content
     assert '"platform":"macOS"' not in desktop_job

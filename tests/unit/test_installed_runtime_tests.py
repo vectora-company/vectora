@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -121,3 +120,4 @@ def test_runner_uses_isolated_test_dependencies_and_propagates_result(
     assert env["VECTORA_INSTALLED_EXECUTABLE"] == str(Path(sys.executable).resolve())
     assert env["UV_CACHE_DIR"]
     assert captured["check"] is False
+    assert "--timeout=90" in command

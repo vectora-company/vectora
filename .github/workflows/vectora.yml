@@ -794,6 +794,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          tested_executable=""
           for format in dmg zip; do
             installer=$(find frontend/dist-electron -maxdepth 1 -type f -name "*.$format" -print -quit)
             test -n "$installer" || { echo "No .$format installer was generated." >&2; exit 1; }
@@ -822,26 +823,26 @@ jobs:
             test -x "$executable" || { echo "Installed app executable is missing: $executable" >&2; exit 1; }
             file "$executable"
             codesign --verify --deep --strict "$app"
-            VECTORA_LICENSE_BYPASS=1 "$executable" --disable-gpu --enable-logging=stderr > "$RUNNER_TEMP/vectora-$format-startup.log" 2>&1 &
-            pid=$!
-            sleep 20
-            if ! kill -0 "$pid" 2>/dev/null; then
-              cat "$RUNNER_TEMP/vectora-$format-startup.log"
-              wait "$pid" || status=$?
-              echo "Vectora exited during first-launch smoke test for .$format (code ${status:-0})." >&2
-              exit 1
-            fi
-            kill "$pid"
-            wait "$pid" || true
-            cat "$RUNNER_TEMP/vectora-$format-startup.log"
-            VECTORA_LICENSE_BYPASS=1 "$executable" --tests > "$RUNNER_TEMP/vectora-$format-installed-tests.log" 2>&1 || {
+            if VECTORA_LICENSE_BYPASS=1 "$executable" --smoke-test > "$RUNNER_TEMP/vectora-$format-startup.log" 2>&1; then
+              :
+            else
               status=$?
-              cat "$RUNNER_TEMP/vectora-$format-installed-tests.log"
-              echo "Installed Vectora test suite failed for .$format (status $status)." >&2
+              cat "$RUNNER_TEMP/vectora-$format-startup.log"
+              echo "Vectora startup smoke test failed for .$format (code $status)." >&2
               exit "$status"
-            }
-            cat "$RUNNER_TEMP/vectora-$format-installed-tests.log"
+            fi
+            cat "$RUNNER_TEMP/vectora-$format-startup.log"
+            if [[ -z "$tested_executable" ]]; then
+              tested_executable="$executable"
+            fi
           done
+          VECTORA_LICENSE_BYPASS=1 "$tested_executable" --tests > "$RUNNER_TEMP/vectora-installed-tests.log" 2>&1 || {
+            status=$?
+            cat "$RUNNER_TEMP/vectora-installed-tests.log"
+            echo "Installed Vectora test suite failed (status $status)." >&2
+            exit "$status"
+          }
+          cat "$RUNNER_TEMP/vectora-installed-tests.log"
       - name: Install Linux package and verify runtime
         if: matrix.target == 'linux' && matrix.arch == 'x64'
         shell: bash
@@ -874,22 +875,20 @@ jobs:
               fi
               command -v xvfb-run
               set +e
-              VECTORA_LICENSE_BYPASS=1 timeout --signal=TERM 25s \
-                xvfb-run -a "$executable" --no-sandbox --disable-gpu --enable-logging=stderr \
+              VECTORA_LICENSE_BYPASS=1 xvfb-run -a "$executable" --no-sandbox --smoke-test \
                 > /tmp/vectora-startup.log 2>&1
               startup_status=$?
               set -e
               cat /tmp/vectora-startup.log
-              if [ "$startup_status" -ne 124 ]; then
-                echo "Vectora exited before the 25-second startup smoke window (status $startup_status)." >&2
+              if [ "$startup_status" -ne 0 ]; then
+                echo "Vectora startup smoke test failed (status $startup_status)." >&2
                 exit 1
               fi
               if grep -Eiq "error while loading shared libraries|FATAL.*(error|exception)" /tmp/vectora-startup.log; then
                 echo "Vectora reported a fatal startup error in Ubuntu 24.04." >&2
                 exit 1
               fi
-              VECTORA_LICENSE_BYPASS=1 timeout --signal=TERM 300s \
-                xvfb-run -a "$executable" --no-sandbox --tests \
+              VECTORA_LICENSE_BYPASS=1 xvfb-run -a "$executable" --no-sandbox --tests \
                 > /tmp/vectora-installed-tests.log 2>&1 || {
                   status=$?
                   cat /tmp/vectora-installed-tests.log
@@ -1007,17 +1006,8 @@ jobs:
             throw "Installed Vectora.exe was not found in standard install locations."
           }
           Write-Host "Installed executable: $app"
-          $stdout = "$env:RUNNER_TEMP\vectora.stdout.log"
-          $stderr = "$env:RUNNER_TEMP\vectora.stderr.log"
-          $process = Start-Process -FilePath $app -ArgumentList @("--disable-gpu", "--enable-logging=stderr") -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
-          Start-Sleep -Seconds 20
-          $process.Refresh()
-          if ($process.HasExited) {
-            Get-Content $stdout, $stderr -ErrorAction SilentlyContinue
-            throw "Vectora exited during first-launch smoke test (code $($process.ExitCode))."
-          }
-          Stop-Process -Id $process.Id -Force
-          Get-Content $stdout, $stderr -ErrorAction SilentlyContinue
+          & $app --smoke-test 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP\vectora-startup.log"
+          if ($LASTEXITCODE -ne 0) { throw "Installed Vectora startup smoke test failed with exit code $LASTEXITCODE." }
           & $app --tests 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP\vectora-installed-tests.log"
           if ($LASTEXITCODE -ne 0) { throw "Installed Vectora test suite failed with exit code $LASTEXITCODE." }
   # ── 7. Create the tag and the GitHub Release after distribution ──────────

@@ -64,6 +64,7 @@ import {
   backendPath,
   backendTransportOptions,
   isInstalledTestsMode,
+  isInstalledSmokeTestMode,
   ignoreBrokenPipe,
   natsBinaryPath,
   spawnBackendProcess,
@@ -82,6 +83,7 @@ import {
   parseGraphicsCliOverrides,
   resolveLinuxGraphicsConfiguration,
 } from "./linux-graphics.js";
+import { createGraphicsInfoReporter } from "./graphics-info.js";
 import {
   BrowserViewManager,
   clearBrowserSessionData,
@@ -157,12 +159,14 @@ const electronCdpAuthToken =
 process.env.VECTORA_ELECTRON_CDP_PROXY_PORT = electronCdpProxyPort;
 process.env.VECTORA_ELECTRON_CDP_AUTH_TOKEN = electronCdpAuthToken;
 const installedTestsMode = isInstalledTestsMode(process.argv);
+const installedSmokeTestMode = isInstalledSmokeTestMode(process.argv);
+const installedAutomationMode = installedTestsMode || installedSmokeTestMode;
 const graphicsCli = parseGraphicsCliOverrides(process.argv);
 if (graphicsCli.disableGpu) {
   app.commandLine.appendSwitch("disable-gpu");
   console.info("[graphics] GPU desabilitada por --disable-gpu");
 }
-if (!installedTestsMode) {
+if (!installedAutomationMode) {
   app.commandLine.appendSwitch("remote-debugging-address", "127.0.0.1");
   app.commandLine.appendSwitch("remote-debugging-port", electronCdpPort);
 }
@@ -208,24 +212,24 @@ if (process.platform === "linux" && !graphicsCli.disableGpu) {
   }
 }
 
-async function logActualGraphicsInfo(reason: string): Promise<void> {
-  try {
-    const info = await app.getGPUInfo("complete");
-    console.info("[graphics] GPU reportada pelo Chromium", { reason, info });
-  } catch (error) {
+const logActualGraphicsInfo = createGraphicsInfoReporter({
+  enabled: !installedAutomationMode && !graphicsCli.disableGpu,
+  getInfo: () => app.getGPUInfo("complete"),
+  log: (reason, info) =>
+    console.info("[graphics] GPU reportada pelo Chromium", { reason, info }),
+  warn: (reason, error) =>
     console.warn("[graphics] não foi possível consultar a GPU", {
       reason,
       error,
-    });
-  }
-}
+    }),
+});
 
 app.on("gpu-info-update", () => {
   void logActualGraphicsInfo("gpu-info-update");
 });
 
 let electronCdpProxy: import("node:http").Server | null = null;
-if (!installedTestsMode) {
+if (!installedAutomationMode) {
   void app.whenReady().then(async () => {
     try {
       await waitForElectronCdpTarget(Number(electronCdpPort));
@@ -350,6 +354,13 @@ let backendPipePath: string | null = null; // Windows named pipe path (\\.\pipe\
 let backendReady = false;
 let mainWindow: BrowserWindow | null = null;
 let windowReadyMarkerEmitted = false;
+let smokeTestWatchdog: NodeJS.Timeout | null = installedSmokeTestMode
+  ? setTimeout(() => {
+      console.error("Vectora startup smoke test exceeded 90 seconds.");
+      app.quit();
+      setTimeout(() => app.exit(124), 15_000);
+    }, 90_000)
+  : null;
 let tray: Tray | null = null;
 let pendingDeepLink: string | null = null;
 // Arquivos e pastas entregues pelo sistema ("Abrir com Vectora"): ficam guardados
@@ -1032,11 +1043,24 @@ function activateMainWindow(reason: string, visible: boolean): void {
     focused: window.isFocused(),
     bounds: window.getBounds(),
   });
+  if (installedSmokeTestMode && reason !== "did-finish-load") return;
   // Lido por backend/services/electron_sidecar.py (WINDOW_READY_MARKER).
   // A emissão é idempotente porque vários eventos podem ativar a mesma janela.
   if (!windowReadyMarkerEmitted) {
     windowReadyMarkerEmitted = true;
     console.log("VECTORA_ELECTRON_WINDOW_READY");
+    if (installedSmokeTestMode) {
+      if (smokeTestWatchdog) clearTimeout(smokeTestWatchdog);
+      console.log("Vectora startup smoke test passed; closing the app.");
+      const shutdownWatchdog = setTimeout(() => {
+        console.error(
+          "Vectora startup smoke test could not shut down cleanly.",
+        );
+        app.exit(1);
+      }, 15_000);
+      app.once("will-quit", () => clearTimeout(shutdownWatchdog));
+      app.quit();
+    }
   }
 }
 

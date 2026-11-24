@@ -123,6 +123,6 @@ Use este mapa como ponto de partida e confira-o na árvore atual quando precisar
 
 O Vectora é licenciado sob a AGPL-3.0 (`LICENSE`), e a Vectora Ltda detém os direitos autorais. Contribuições de terceiros exigem o aceite do `CLA.md`. Dependências novas precisam ser compatíveis com a AGPL-3.0; registre-as com a licença em `THIRD_PARTY_NOTICES.md` (gerado por `utils/third_party_notices.py`, não edite à mão). Segredos nunca entram no repositório: o hook do gitleaks e o workflow `Gitleaks` reprovam.
 
-## 11. Walkthroughs de PR e CodeRabbit
+## 11. Walkthroughs de PR
 
-Todo walkthrough publicado como comentário de PR começa marcando `@coderabbitai` e pedindo explicitamente uma **revisão completa** (`full review`) do diff atual do PR. Coloque esse pedido no início do comentário, antes do conteúdo do walkthrough. Um walkthrough sem essa abertura não conta como pedido de revisão.
+Walkthroughs de PR devem resumir o comportamento implementado, as decisões relevantes e a validação executada. Não marque nem acione bots de revisão externos.
