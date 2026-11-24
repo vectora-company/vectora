@@ -447,9 +447,9 @@ jobs:
           echo "value=$CHANNEL" >> "$GITHUB_OUTPUT"
 
   # ── 6. Prepare the Electron cache before native package matrix ────────────
-  # O runtime do Electron é específico de SO/arquitetura. Este job aquece cada
-  # cache antes de os jobs de build começarem; os builds não competem pelo
-  # primeiro download durante a execução da matriz principal.
+  # O runtime do Electron é específico de SO/arquitetura. Este job prepara os
+  # caches Linux e Windows; o build macOS baixa o runtime no próprio job para
+  # não alocar um segundo runner macOS arm64 só para aquecimento.
   prepare-electron:
     name: Prepare Electron (${{ matrix.target }}/${{ matrix.arch }})
     needs: [release-channel, release-trigger]
@@ -463,7 +463,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"os":"ubuntu-22.04","arch":"x64","target":"linux"}]' || '[{"os":"ubuntu-22.04","arch":"x64","target":"linux"},{"os":"ubuntu-22.04-arm","arch":"arm64","target":"linux"},{"os":"macos-26","arch":"arm64","target":"mac"},{"os":"windows-latest","arch":"x64","target":"win"},{"os":"windows-11-arm","arch":"arm64","target":"win"}]') }}
+        include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"os":"ubuntu-22.04","arch":"x64","target":"linux"}]' || '[{"os":"ubuntu-22.04","arch":"x64","target":"linux"},{"os":"ubuntu-22.04-arm","arch":"arm64","target":"linux"},{"os":"windows-latest","arch":"x64","target":"win"},{"os":"windows-11-arm","arch":"arm64","target":"win"}]') }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -789,6 +789,59 @@ jobs:
               require_one "Vectora-*-linux-*.tar.gz"
               ;;
           esac
+      - name: Install and launch macOS packages
+        if: matrix.target == 'mac'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for format in dmg zip; do
+            installer=$(find frontend/dist-electron -maxdepth 1 -type f -name "*.$format" -print -quit)
+            test -n "$installer" || { echo "No .$format installer was generated." >&2; exit 1; }
+            app="$RUNNER_TEMP/Vectora-$format.app"
+            if [[ "$format" == "dmg" ]]; then
+              mount="$RUNNER_TEMP/vectora-dmg"
+              mkdir -p "$mount"
+              hdiutil attach "$installer" -nobrowse -readonly -mountpoint "$mount"
+              app_source=$(find "$mount" -maxdepth 2 -name Vectora.app -print -quit)
+              if [[ -z "$app_source" ]]; then
+                hdiutil detach "$mount"
+                echo "Vectora.app missing from DMG." >&2
+                exit 1
+              fi
+              ditto "$app_source" "$app"
+              hdiutil detach "$mount"
+            else
+              unpack="$RUNNER_TEMP/vectora-zip"
+              mkdir -p "$unpack"
+              ditto -x -k "$installer" "$unpack"
+              app_source=$(find "$unpack" -maxdepth 3 -name Vectora.app -print -quit)
+              test -n "$app_source" || { echo "Vectora.app missing from ZIP." >&2; exit 1; }
+              ditto "$app_source" "$app"
+            fi
+            executable="$app/Contents/MacOS/Vectora"
+            test -x "$executable" || { echo "Installed app executable is missing: $executable" >&2; exit 1; }
+            file "$executable"
+            codesign --verify --deep --strict "$app"
+            VECTORA_LICENSE_BYPASS=1 "$executable" --disable-gpu --enable-logging=stderr > "$RUNNER_TEMP/vectora-$format-startup.log" 2>&1 &
+            pid=$!
+            sleep 20
+            if ! kill -0 "$pid" 2>/dev/null; then
+              cat "$RUNNER_TEMP/vectora-$format-startup.log"
+              wait "$pid" || status=$?
+              echo "Vectora exited during first-launch smoke test for .$format (code ${status:-0})." >&2
+              exit 1
+            fi
+            kill "$pid"
+            wait "$pid" || true
+            cat "$RUNNER_TEMP/vectora-$format-startup.log"
+            VECTORA_LICENSE_BYPASS=1 "$executable" --tests > "$RUNNER_TEMP/vectora-$format-installed-tests.log" 2>&1 || {
+              status=$?
+              cat "$RUNNER_TEMP/vectora-$format-installed-tests.log"
+              echo "Installed Vectora test suite failed for .$format (status $status)." >&2
+              exit "$status"
+            }
+            cat "$RUNNER_TEMP/vectora-$format-installed-tests.log"
+          done
       - name: Install Linux package and verify runtime
         if: matrix.target == 'linux' && matrix.arch == 'x64'
         shell: bash
@@ -870,10 +923,9 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-  # Install the actual Windows/macOS packages (and both architectures), then
-  # verify their installed paths and keep the real desktop process alive long
-  # enough to catch loader, Gatekeeper, and first-launch failures. This is
-  # deliberately downstream of the complete build matrix and gates release.
+  # Install the actual Windows packages and verify their installed paths.
+  # macOS packages are tested on the native build runner to avoid allocating
+  # additional macOS arm64 runners for the two formats.
   desktop-install-smoke:
     name: Desktop install and launch (${{ matrix.platform }}/${{ matrix.arch }}/${{ matrix.format }})
     needs: release-native
@@ -881,7 +933,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON('[{"platform":"Windows","os":"windows-latest","arch":"x64","format":"exe"},{"platform":"Windows","os":"windows-latest","arch":"x64","format":"msi"},{"platform":"Windows","os":"windows-11-arm","arch":"arm64","format":"exe"},{"platform":"Windows","os":"windows-11-arm","arch":"arm64","format":"msi"},{"platform":"macOS","os":"macos-26","arch":"arm64","format":"dmg"},{"platform":"macOS","os":"macos-26","arch":"arm64","format":"zip"}]') }}
+        include: ${{ fromJSON('[{"platform":"Windows","os":"windows-latest","arch":"x64","format":"exe"},{"platform":"Windows","os":"windows-latest","arch":"x64","format":"msi"},{"platform":"Windows","os":"windows-11-arm","arch":"arm64","format":"exe"},{"platform":"Windows","os":"windows-11-arm","arch":"arm64","format":"msi"}]') }}
     runs-on: ${{ matrix.os }}
     steps:
       - name: Download native installer
@@ -968,55 +1020,6 @@ jobs:
           Get-Content $stdout, $stderr -ErrorAction SilentlyContinue
           & $app --tests 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP\vectora-installed-tests.log"
           if ($LASTEXITCODE -ne 0) { throw "Installed Vectora test suite failed with exit code $LASTEXITCODE." }
-      - name: Install and launch macOS installer
-        if: matrix.platform == 'macOS'
-        shell: bash
-        env:
-          INSTALLER_FORMAT: ${{ matrix.format }}
-        run: |
-          set -euo pipefail
-          installer=$(find "$GITHUB_WORKSPACE/installers" -maxdepth 1 -type f -name "*.$INSTALLER_FORMAT" -print -quit)
-          test -n "$installer" || { echo "No .$INSTALLER_FORMAT installer was downloaded." >&2; exit 1; }
-          app="$RUNNER_TEMP/Vectora.app"
-          if [[ "$INSTALLER_FORMAT" == "dmg" ]]; then
-            mount="$RUNNER_TEMP/vectora-dmg"
-            mkdir -p "$mount"
-            hdiutil attach "$installer" -nobrowse -readonly -mountpoint "$mount"
-            app_source=$(find "$mount" -maxdepth 2 -name Vectora.app -print -quit)
-            test -n "$app_source" || { hdiutil detach "$mount"; echo "Vectora.app missing from DMG." >&2; exit 1; }
-            ditto "$app_source" "$app"
-            hdiutil detach "$mount"
-          else
-            unpack="$RUNNER_TEMP/vectora-zip"
-            mkdir -p "$unpack"
-            ditto -x -k "$installer" "$unpack"
-            app_source=$(find "$unpack" -maxdepth 3 -name Vectora.app -print -quit)
-            test -n "$app_source" || { echo "Vectora.app missing from ZIP." >&2; exit 1; }
-            ditto "$app_source" "$app"
-          fi
-          executable="$app/Contents/MacOS/Vectora"
-          test -x "$executable" || { echo "Installed app executable is missing: $executable" >&2; exit 1; }
-          file "$executable"
-          codesign --verify --deep --strict "$app"
-          VECTORA_LICENSE_BYPASS=1 "$executable" --disable-gpu --enable-logging=stderr > "$RUNNER_TEMP/vectora-startup.log" 2>&1 &
-          pid=$!
-          sleep 20
-          if ! kill -0 "$pid" 2>/dev/null; then
-            cat "$RUNNER_TEMP/vectora-startup.log"
-            wait "$pid" || status=$?
-            echo "Vectora exited during first-launch smoke test (code ${status:-0})." >&2
-            exit 1
-          fi
-          kill "$pid"
-          wait "$pid" || true
-          cat "$RUNNER_TEMP/vectora-startup.log"
-          VECTORA_LICENSE_BYPASS=1 "$executable" --tests > "$RUNNER_TEMP/vectora-installed-tests.log" 2>&1 || {
-            status=$?
-            cat "$RUNNER_TEMP/vectora-installed-tests.log"
-            echo "Installed Vectora test suite failed (status $status)." >&2
-            exit "$status"
-          }
-          cat "$RUNNER_TEMP/vectora-installed-tests.log"
   # ── 7. Create the tag and the GitHub Release after distribution ──────────
   # O commit da PR de release só vira uma versão publicada depois que os testes
   # e os instaladores terminarem com sucesso. Este job cria a tag, a release e

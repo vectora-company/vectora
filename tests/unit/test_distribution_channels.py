@@ -97,14 +97,17 @@ def test_second_instance_does_not_open_a_window_before_backend_ready() -> None:
     assert "if (!gotLock) return;" in ELECTRON_MAIN
 
 
-def test_linux_packages_declare_vulkan_runtime_and_snap_opengl_plug() -> None:
+def test_linux_packages_declare_vulkan_runtime_without_duplicating_snap_defaults() -> (
+    None
+):
     deb = re.search(r"^deb:\n(?P<body>(?:[ \t].*\n|\n)+)", BUILDER, re.MULTILINE)
     snap = re.search(r"^snapcraft:\n(?P<body>(?:[ \t].*\n|\n)+)", BUILDER, re.MULTILINE)
     assert deb and snap
     assert "- libvulkan1" in deb["body"]
     assert "- mesa-vulkan-drivers" in deb["body"]
     assert "plugs:" in snap["body"]
-    assert "- opengl" in snap["body"]
+    assert "- default" in snap["body"]
+    assert "- opengl" not in snap["body"]
 
 
 def test_linux_desktop_entries_use_the_installed_vectora_icon() -> None:
