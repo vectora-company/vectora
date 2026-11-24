@@ -88,6 +88,44 @@ async def test_worker_does_not_invoke_provider_when_queue_rejects_claim(
 
 
 @pytest.mark.asyncio
+async def test_worker_failure_remains_retryable_when_dlq_write_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from unittest.mock import AsyncMock
+
+    from backend.embedding import background
+    from backend.embedding.background import BackgroundEmbeddingWorker
+
+    queue = EmbeddingQueue(f"sqlite+aiosqlite:///{tmp_path / 'queue.db'}")
+    await queue.init()
+    try:
+        await queue.enqueue("documento")
+        record = (await queue.get_pending())[0]
+        worker = BackgroundEmbeddingWorker()
+        monkeypatch.setattr(
+            worker, "_generate_embedding", AsyncMock(side_effect=RuntimeError("falhou"))
+        )
+        monkeypatch.setattr(background, "RETRY_BACKOFF", (0, 0, 0))
+
+        async def fail_dlq(_queue_id: str, _reason: str) -> None:
+            raise RuntimeError("DLQ indisponível")
+
+        monkeypatch.setattr(queue, "mark_dlq", fail_dlq)
+        await worker._process_record(record, queue)
+
+        failures = await queue.list_failures(10)
+        assert len(failures) == 1
+        assert failures[0]["status"] == "failed"
+        assert failures[0]["error"].startswith("falhou")
+        assert await queue.retry_failed() == 1
+        assert [item.queue_id for item in await queue.get_pending()] == [
+            record.queue_id
+        ]
+    finally:
+        await queue.close()
+
+
+@pytest.mark.asyncio
 async def test_retry_job_only_requeues_the_requested_job(tmp_path: Path) -> None:
     queue = EmbeddingQueue(f"sqlite+aiosqlite:///{tmp_path / 'queue.db'}")
     await queue.init()
