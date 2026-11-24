@@ -38,6 +38,7 @@ READ_ONLY = {
     ("pr", "view"),
     ("issue", "list"),
     ("issue", "view"),
+    ("api", "--include"),
 }
 
 
@@ -62,6 +63,41 @@ def gh_output(monkeypatch: pytest.MonkeyPatch):
     async def fake(args, cwd=None, input_data=None, user_id=None):
         calls.append(list(args))
         assert tuple(args[:2]) in READ_ONLY, f"operação fora da leitura: {args}"
+        if args[:2] == ["api", "--include"]:
+            endpoint = args[2].rsplit("/", 1)[-1]
+            fixture = "gh_pr_list.json" if endpoint == "pulls" else "gh_issue_list.json"
+            raw_items = json.loads(_raw(fixture))
+            output_items = []
+            for item in raw_items:
+                if endpoint == "pulls":
+                    output_items.append(
+                        {
+                            "number": item["number"],
+                            "title": item.get("title", ""),
+                            "state": str(item.get("state", "")).lower(),
+                            "draft": item.get("isDraft", False),
+                            "user": item.get("author", {}),
+                            "head": {"ref": item.get("headRefName", "")},
+                            "base": {"ref": item.get("baseRefName", "")},
+                            "updated_at": item.get("updatedAt", ""),
+                            "html_url": item.get("url", ""),
+                            "merged_at": item.get("mergedAt"),
+                        }
+                    )
+                elif "pullRequest" not in item:
+                    output_items.append(
+                        {
+                            "number": item["number"],
+                            "title": item.get("title", ""),
+                            "state": str(item.get("state", "")).lower(),
+                            "user": item.get("author", {}),
+                            "labels": item.get("labels", []),
+                            "updated_at": item.get("updatedAt", ""),
+                            "html_url": item.get("url", ""),
+                            "comments": len(item.get("comments", [])),
+                        }
+                    )
+            return {"status": "ok", "output": json.dumps(output_items)}
         return {"status": "ok", "output": state["output"]}
 
     monkeypatch.setattr(github, "_gh_run", fake)

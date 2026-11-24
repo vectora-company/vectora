@@ -221,3 +221,71 @@ async def test_run_gh_kills_process_after_timeout(
 
     assert result["code"] == "gh_timeout"
     assert process.killed
+
+
+@pytest.mark.asyncio
+async def test_run_gh_exposes_only_etag_and_rate_headers(monkeypatch) -> None:
+    process = _Process(
+        stdout=(
+            b'HTTP/2.0 200 OK\r\nETag: "etag-1"\r\n'
+            b"X-RateLimit-Remaining: 9\r\nAuthorization: secret\r\n\r\n[]"
+        )
+    )
+    monkeypatch.setattr(
+        github_cli.shutil, "which", lambda *_args, **_kwargs: "/usr/bin/gh"
+    )
+    monkeypatch.setattr(
+        github_cli.asyncio,
+        "create_subprocess_exec",
+        AsyncMock(return_value=process),
+    )
+
+    result = await github_cli.run_gh_command(["api", "--include", "repos/o/r/issues"])
+
+    assert result["http_status"] == 200
+    assert result["etag"] == '"etag-1"'
+    assert result["x-ratelimit-remaining"] == "9"
+    assert "authorization" not in result
+
+
+@pytest.mark.asyncio
+async def test_run_gh_returns_rate_limit_reset_from_http_headers(monkeypatch) -> None:
+    reset_at = 1_900_000_000
+    process = _Process(
+        returncode=1,
+        stdout=(
+            f"HTTP/2.0 403 Forbidden\r\n"
+            f"X-RateLimit-Remaining: 0\r\nX-RateLimit-Reset: {reset_at}\r\n\r\n"
+        ).encode(),
+        stderr=b"API rate limit exceeded",
+    )
+    monkeypatch.setattr(
+        github_cli.shutil, "which", lambda *_args, **_kwargs: "/usr/bin/gh"
+    )
+    monkeypatch.setattr(
+        github_cli.asyncio,
+        "create_subprocess_exec",
+        AsyncMock(return_value=process),
+    )
+
+    result = await github_cli.run_gh_command(["api", "--include", "repos/o/r/issues"])
+
+    assert result["code"] == "rate_limited"
+    assert result["reset_at"] == reset_at
+    assert result["http_status"] == 403
+
+
+@pytest.mark.asyncio
+async def test_github_auth_epoch_is_a_non_reversible_token_digest(monkeypatch) -> None:
+    from backend.rbac import auth
+
+    monkeypatch.setattr(
+        auth,
+        "get_env_overrides",
+        AsyncMock(return_value={"GITHUB_TOKEN": "private-token"}),
+    )
+
+    epoch = await github_cli.github_auth_epoch("user-1")
+
+    assert epoch == github_cli.hashlib.sha256(b"private-token").hexdigest()
+    assert "private-token" not in epoch
