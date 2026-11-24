@@ -82,6 +82,7 @@ import {
   parseGraphicsCliOverrides,
   resolveLinuxGraphicsConfiguration,
 } from "./linux-graphics.js";
+import { createGraphicsInfoReporter } from "./graphics-info.js";
 import {
   BrowserViewManager,
   clearBrowserSessionData,
@@ -208,17 +209,17 @@ if (process.platform === "linux" && !graphicsCli.disableGpu) {
   }
 }
 
-async function logActualGraphicsInfo(reason: string): Promise<void> {
-  try {
-    const info = await app.getGPUInfo("complete");
-    console.info("[graphics] GPU reportada pelo Chromium", { reason, info });
-  } catch (error) {
+const logActualGraphicsInfo = createGraphicsInfoReporter({
+  enabled: !installedTestsMode && !graphicsCli.disableGpu,
+  getInfo: () => app.getGPUInfo("complete"),
+  log: (reason, info) =>
+    console.info("[graphics] GPU reportada pelo Chromium", { reason, info }),
+  warn: (reason, error) =>
     console.warn("[graphics] não foi possível consultar a GPU", {
       reason,
       error,
-    });
-  }
-}
+    }),
+});
 
 app.on("gpu-info-update", () => {
   void logActualGraphicsInfo("gpu-info-update");
