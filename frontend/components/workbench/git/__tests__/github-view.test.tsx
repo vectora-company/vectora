@@ -57,7 +57,7 @@ afterEach(cleanup);
 
 describe("GithubView", () => {
   it("lista os PRs com autor, branches, revisão e checks", async () => {
-    mockGithub({ "/github/pulls": { status: "ok", pulls: [pull] } });
+    mockGithub({ "/github/pulls": { state: "loaded", items: [pull] } });
     render(<GithubView workspaceId="ws1" kind="pulls" />);
 
     const link = await screen.findByRole("link", { name: /feat: algo/ });
@@ -73,7 +73,7 @@ describe("GithubView", () => {
   });
 
   it("a lista de issues mostra rótulos e comentários", async () => {
-    mockGithub({ "/github/issues": { status: "ok", issues: [issue] } });
+    mockGithub({ "/github/issues": { state: "loaded", items: [issue] } });
     render(<GithubView workspaceId="ws1" kind="issues" />);
 
     const link = await screen.findByRole("link", { name: /bug no chat/ });
@@ -83,7 +83,7 @@ describe("GithubView", () => {
   });
 
   it("cada lista é uma aba própria: não há botões para alternar entre elas", async () => {
-    mockGithub({ "/github/pulls": { status: "ok", pulls: [] } });
+    mockGithub({ "/github/pulls": { state: "empty", items: [] } });
     render(<GithubView workspaceId="ws1" kind="pulls" />);
     await screen.findByTestId("github-empty");
 
@@ -95,8 +95,8 @@ describe("GithubView", () => {
   it("filtra pelo título (e pelo número) sem nova chamada ao servidor", async () => {
     const fetchMock = mockGithub({
       "/github/pulls": {
-        status: "ok",
-        pulls: [
+        state: "loaded",
+        items: [
           { ...pull, number: 7, title: "feat: algo novo" },
           { ...pull, number: 8, title: "fix: bug no chat" },
         ],
@@ -120,7 +120,7 @@ describe("GithubView", () => {
   });
 
   it("avisa quando o filtro não encontra nada, diferente de lista vazia", async () => {
-    mockGithub({ "/github/pulls": { status: "ok", pulls: [pull] } });
+    mockGithub({ "/github/pulls": { state: "loaded", items: [pull] } });
     render(<GithubView workspaceId="ws1" kind="pulls" />);
     await screen.findByRole("link", { name: /feat: algo/ });
 
@@ -134,7 +134,7 @@ describe("GithubView", () => {
 
   it("pede ao servidor o estado e o workspace escolhidos", async () => {
     const fetchMock = mockGithub({
-      "/github/pulls": { status: "ok", pulls: [] },
+      "/github/pulls": { state: "empty", items: [] },
     });
     render(<GithubView workspaceId="ws1" kind="pulls" />);
     await screen.findByTestId("github-empty");
@@ -155,8 +155,9 @@ describe("GithubView", () => {
   it("explica quando o gh não está disponível", async () => {
     mockGithub({
       "/github/pulls": {
-        status: "unavailable",
-        message: "gh not found in PATH",
+        state: "unknown",
+        error: "gh not found in PATH",
+        code: "gh_unavailable",
       },
     });
     render(<GithubView workspaceId="ws1" kind="pulls" />);
@@ -169,8 +170,8 @@ describe("GithubView", () => {
   it("mostra o erro do servidor", async () => {
     mockGithub({
       "/github/pulls": {
-        status: "error",
-        message: "repositório não encontrado",
+        state: "unknown",
+        error: "repositório não encontrado",
       },
     });
     render(<GithubView workspaceId="ws1" kind="pulls" />);
@@ -181,7 +182,7 @@ describe("GithubView", () => {
 
   it("atualiza a lista ao clicar em atualizar", async () => {
     const fetchMock = mockGithub({
-      "/github/pulls": { status: "ok", pulls: [] },
+      "/github/pulls": { state: "empty", items: [] },
     });
     render(<GithubView workspaceId="ws1" kind="pulls" />);
     await screen.findByTestId("github-empty");
@@ -198,7 +199,7 @@ describe("GithubView", () => {
 
   it("com onOpenItem, clicar no título abre o item como document (em vez de ir ao GitHub)", async () => {
     const onOpenItem = vi.fn();
-    mockGithub({ "/github/pulls": { status: "ok", pulls: [pull] } });
+    mockGithub({ "/github/pulls": { state: "loaded", items: [pull] } });
     render(
       <GithubView workspaceId="ws1" kind="pulls" onOpenItem={onOpenItem} />,
     );
@@ -215,7 +216,7 @@ describe("GithubView", () => {
 
   it("nas issues, o document aberto é do tipo issue", async () => {
     const onOpenItem = vi.fn();
-    mockGithub({ "/github/issues": { status: "ok", issues: [issue] } });
+    mockGithub({ "/github/issues": { state: "loaded", items: [issue] } });
     render(
       <GithubView workspaceId="ws1" kind="issues" onOpenItem={onOpenItem} />,
     );
@@ -230,7 +231,7 @@ describe("GithubView", () => {
   });
 
   it("o seletor de aberto/fechado fica à direita do campo de busca", async () => {
-    mockGithub({ "/github/pulls": { status: "ok", pulls: [] } });
+    mockGithub({ "/github/pulls": { state: "empty", items: [] } });
     render(<GithubView workspaceId="ws1" kind="pulls" />);
     await screen.findByTestId("github-empty");
 

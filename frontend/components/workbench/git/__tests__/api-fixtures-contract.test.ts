@@ -26,9 +26,9 @@ import type { RunDetailData } from "../run-detail";
 // Atribuições tipadas: o `tsc` falha se a forma do backend e a do frontend divergirem.
 const runs: RunSummaryData[] = runsFixture.runs;
 const runDetail: RunDetailData = runDetailFixture.run;
-const pulls: GithubPull[] = pullsFixture.pulls;
+const pulls: GithubPull[] = pullsFixture.items;
 const pullDetail: PullDetailData = pullDetailFixture.pull;
-const issues: GithubIssue[] = issuesFixture.issues;
+const issues: GithubIssue[] = issuesFixture.items;
 const issueDetail: IssueDetailData = issueDetailFixture.issue;
 
 const ENVELOPES = [
@@ -43,13 +43,15 @@ const ENVELOPES = [
 ] as const;
 
 describe("fixtures reais ↔ tipos do frontend", () => {
-  it.each(ENVELOPES)(
-    "%s é uma resposta ok, sem mensagem de erro",
-    (_name, fixture) => {
+  it.each(ENVELOPES)("%s mantém o envelope esperado", (_name, fixture) => {
+    if ("state" in fixture) {
+      expect(fixture.state).toBe("loaded");
+      expect(fixture.error).toBeNull();
+    } else {
       expect(fixture.status).toBe("ok");
       expect(fixture.message).toBe("");
-    },
-  );
+    }
+  });
 
   it("a lista de runs traz os campos que a linha usa, com os tipos certos", () => {
     expect(runs.length).toBeGreaterThan(1);

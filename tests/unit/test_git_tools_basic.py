@@ -12,6 +12,7 @@ os @tool wrappers recebem apenas testes de metadados.
 from __future__ import annotations
 
 import json
+from importlib import import_module
 from pathlib import Path
 
 import git
@@ -68,6 +69,7 @@ def dirty_repo(tmp_path: Path) -> git.Repo:
 
 
 def _tool_extras(name: str):
+    import_module("backend.tools.git")
     from backend.tools.registry import TOOL_REGISTRY
 
     spec = TOOL_REGISTRY.get(name)
