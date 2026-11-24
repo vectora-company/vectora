@@ -1,3 +1,13 @@
+## [0.1.26] (2026-11-24)
+
+Esta seção reúne as alterações publicadas nesta versão.
+
+### Bug Fixes
+
+As correções incluídas nesta versão são listadas abaixo.
+
+- fix(ci): evitar falha do lint i18n sem SHA da PR (#846)
+
 # Changelog
 
 Este arquivo registra as alterações do Vectora, organizadas por versão.
