@@ -25,7 +25,7 @@ Cada item precisa de decisão antes de distribuir um build que o contenha.
 | pyinstaller-hooks-contrib | 2026.10 | Apache-2.0 AND GPL-2.0-only |
 | python-xlib | 0.33 | GNU Lesser General Public License v2 or later (LGPLv2+) |
 | python3-xlib | 0.15 | GPLv2 |
-| vectora | 0.1.25 | AGPL-3.0-only |
+| vectora | 0.1.24 | AGPL-3.0-only |
 | sentry | 0.45.0 | FSL-1.1-Apache-2.0 |
 
 ## Copyleft forte
