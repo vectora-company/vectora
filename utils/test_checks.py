@@ -280,13 +280,13 @@ class TestDescricao:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         body = "- feat(chat): aceita qualquer arquivo anexado (#480)"
-        assert _run(monkeypatch, "chore(master): release 0.1.25", body) == 0
+        assert _run(monkeypatch, "chore(master): release 0.1.24", body) == 0
 
     def test_titulo_parecido_com_release_nao_isenta(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         body = "- feat(chat): aceita qualquer arquivo anexado (#480)"
-        assert _run(monkeypatch, "feat: prepara o release 0.1.25", body) == 1
+        assert _run(monkeypatch, "feat: prepara o release 0.1.24", body) == 1
 
 
 class TestVinculoComIssue:
