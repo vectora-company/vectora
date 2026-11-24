@@ -2771,21 +2771,6 @@ def _git_commit_context_sync(workspace_id: str, paths: list[str] | None) -> Any 
     return collect_change_context(repo, paths)
 
 
-def _git_commit_suggestion_sync(
-    workspace_id: str, paths: list[str] | None = None
-) -> GitCommitSuggestion:
-    """Sugestão sem modelo, baseada só no diff (usada onde não há `await`)."""
-    from backend.services.commit_message import heuristic_suggestion
-
-    ctx = _git_commit_context_sync(workspace_id, paths)
-    if ctx is None:
-        return GitCommitSuggestion(title="", description="")
-    suggestion = heuristic_suggestion(ctx)
-    return GitCommitSuggestion(
-        title=suggestion.title, description=suggestion.description
-    )
-
-
 async def suggest_commit_message(
     workspace_id: str, paths: list[str] | None = None
 ) -> GitCommitSuggestion:

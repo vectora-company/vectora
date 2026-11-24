@@ -63,11 +63,13 @@ def sem_bwrap_automatico(monkeypatch):
 def _limpa_cache_de_leituras_do_gh():
     """O handler do GitHub guarda leituras por alguns segundos; sem limpar, um
     teste veria a resposta simulada do anterior."""
-    from backend.api.handlers.github import clear_gh_cache
+    from backend.api.handlers import github
 
-    clear_gh_cache()
+    github._gh_cache.clear()
+    github._gh_inflight.clear()
     yield
-    clear_gh_cache()
+    github._gh_cache.clear()
+    github._gh_inflight.clear()
 
 
 @pytest.fixture(autouse=True)

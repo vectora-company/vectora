@@ -54,7 +54,7 @@ export function OllamaIcon({ className }: { className?: string }) {
   );
 }
 
-export function LlamaCppIcon({ className }: { className?: string }) {
+function LlamaCppIcon({ className }: { className?: string }) {
   return (
     <LogoImage
       onDark={llamacppOnDark}
@@ -64,7 +64,7 @@ export function LlamaCppIcon({ className }: { className?: string }) {
   );
 }
 
-export function HuggingFaceIcon({ className }: { className?: string }) {
+function HuggingFaceIcon({ className }: { className?: string }) {
   return <LogoImage onDark={huggingfaceLogo} className={className} />;
 }
 
@@ -72,7 +72,7 @@ export function NineRouterIcon({ className }: { className?: string }) {
   return <LogoImage onDark={ninerouterLogo} className={className} />;
 }
 
-export function LayaIcon({ className }: { className?: string }) {
+function LayaIcon({ className }: { className?: string }) {
   return <LogoImage onDark={layaLogo} className={className} />;
 }
 
@@ -191,7 +191,7 @@ export function VoyageIcon({ className }: { className?: string }) {
   );
 }
 
-export function MistralIcon({ className }: { className?: string }) {
+function MistralIcon({ className }: { className?: string }) {
   return (
     <svg
       viewBox="0 0 24 24"
@@ -208,7 +208,7 @@ export function MistralIcon({ className }: { className?: string }) {
   );
 }
 
-export function DeepSeekIcon({ className }: { className?: string }) {
+function DeepSeekIcon({ className }: { className?: string }) {
   return (
     <svg
       viewBox="0 0 24 24"
@@ -225,7 +225,7 @@ export function DeepSeekIcon({ className }: { className?: string }) {
   );
 }
 
-export function GroqIcon({ className }: { className?: string }) {
+function GroqIcon({ className }: { className?: string }) {
   return (
     <svg
       viewBox="0 0 24 24"
@@ -242,11 +242,11 @@ export function GroqIcon({ className }: { className?: string }) {
   );
 }
 
-export function ClefIcon({ className }: { className?: string }) {
+function ClefIcon({ className }: { className?: string }) {
   return <LogoImage onDark={clefLogo} className={className} />;
 }
 
-export function JevIcon({ className }: { className?: string }) {
+function JevIcon({ className }: { className?: string }) {
   return (
     <LogoImage onDark={jevOnDark} onLight={jevOnLight} className={className} />
   );
@@ -271,7 +271,7 @@ export function WhisperIcon({ className }: { className?: string }) {
   );
 }
 
-export function DockerIcon({ className }: { className?: string }) {
+function DockerIcon({ className }: { className?: string }) {
   return (
     <svg
       viewBox="0 0 24 24"

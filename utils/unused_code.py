@@ -1,7 +1,7 @@
 """Aponta código, páginas e rotas que nada alcança e ainda não estão ligados ao produto.
 
-Uso: `python utils/unused_code.py <comando> [--strict]`. Por padrão os achados só
-avisam (anotação de aviso no GitHub Actions); `--strict` os faz reprovar. Só depende da stdlib, exceto o
+Uso: `python utils/unused_code.py <comando>`. Achados reprovam por padrão e
+aparecem como erros no GitHub Actions. Só depende da stdlib, exceto o
 comando `python`, que precisa do `vulture` no ambiente (`uv run --with vulture`).
 
 Comandos:
@@ -39,23 +39,18 @@ ROUTES_DIR: Final = FRONTEND / "src" / "routes"
 ENTRYPOINTS: Final = ROOT / "utils" / "route_entrypoints.json"
 PYTHON_BASELINE: Final = ROOT / "utils" / "unused_python_baseline.json"
 
-#: Com `--strict` (ou UNUSED_CODE_STRICT=1) um achado reprova; por padrão só avisa.
-#: Código sem uso costuma ser funcionalidade ainda não ligada, então o detector
-#: informa no pre-commit e no CI sem impedir ninguém de seguir.
-_STRICT = False
-
 
 def _warn(message: str) -> None:
-    """Mostra um achado; no GitHub Actions também o publica como anotação de aviso."""
+    """Mostra um achado; no GitHub Actions também o publica como erro."""
     print(message)
     if os.environ.get("GITHUB_ACTIONS") == "true":
         text = message.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-        print(f"::warning title=Código sem uso::{text}")
+        print(f"::error title=Código sem uso::{text}")
 
 
 def _status(findings: int) -> int:
-    """Código de saída: avisos não reprovam, exceto no modo estrito."""
-    return 1 if findings and _STRICT else 0
+    """Código de saída: qualquer achado reprova."""
+    return 1 if findings else 0
 
 
 #: Diretórios de código de produção onde uma navegação conta como referência.
@@ -500,10 +495,7 @@ _COMMANDS: Final[dict[str, Callable[[Sequence[str]], int]]] = {
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    global _STRICT
     arguments = list(sys.argv[1:] if argv is None else argv)
-    _STRICT = "--strict" in arguments or os.environ.get("UNUSED_CODE_STRICT") == "1"
-    arguments = [argument for argument in arguments if argument != "--strict"]
     if not arguments or arguments[0] not in _COMMANDS:
         print(__doc__)
         return 2
