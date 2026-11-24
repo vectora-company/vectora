@@ -31,6 +31,37 @@ def _uv_name() -> str:
     return "uv.exe" if sys.platform == "win32" else "uv"
 
 
+def _run_test_command(command: list[str], env: dict[str, str]) -> int:
+    """Run the bounded test command and report its result."""
+    try:
+        # O executável e os argumentos são resolvidos acima e não passam por shell.
+        result = subprocess.run(  # noqa: S603  # nosec B603
+            command,
+            env=env,
+            check=False,
+            timeout=_TOTAL_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired:
+        print(
+            "A suíte de testes da instalação excedeu o limite total de "
+            f"{_TOTAL_TIMEOUT_SECONDS} s.",
+            file=sys.stderr,
+        )
+        return 124
+    except OSError as exc:
+        print(f"Não foi possível iniciar o runner de testes: {exc}", file=sys.stderr)
+        return 2
+
+    if result.returncode == 0:
+        print("Smoke tests da instalação passaram.")
+    else:
+        print(
+            f"Smoke tests da instalação falharam (exit code {result.returncode}).",
+            file=sys.stderr,
+        )
+    return result.returncode
+
+
 def run_installed_runtime_tests() -> int:
     """Download isolated test tooling and run smoke tests against this binary."""
     suite_path, uv_path = _runtime_test_assets()
@@ -92,32 +123,7 @@ def run_installed_runtime_tests() -> int:
     ]
     print("Baixando as dependências de teste para um ambiente isolado...")
     print(f"Validando a instalação: {executable}")
-    try:
-        # O executável e os argumentos são resolvidos acima e não passam por shell.
-        result = subprocess.run(  # noqa: S603  # nosec B603
-            command,
-            env=env,
-            check=False,
-            timeout=_TOTAL_TIMEOUT_SECONDS,
-        )
-    except subprocess.TimeoutExpired:
-        print(
-            "A suíte de testes da instalação excedeu o limite total de "
-            f"{_TOTAL_TIMEOUT_SECONDS} s.",
-            file=sys.stderr,
-        )
-        return 124
-    except OSError as exc:
-        print(f"Não foi possível iniciar o runner de testes: {exc}", file=sys.stderr)
-        return 2
-    if result.returncode == 0:
-        print("Smoke tests da instalação passaram.")
-    else:
-        print(
-            f"Smoke tests da instalação falharam (exit code {result.returncode}).",
-            file=sys.stderr,
-        )
-    return result.returncode
+    return _run_test_command(command, env)
 
 
 def _test_cache_dir() -> Path:
