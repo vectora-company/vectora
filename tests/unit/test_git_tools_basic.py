@@ -409,15 +409,15 @@ class TestGhToolsMetadata:
         assert spec.extras.render_hint == "table"
 
     @pytest.mark.asyncio
-    async def test_gh_pr_list_graceful_without_gh(self, tmp_path: Path) -> None:
+    async def test_gh_pr_list_graceful_without_gh(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Se `gh` não estiver no PATH, tool retorna JSON de erro, não levanta."""
-        import os
-        from unittest.mock import patch
+        from backend.services import github_cli
+        from backend.services.github_cli import run_gh_command
 
-        from backend.tools.gh import _gh_run
-
-        with patch.dict(os.environ, {"PATH": ""}):
-            result = await _gh_run(["pr", "list"], cwd=str(tmp_path))
+        monkeypatch.setattr(github_cli.shutil, "which", lambda *_args, **_kwargs: None)
+        result = await run_gh_command(["pr", "list"], cwd=str(tmp_path))
 
         assert result["status"] == "error"
         assert (

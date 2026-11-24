@@ -592,14 +592,14 @@ class TestPrEndpoints:
     async def test_pr_list_unavailable_when_gh_fails(self, trusted_ws, monkeypatch):
         from unittest.mock import AsyncMock
 
-        import backend.tools.gh as gh_mod
         from backend.api.handlers import workspaces as ws_mod
+        from backend.services import github_cli
 
         wsid, root = trusted_ws
         _init_repo(root)
         monkeypatch.setattr(
-            gh_mod,
-            "_gh_run",
+            github_cli,
+            "run_gh_command",
             AsyncMock(return_value={"status": "error", "message": "gh not found"}),
         )
         resp = await ws_mod.pr_list(

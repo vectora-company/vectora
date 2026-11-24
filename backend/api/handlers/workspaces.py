@@ -1000,8 +1000,9 @@ async def git_contributors(
         parse_shortlog,
         valid_username,
     )
+    from backend.services.github_cli import run_gh_command as _gh_run
     from backend.tools.context import ToolContext
-    from backend.tools.gh import _gh_run, _resolve_cwd
+    from backend.tools.gh import _resolve_cwd
 
     repo = _open_workspace_repo(workspace_id)
     committers: list[GitPerson] = []
@@ -3518,8 +3519,9 @@ async def pr_list(
     state: Annotated[str, Query()] = "open",
 ) -> PullRequestListResponse:
     """Lista PRs do repositório via ``gh pr list``."""
+    from backend.services.github_cli import run_gh_command as _gh_run
     from backend.tools.context import ToolContext
-    from backend.tools.gh import _gh_run, _resolve_cwd
+    from backend.tools.gh import _resolve_cwd
 
     # O Workbench usa a mesma integração GitHub do agente. Sem propagar o
     # usuário autenticado, ``_gh_run`` ignorava o token salvo em Integrações
@@ -3582,8 +3584,9 @@ async def pr_create(
     workspace_id: str, body: PullRequestCreateRequest, request: Request
 ) -> StatusResponse:
     """Cria um PR da branch atual via ``gh pr create``."""
+    from backend.services.github_cli import run_gh_command as _gh_run
     from backend.tools.context import ToolContext
-    from backend.tools.gh import _gh_run, _resolve_cwd
+    from backend.tools.gh import _resolve_cwd
 
     if not body.title.strip():
         return StatusResponse(status="error", message="Título do PR é obrigatório.")
@@ -3602,14 +3605,14 @@ async def pr_create(
         "create",
         "--title",
         body.title,
-        "--body",
-        body.body,
+        "--body-file",
+        "-",
         "--base",
         body.base,
     ]
     if body.draft:
         args.append("--draft")
-    result = await _gh_run(args, cwd=cwd, user_id=context.user_id)
+    result = await _gh_run(args, cwd=cwd, input_data=body.body, user_id=context.user_id)
     if result.get("status") == "ok":
         return StatusResponse(status="ok", message=result.get("output", ""))
     return StatusResponse(status="error", message=result.get("message", ""))

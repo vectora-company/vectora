@@ -6,7 +6,7 @@ gh_issue_list, gh_issue_create, gh_issue_view, gh_issue_comment.
 Todas as tools:
 - Executam o binário `gh` via subprocess assíncrono (sem imports do SDK GitHub).
 - Retornam JSON estruturado compatível com os render_hints declarados.
-- _gh_run() é o helper central: captura stdout/stderr e converte em dict.
+- O runner compartilhado vive em ``backend.services.github_cli``.
 - Fallback gracioso quando `gh` não está no PATH.
 
 Requisito de sistema: `gh` CLI instalado e autenticado (`gh auth login`).
@@ -14,16 +14,12 @@ Requisito de sistema: `gh` CLI instalado e autenticado (`gh auth login`).
 
 from __future__ import annotations
 
-import asyncio
 import json
-import logging
-import os
 import warnings
 
+from backend.services.github_cli import run_gh_command as _gh_run
 from backend.tools.context import ToolContext
 from backend.tools.registry import ToolExtras, vtool
-
-logger = logging.getLogger(__name__)
 
 # O lancedb avisa a cada fork que o runtime assíncrono dele foi reiniciado no
 # filho. Aqui o filho executa o `gh` na hora (exec), sem tocar no lancedb, então
@@ -33,133 +29,6 @@ warnings.filterwarnings(
     message="lancedb fork support is experimental",
     category=RuntimeWarning,
 )
-
-
-# ---------------------------------------------------------------------------
-# Helper central
-# ---------------------------------------------------------------------------
-
-
-async def _gh_run(
-    args: list[str],
-    cwd: str | None = None,
-    input_data: str | None = None,
-    user_id: str | None = None,
-) -> dict:
-    """Executa `gh <args>` e retorna dict com status + dados.
-
-    - Sucesso: {"status": "ok", "output": "<stdout>"}
-    - Erro de processo: {"status": "error", "message": "<stderr>", "code": <int>}
-    - gh não encontrado: {"status": "error", "message": "gh not found in PATH"}
-    """
-    from backend.settings import get_settings
-
-    timeout = get_settings().git_cli_timeout
-    cmd = ["gh", *args]
-    logger.info(
-        "github_cli_command_started",
-        extra={
-            "tool": "gh_cli",
-            "operation": " ".join(args[:2]),
-            "command": "gh " + " ".join(args),
-            "status": "started",
-        },
-    )
-    env = os.environ.copy()
-    if user_id:
-        # Nunca permita que uma credencial global seja usada em nome de outro
-        # usuário. O contexto autenticado deve ser explícito ou anônimo.
-        # Em GitHub Actions, porém, GH_TOKEN é a credencial nativa do job e
-        # não representa outro usuário Vectora. Preserve-a para que o gh CLI
-        # consiga operar no mesmo contrato autenticado dos demais caminhos.
-        native_ci_token = (
-            env.get("GH_TOKEN", "").strip() if env.get("CI") == "true" else ""
-        )
-        if not native_ci_token and env.get("CI") == "true":
-            native_ci_token = env.get("GITHUB_TOKEN", "").strip()
-        env.pop("GH_TOKEN", None)
-        env.pop("GITHUB_TOKEN", None)
-        try:
-            from backend.rbac.auth import get_env_overrides
-
-            token = (await get_env_overrides(user_id)).get("GITHUB_TOKEN", "").strip()
-            if token:
-                env["GH_TOKEN"] = token
-                env["GITHUB_TOKEN"] = token
-            elif native_ci_token:
-                env["GH_TOKEN"] = native_ci_token
-                env["GITHUB_TOKEN"] = native_ci_token
-        except Exception:
-            if native_ci_token:
-                env["GH_TOKEN"] = native_ci_token
-                env["GITHUB_TOKEN"] = native_ci_token
-            logger.debug(
-                "gh: não foi possível carregar o token do usuário", exc_info=True
-            )
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            cwd=cwd,
-            stdin=asyncio.subprocess.PIPE if input_data is not None else None,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            env=env,
-        )
-    except FileNotFoundError:
-        return {
-            "status": "error",
-            "message": "gh not found in PATH — install the GitHub CLI: https://cli.github.com",
-        }
-    except Exception as exc:
-        return {"status": "error", "message": str(exc)}
-
-    try:
-        stdout_b, stderr_b = await asyncio.wait_for(
-            proc.communicate(input_data.encode() if input_data is not None else None),
-            timeout=timeout,
-        )
-    except TimeoutError:
-        proc.kill()
-        await proc.wait()
-        return {
-            "status": "error",
-            "message": f"gh command timed out after {timeout:g}s",
-        }
-    except Exception as exc:
-        return {"status": "error", "message": str(exc)}
-
-    stdout = stdout_b.decode(errors="replace").strip()
-    stderr = stderr_b.decode(errors="replace").strip()
-
-    if proc.returncode != 0:
-        logger.warning(
-            "github_cli_command_failed",
-            extra={
-                "tool": "gh_cli",
-                "operation": " ".join(args[:2]),
-                "command": "gh " + " ".join(args),
-                "exit_code": proc.returncode,
-                "status": "error",
-            },
-        )
-        return {
-            "status": "error",
-            "message": stderr or stdout,
-            "code": proc.returncode,
-        }
-
-    logger.info(
-        "github_cli_command_completed",
-        extra={
-            "tool": "gh_cli",
-            "operation": " ".join(args[:2]),
-            "command": "gh " + " ".join(args),
-            "exit_code": proc.returncode,
-            "output_length": len(stdout),
-            "status": "ok",
-        },
-    )
-    return {"status": "ok", "output": stdout}
 
 
 def _resolve_cwd(workspace_id: str | None, ctx: ToolContext) -> str | None:
@@ -245,10 +114,10 @@ async def gh_pr_create(
     cwd = _resolve_cwd(workspace_id, ctx)
     if not title:
         return json.dumps({"status": "error", "message": "Título do PR é obrigatório."})
-    args = ["pr", "create", "--title", title, "--body", body, "--base", base]
+    args = ["pr", "create", "--title", title, "--body-file", "-", "--base", base]
     if draft:
         args.append("--draft")
-    result = await _gh_run(args, cwd=cwd, user_id=ctx.user_id)
+    result = await _gh_run(args, cwd=cwd, input_data=body, user_id=ctx.user_id)
     return json.dumps(result)
 
 
@@ -398,10 +267,10 @@ async def gh_issue_create(
         return json.dumps(
             {"status": "error", "message": "Título da issue é obrigatório."}
         )
-    args = ["issue", "create", "--title", title, "--body", body]
+    args = ["issue", "create", "--title", title, "--body-file", "-"]
     if labels:
         args += ["--label", labels]
-    result = await _gh_run(args, cwd=cwd, user_id=ctx.user_id)
+    result = await _gh_run(args, cwd=cwd, input_data=body, user_id=ctx.user_id)
     return json.dumps(result)
 
 
@@ -480,8 +349,9 @@ async def gh_issue_comment(
             {"status": "error", "message": "Corpo do comentário é obrigatório."}
         )
     result = await _gh_run(
-        ["issue", "comment", str(issue_number), "--body", body],
+        ["issue", "comment", str(issue_number), "--body-file", "-"],
         cwd=cwd,
+        input_data=body,
         user_id=ctx.user_id,
     )
     return json.dumps(result)
