@@ -370,3 +370,44 @@ class TestCheckHooks:
     def test_sem_hook_configurado_passa(self, repo_with_history):
         result = _run_pre_commit_hooks(repo_with_history)
         assert result["passed"] is True
+
+
+@pytest.mark.asyncio
+async def test_agent_git_writes_use_repository_lock(
+    monkeypatch, tmp_path: Path
+) -> None:
+    import asyncio
+    import threading
+    import time
+    from types import SimpleNamespace
+
+    from backend.tools import git as git_tools
+    from backend.tools.context import ToolContext
+
+    repo = git.Repo.init(tmp_path / "locked")
+    repo.config_writer().set_value("user", "name", "Test User").release()
+    repo.config_writer().set_value("user", "email", "test@test.com").release()
+    monkeypatch.setattr(
+        git_tools,
+        "_resolve_workspace",
+        lambda _workspace_id, _ctx: SimpleNamespace(id="locked-workspace"),
+    )
+    context = ToolContext(user_id="test", workspace_id="locked-workspace")
+    running = 0
+    maximum = 0
+
+    def write() -> dict[str, str]:
+        nonlocal running, maximum
+        running += 1
+        maximum = max(maximum, running)
+        time.sleep(0.02)
+        running -= 1
+        return {"status": "ok"}
+
+    results = await asyncio.gather(
+        git_tools._execute_git_write(context, None, repo, "test-write", write),
+        git_tools._execute_git_write(context, None, repo, "test-write", write),
+    )
+
+    assert maximum == 1
+    assert all(result["status"] == "ok" for result in results)
