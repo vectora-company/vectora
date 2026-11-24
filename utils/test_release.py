@@ -195,10 +195,10 @@ def test_apply_updates_all_configured_versions_and_lockfile(
     plan = calculate_plan("0.1.24", [Commit(subject="fix: repair release")])
     apply_plan(tmp_path, plan, ["pyproject.toml", "frontend/package.json", "uv.lock"])
     assert lock_path.read_text(encoding="utf-8") == _LOCK_TEMPLATE.replace(
-        'name = "vectora"\nversion = "0.1.24"', 'name = "vectora"\nversion = "0.1.24"'
+        'name = "vectora"\nversion = "0.1.24"', 'name = "vectora"\nversion = "0.1.25"'
     )
-    assert '"version": "0.1.24"' in frontend_package.read_text(encoding="utf-8")
-    assert changelog.read_text(encoding="utf-8").startswith("## [0.1.24]")
+    assert '"version": "0.1.25"' in frontend_package.read_text(encoding="utf-8")
+    assert changelog.read_text(encoding="utf-8").startswith("## [0.1.25]")
     assert sorted(path.name for path in tmp_path.iterdir()) == [
         "CHANGELOG.md",
         "frontend",
