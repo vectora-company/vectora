@@ -14117,10 +14117,14 @@
             "type": "string"
           },
           "name": {
+            "maxLength": 120,
+            "minLength": 1,
             "title": "Name",
             "type": "string"
           },
           "publisher": {
+            "maxLength": 120,
+            "minLength": 1,
             "title": "Publisher",
             "type": "string"
           },
