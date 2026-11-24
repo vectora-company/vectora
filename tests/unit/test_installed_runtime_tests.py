@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -98,12 +97,11 @@ def test_runner_uses_isolated_test_dependencies_and_propagates_result(
     monkeypatch.setattr(runtime_tests.sys, "frozen", True, raising=False)
 
     def fake_run(
-        command: list[str], *, env: dict[str, str], check: bool, timeout: int
+        command: list[str], *, env: dict[str, str], check: bool
     ) -> SimpleNamespace:
         captured["command"] = command
         captured["env"] = env
         captured["check"] = check
-        captured["timeout"] = timeout
         return SimpleNamespace(returncode=exit_code)
 
     monkeypatch.setattr(runtime_tests, "_runtime_test_assets", lambda: (suite, uv))
@@ -122,26 +120,4 @@ def test_runner_uses_isolated_test_dependencies_and_propagates_result(
     assert env["VECTORA_INSTALLED_EXECUTABLE"] == str(Path(sys.executable).resolve())
     assert env["UV_CACHE_DIR"]
     assert captured["check"] is False
-    assert captured["timeout"] == runtime_tests._TOTAL_TIMEOUT_SECONDS
-
-
-def test_runner_fails_when_the_complete_suite_exceeds_its_deadline(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    suite = tmp_path / "test_installed_runtime.py"
-    uv = tmp_path / "uv"
-    suite.write_text("# packaged suite", encoding="utf-8")
-    (suite.parent / "pytest.ini").write_text("[pytest]\n", encoding="utf-8")
-    uv.write_bytes(b"uv test binary placeholder")
-    monkeypatch.setattr(runtime_tests.sys, "frozen", True, raising=False)
-    monkeypatch.setattr(runtime_tests, "_runtime_test_assets", lambda: (suite, uv))
-
-    def timeout_run(*_args: object, **_kwargs: object) -> None:
-        raise subprocess.TimeoutExpired("pytest", runtime_tests._TOTAL_TIMEOUT_SECONDS)
-
-    monkeypatch.setattr(runtime_tests.subprocess, "run", timeout_run)
-
-    assert runtime_tests.run_installed_runtime_tests() == 124
-    assert "excedeu o limite total" in capsys.readouterr().err
+    assert "--timeout=90" in command

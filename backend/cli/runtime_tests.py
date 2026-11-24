@@ -11,7 +11,6 @@ from pathlib import Path
 _PYTHON_VERSION = "3.13"
 _PYTEST_VERSION = "9.1.1"
 _PYTEST_TIMEOUT_VERSION = "2.4.0"
-_TOTAL_TIMEOUT_SECONDS = 600
 
 
 def _runtime_test_assets() -> tuple[Path, Path]:
@@ -32,22 +31,14 @@ def _uv_name() -> str:
 
 
 def _run_test_command(command: list[str], env: dict[str, str]) -> int:
-    """Run the bounded test command and report its result."""
+    """Run pytest with per-test timeouts and report its result."""
     try:
         # O executável e os argumentos são resolvidos acima e não passam por shell.
         result = subprocess.run(  # noqa: S603  # nosec B603
             command,
             env=env,
             check=False,
-            timeout=_TOTAL_TIMEOUT_SECONDS,
         )
-    except subprocess.TimeoutExpired:
-        print(
-            "A suíte de testes da instalação excedeu o limite total de "
-            f"{_TOTAL_TIMEOUT_SECONDS} s.",
-            file=sys.stderr,
-        )
-        return 124
     except OSError as exc:
         print(f"Não foi possível iniciar o runner de testes: {exc}", file=sys.stderr)
         return 2

@@ -16,6 +16,7 @@ import {
   backendLaunch,
   backendPath,
   isInstalledTestsMode,
+  isInstalledSmokeTestMode,
   natsBinaryPath,
   resolveExternalBackendConnection,
   backendTransportOptions,
@@ -118,6 +119,15 @@ describe("isInstalledTestsMode", () => {
     expect(isInstalledTestsMode(["/app/Vectora", "--tests"])).toBe(true);
     expect(isInstalledTestsMode(["/app/Vectora", "--version"])).toBe(false);
     expect(isInstalledTestsMode(["/app/Vectora", "start"])).toBe(false);
+  });
+});
+
+describe("isInstalledSmokeTestMode", () => {
+  it("detecta o smoke test autocontido", () => {
+    expect(isInstalledSmokeTestMode(["/app/Vectora", "--smoke-test"])).toBe(
+      true,
+    );
+    expect(isInstalledSmokeTestMode(["/app/Vectora", "--tests"])).toBe(false);
   });
 });
 
@@ -551,6 +561,12 @@ describe("killBackendTree", () => {
     await killBackendTree(parentPid, "linux", treeKillFn);
 
     expect(calledWithPid).toBe(parentPid);
+  });
+
+  it("não fica preso se tree-kill nunca chama o callback", async () => {
+    const startedAt = Date.now();
+    await killBackendTree(12345, "linux", () => {});
+    expect(Date.now() - startedAt).toBeLessThan(1_500);
   });
 });
 

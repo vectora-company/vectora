@@ -228,6 +228,10 @@ export function isInstalledTestsMode(argv: string[]): boolean {
   return argv.includes("--tests");
 }
 
+export function isInstalledSmokeTestMode(argv: string[]): boolean {
+  return argv.includes("--smoke-test");
+}
+
 export function spawnBackendProcess(
   exePath: string,
   args: string[],
@@ -482,11 +486,23 @@ export function killBackendTree(
   }
 
   return new Promise((resolve) => {
+    let settled = false;
+    let timeout: NodeJS.Timeout;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      resolve();
+    };
+    // A callback do tree-kill pode não chegar se algum descendente já tiver
+    // desaparecido. A confirmação de saída é feita pelo chamador; não deixe
+    // o encerramento do app preso esperando um callback perdido.
+    timeout = setTimeout(finish, 1_000);
     try {
-      treeKillFn(pid, signal, () => resolve());
+      treeKillFn(pid, signal, finish);
     } catch {
       // Processo já encerrado ou inacessível: o chamador confirma a saída.
-      resolve();
+      finish();
     }
   });
 }
