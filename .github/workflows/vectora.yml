@@ -789,6 +789,62 @@ jobs:
               require_one "Vectora-*-linux-*.tar.gz"
               ;;
           esac
+      - name: Install Linux package and verify runtime
+        if: matrix.target == 'linux' && matrix.arch == 'x64'
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            --volume "$GITHUB_WORKSPACE/frontend/dist-electron:/artifacts:ro" \
+            ubuntu:24.04 sh -euc '
+              for attempt in 1 2 3 4 5; do
+                rm -rf /var/lib/apt/lists/*
+                apt-get -o Acquire::Retries=5 update -qq && break
+                [ "$attempt" -lt 5 ] || exit 1
+                sleep $((attempt * 10))
+              done
+              apt-get -o Acquire::Retries=5 install -y xvfb /artifacts/Vectora-*-linux-amd64.deb
+              dpkg-query -s vectora | grep -F "Status: install ok installed"
+              executable=/opt/Vectora/vectora
+              test -x "$executable"
+              command -v vectora >/dev/null
+              test "$(readlink -f "$(command -v vectora)")" = "$executable"
+              ldd "$executable" | tee /tmp/vectora-ldd.txt
+              if grep -q "not found" /tmp/vectora-ldd.txt; then
+                echo "Vectora has unresolved runtime libraries in Ubuntu 24.04" >&2
+                exit 1
+              fi
+              alsa=$(grep -m1 "libasound\.so" /tmp/vectora-ldd.txt | sed -E "s/.*=> ([^ ]+).*/\1/")
+              if [ -n "$alsa" ] && ! grep -aq snd_device_name_get_hint "$alsa"; then
+                echo "The resolved ALSA library does not export the real ALSA API." >&2
+                exit 1
+              fi
+              command -v xvfb-run
+              set +e
+              VECTORA_LICENSE_BYPASS=1 timeout --signal=TERM 25s \
+                xvfb-run -a "$executable" --no-sandbox --disable-gpu --enable-logging=stderr \
+                > /tmp/vectora-startup.log 2>&1
+              startup_status=$?
+              set -e
+              cat /tmp/vectora-startup.log
+              if [ "$startup_status" -ne 124 ]; then
+                echo "Vectora exited before the 25-second startup smoke window (status $startup_status)." >&2
+                exit 1
+              fi
+              if grep -Eiq "error while loading shared libraries|FATAL.*(error|exception)" /tmp/vectora-startup.log; then
+                echo "Vectora reported a fatal startup error in Ubuntu 24.04." >&2
+                exit 1
+              fi
+              VECTORA_LICENSE_BYPASS=1 timeout --signal=TERM 300s \
+                xvfb-run -a "$executable" --no-sandbox --tests \
+                > /tmp/vectora-installed-tests.log 2>&1 || {
+                  status=$?
+                  cat /tmp/vectora-installed-tests.log
+                  echo "Installed Vectora test suite failed in Ubuntu 24.04 (status $status)." >&2
+                  exit "$status"
+                }
+              cat /tmp/vectora-installed-tests.log
+            '
       - name: Remove temporary Windows signing certificate
         if: always() && matrix.target == 'win'
         shell: pwsh
@@ -814,109 +870,6 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-  # ── 7. Install Linux artifacts on supported distribution families ────────
-  # Build success alone does not prove package-manager dependencies resolve.
-  # Install the x64 artifacts in clean distro containers so a stale package
-  # name or broken dependency prevents the PR/release matrix from passing.
-  linux-package-install:
-    name: Linux install (${{ matrix.distro }})
-    needs: release-native
-    if: needs.release-native.result == 'success'
-    runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix:
-        # Em PR só o Ubuntu 24.04; todas as distribuições no disparo manual e
-        # no master.
-        include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"distro":"Ubuntu 24.04","image":"ubuntu:24.04","family":"deb"}]' || '[{"distro":"Ubuntu 22.04","image":"ubuntu:22.04","family":"deb"},{"distro":"Ubuntu 24.04","image":"ubuntu:24.04","family":"deb"},{"distro":"Ubuntu 26.04","image":"ubuntu:26.04","family":"deb"},{"distro":"Debian 12","image":"debian:12","family":"deb"},{"distro":"Debian 13","image":"debian:13","family":"deb"},{"distro":"Fedora","image":"fedora:latest","family":"rpm"},{"distro":"Arch Linux","image":"archlinux:latest","family":"pacman"}]') }}
-    steps:
-      - name: Download Linux x64 installers
-        uses: actions/download-artifact@v8
-        with:
-          name: vectora-linux-x64
-          path: dist-electron
-      - name: Install package and verify runtime libraries
-        env:
-          DISTRO_IMAGE: ${{ matrix.image }}
-          PACKAGE_FAMILY: ${{ matrix.family }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          docker run --rm \
-            --env PACKAGE_FAMILY \
-            --env DISTRO_IMAGE \
-            --volume "$GITHUB_WORKSPACE/dist-electron:/artifacts:ro" \
-            "$DISTRO_IMAGE" sh -euc '
-              case "$PACKAGE_FAMILY" in
-                deb)
-                  for attempt in 1 2 3 4 5; do
-                    rm -rf /var/lib/apt/lists/*
-                    apt-get -o Acquire::Retries=5 update -qq && break
-                    [ "$attempt" -lt 5 ] || exit 1
-                    sleep $((attempt * 10))
-                  done
-                  apt-get -o Acquire::Retries=5 install -y xvfb /artifacts/Vectora-*-linux-amd64.deb
-                  dpkg-query -s vectora | grep -F "Status: install ok installed"
-                  ;;
-                rpm)
-                  dnf install -y xorg-x11-server-Xvfb /artifacts/Vectora-*-linux-x86_64.rpm
-                  rpm -q vectora
-                  ;;
-                pacman)
-                  pacman -Sy --noconfirm
-                  pacman -S --noconfirm xorg-server-xvfb
-                  pacman -U --noconfirm /artifacts/Vectora-*-linux-x64.pacman
-                  pacman -Q vectora
-                  ;;
-                *) echo "Unsupported package family: $PACKAGE_FAMILY" >&2; exit 2 ;;
-              esac
-              executable=/opt/Vectora/vectora
-              test -x "$executable"
-              command -v vectora >/dev/null || {
-                echo "O pacote não instalou o comando vectora no PATH em $DISTRO_IMAGE." >&2
-                exit 1
-              }
-              test "$(readlink -f "$(command -v vectora)")" = "$executable" || {
-                echo "O comando vectora não aponta para $executable em $DISTRO_IMAGE." >&2
-                exit 1
-              }
-              ldd "$executable" | tee /tmp/vectora-ldd.txt
-              if grep -q "not found" /tmp/vectora-ldd.txt; then
-                echo "Vectora has unresolved runtime libraries in $DISTRO_IMAGE" >&2
-                exit 1
-              fi
-              alsa=$(grep -m1 "libasound\.so" /tmp/vectora-ldd.txt | sed -E "s/.*=> ([^ ]+).*/\1/")
-              if [ -n "$alsa" ] && ! grep -aq snd_device_name_get_hint "$alsa"; then
-                echo "A libasound resolvida ($alsa) não exporta o ALSA real em $DISTRO_IMAGE." >&2
-                exit 1
-              fi
-              command -v xvfb-run
-              set +e
-              VECTORA_LICENSE_BYPASS=1 timeout --signal=TERM 25s \
-                xvfb-run -a "$executable" --no-sandbox --disable-gpu --enable-logging=stderr \
-                > /tmp/vectora-startup.log 2>&1
-              startup_status=$?
-              set -e
-              cat /tmp/vectora-startup.log
-              if [ "$startup_status" -ne 124 ]; then
-                echo "Vectora exited before the 25-second startup smoke window (status $startup_status)." >&2
-                exit 1
-              fi
-              if grep -Eiq "error while loading shared libraries|FATAL.*(error|exception)" /tmp/vectora-startup.log; then
-                echo "Vectora reported a fatal startup error in $DISTRO_IMAGE." >&2
-                exit 1
-              fi
-              VECTORA_LICENSE_BYPASS=1 timeout --signal=TERM 300s \
-                xvfb-run -a "$executable" --no-sandbox --tests \
-                > /tmp/vectora-installed-tests.log 2>&1 || {
-                  status=$?
-                  cat /tmp/vectora-installed-tests.log
-                  echo "Installed Vectora test suite failed in $DISTRO_IMAGE (status $status)." >&2
-                  exit "$status"
-                }
-              cat /tmp/vectora-installed-tests.log
-            '
-
   # Install the actual Windows/macOS packages (and both architectures), then
   # verify their installed paths and keep the real desktop process alive long
   # enough to catch loader, Gatekeeper, and first-launch failures. This is
@@ -924,12 +877,11 @@ jobs:
   desktop-install-smoke:
     name: Desktop install and launch (${{ matrix.platform }}/${{ matrix.arch }}/${{ matrix.format }})
     needs: release-native
-    if: needs.release-native.result == 'success'
+    if: needs.release-native.result == 'success' && github.event_name != 'pull_request'
     strategy:
       fail-fast: false
       matrix:
-        # Em PR só o .deb de Linux x64, o único pacote que a PR constrói.
-        include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"platform":"Linux","os":"ubuntu-24.04","arch":"x64","format":"deb"}]' || '[{"platform":"Windows","os":"windows-latest","arch":"x64","format":"exe"},{"platform":"Windows","os":"windows-latest","arch":"x64","format":"msi"},{"platform":"Windows","os":"windows-11-arm","arch":"arm64","format":"exe"},{"platform":"Windows","os":"windows-11-arm","arch":"arm64","format":"msi"},{"platform":"macOS","os":"macos-26","arch":"arm64","format":"dmg"},{"platform":"macOS","os":"macos-26","arch":"arm64","format":"zip"},{"platform":"Linux","os":"ubuntu-24.04","arch":"x64","format":"deb"},{"platform":"Linux","os":"ubuntu-24.04-arm","arch":"arm64","format":"deb"}]') }}
+        include: ${{ fromJSON('[{"platform":"Windows","os":"windows-latest","arch":"x64","format":"exe"},{"platform":"Windows","os":"windows-latest","arch":"x64","format":"msi"},{"platform":"Windows","os":"windows-11-arm","arch":"arm64","format":"exe"},{"platform":"Windows","os":"windows-11-arm","arch":"arm64","format":"msi"},{"platform":"macOS","os":"macos-26","arch":"arm64","format":"dmg"},{"platform":"macOS","os":"macos-26","arch":"arm64","format":"zip"}]') }}
     runs-on: ${{ matrix.os }}
     steps:
       - name: Download native installer
@@ -1065,69 +1017,6 @@ jobs:
             exit "$status"
           }
           cat "$RUNNER_TEMP/vectora-installed-tests.log"
-      - name: Install and launch Linux package
-        if: matrix.platform == 'Linux'
-        shell: bash
-        run: |
-          set -euo pipefail
-          for attempt in 1 2 3 4 5; do
-            sudo rm -rf /var/lib/apt/lists/*
-            sudo apt-get -o Acquire::Retries=5 update -qq && break
-            [ "$attempt" -lt 5 ] || exit 1
-            sleep $((attempt * 10))
-          done
-          deb=$(find "$GITHUB_WORKSPACE/installers" -maxdepth 1 -type f -name '*.deb' -print -quit)
-          test -n "$deb" || { echo "Downloaded .deb installer is missing." >&2; exit 1; }
-          sudo apt-get -o Acquire::Retries=5 install -y xvfb "$deb"
-          dpkg-query -s vectora | grep -F "Status: install ok installed"
-          executable=$(command -v vectora || true)
-          test -n "$executable" || {
-            echo "O pacote não instalou o comando vectora no PATH." >&2
-            exit 1
-          }
-          test -x "$executable"
-          # O ldd resolve `$ORIGIN` pelo caminho recebido; num link simbólico
-          # ele aponta para /usr/bin e não acha as bibliotecas do app.
-          real_executable=$(readlink -f "$executable")
-          echo "Installed executable: $executable -> $real_executable"
-          if [ -e /opt/Vectora/chrome-sandbox ]; then
-            stat -c '%a %U %n' /opt/Vectora/chrome-sandbox
-          fi
-          ldd "$real_executable" | tee "$RUNNER_TEMP/vectora-ldd.log"
-          if grep -q "not found" "$RUNNER_TEMP/vectora-ldd.log"; then
-            echo "Installed Vectora has unresolved shared libraries." >&2
-            exit 1
-          fi
-          alsa=$(grep -m1 "libasound\.so" "$RUNNER_TEMP/vectora-ldd.log" | sed -E "s/.*=> ([^ ]+).*/\1/")
-          if [ -n "$alsa" ] && ! grep -aq snd_device_name_get_hint "$alsa"; then
-            echo "A libasound resolvida ($alsa) não exporta o ALSA real." >&2
-            exit 1
-          fi
-          set +e
-          VECTORA_LICENSE_BYPASS=1 timeout --signal=TERM 25s \
-            xvfb-run -a "$executable" --no-sandbox --disable-gpu --enable-logging=stderr \
-            > "$RUNNER_TEMP/vectora-startup.log" 2>&1
-          status=$?
-          set -e
-          cat "$RUNNER_TEMP/vectora-startup.log"
-          if [ "$status" -ne 124 ]; then
-            echo "Vectora exited before the 25-second startup smoke window (status $status)." >&2
-            exit 1
-          fi
-          if grep -Eiq "error while loading shared libraries|FATAL.*(error|exception)" "$RUNNER_TEMP/vectora-startup.log"; then
-            echo "Vectora reported a fatal startup error." >&2
-            exit 1
-          fi
-          VECTORA_LICENSE_BYPASS=1 timeout --signal=TERM 300s \
-            xvfb-run -a vectora --no-sandbox --tests \
-            > "$RUNNER_TEMP/vectora-installed-tests.log" 2>&1 || {
-              status=$?
-              cat "$RUNNER_TEMP/vectora-installed-tests.log"
-              echo "Installed Vectora test suite failed (status $status)." >&2
-              exit "$status"
-            }
-          cat "$RUNNER_TEMP/vectora-installed-tests.log"
-
   # ── 7. Create the tag and the GitHub Release after distribution ──────────
   # O commit da PR de release só vira uma versão publicada depois que os testes
   # e os instaladores terminarem com sucesso. Este job cria a tag, a release e
@@ -1139,13 +1028,7 @@ jobs:
   tag-release:
     name: Tag and publish release
     needs:
-      [
-        release-native,
-        release-channel,
-        release-trigger,
-        linux-package-install,
-        desktop-install-smoke,
-      ]
+      [release-native, release-channel, release-trigger, desktop-install-smoke]
     if: >-
       github.event_name == 'push' &&
       github.ref == 'refs/heads/master' &&
