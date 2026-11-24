@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import os
 import re
 import shutil
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -120,6 +122,30 @@ async def _user_environment(user_id: str | None) -> dict[str, str]:
     return env
 
 
+async def github_auth_epoch(user_id: str | None) -> str:
+    """Return a non-reversible cache namespace for the active credential."""
+    env = await _user_environment(user_id)
+    token = env.get("GH_TOKEN") or env.get("GITHUB_TOKEN") or ""
+    return hashlib.sha256(token.encode()).hexdigest() if token else "anonymous"
+
+
+def _http_response_headers(output: str) -> tuple[int | None, dict[str, str]]:
+    """Extract only cache and rate-limit headers from ``gh api --include``."""
+    status: int | None = None
+    headers: dict[str, str] = {}
+    allowed = {"etag", "retry-after", "x-ratelimit-reset", "x-ratelimit-remaining"}
+    for line in output.splitlines():
+        if line.startswith("HTTP/"):
+            pieces = line.split()
+            status = int(pieces[1]) if len(pieces) > 1 and pieces[1].isdigit() else None
+        elif ":" in line:
+            name, value = line.split(":", 1)
+            normalized = name.strip().casefold()
+            if normalized in allowed:
+                headers[normalized] = value.strip()
+    return status, headers
+
+
 def _is_unauthenticated(message: str) -> bool:
     lowered = message.casefold()
     return any(
@@ -134,6 +160,39 @@ def _is_unauthenticated(message: str) -> bool:
             "gh auth login",
         )
     )
+
+
+def _rate_limit_details(
+    message: str,
+    headers: dict[str, str] | None = None,
+) -> dict[str, int | str] | None:
+    lowered = message.casefold()
+    headers = headers or {}
+    if (
+        not any(
+            marker in lowered
+            for marker in ("rate limit", "secondary rate", "abuse detection")
+        )
+        and headers.get("x-ratelimit-remaining") != "0"
+    ):
+        return None
+    reset_match = re.search(
+        r"(?:reset|resets)\s+(?:at\s+)?(\d{10})", message, re.IGNORECASE
+    )
+    retry_match = re.search(r"retry[- ]after[: ]+(\d+)", message, re.IGNORECASE)
+    reset_header = headers.get("x-ratelimit-reset")
+    retry_header = headers.get("retry-after")
+    if reset_header and reset_header.isdigit():
+        reset_at = int(reset_header)
+    elif retry_header and retry_header.isdigit():
+        reset_at = int(time.time()) + max(60, int(retry_header))
+    elif reset_match:
+        reset_at = int(reset_match.group(1))
+    elif retry_match:
+        reset_at = int(time.time()) + max(60, int(retry_match.group(1)))
+    else:
+        reset_at = int(time.time()) + 60
+    return {"code": "rate_limited", "reset_at": reset_at}
 
 
 def _error(code: str, message: str, *, exit_code: int | None = None) -> dict:
@@ -247,6 +306,14 @@ async def run_gh_command(
                 },
             )
             result = _error(error.code, str(error), exit_code=process.returncode)
+            http_status, response_headers = _http_response_headers(
+                stdout_bytes.decode(errors="replace")
+            )
+            if http_status is not None:
+                result["http_status"] = http_status
+            rate_limit = _rate_limit_details(message, response_headers)
+            if rate_limit is not None:
+                result.update(rate_limit)
         else:
             logger.info(
                 "github_cli_command_completed",
@@ -258,5 +325,9 @@ async def run_gh_command(
                 },
             )
             result = {"status": "ok", "output": stdout}
+            http_status, response_headers = _http_response_headers(stdout)
+            if http_status is not None:
+                result["http_status"] = http_status
+            result.update(response_headers)
 
     return result

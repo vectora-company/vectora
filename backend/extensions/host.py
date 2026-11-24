@@ -18,7 +18,7 @@ from collections.abc import Callable
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, Final
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from backend.extensions.models import (
     HOST_API_VERSION,
@@ -27,6 +27,7 @@ from backend.extensions.models import (
     ExtensionRelease,
     ExtensionState,
     Grants,
+    _validate_extension_id,
     effective_contribution_id,
 )
 from backend.extensions.store import ExtensionStore
@@ -54,9 +55,14 @@ class InstallRequest(BaseModel):
     """O que o host precisa para instalar uma versão já verificada pelo Vext."""
 
     id: str
-    name: str
-    publisher: str
+    name: str = Field(min_length=1, max_length=120)
+    publisher: str = Field(min_length=1, max_length=120)
     release: ExtensionRelease
+
+    @field_validator("id")
+    @classmethod
+    def _valid_id(cls, value: str) -> str:
+        return _validate_extension_id(value)
 
 
 class GrantsUpdate(BaseModel):

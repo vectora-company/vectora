@@ -5980,19 +5980,71 @@
       },
       "IssueListResponse": {
         "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
           "issues": {
+            "deprecated": true,
             "items": {
               "$ref": "#/components/schemas/IssueSummary"
             },
             "title": "Issues",
             "type": "array"
           },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/IssueSummary"
+            },
+            "title": "Items",
+            "type": "array"
+          },
           "message": {
             "default": "",
+            "deprecated": true,
             "title": "Message",
             "type": "string"
           },
+          "reset_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reset At"
+          },
+          "state": {
+            "enum": [
+              "loaded",
+              "empty",
+              "unknown"
+            ],
+            "title": "State",
+            "type": "string"
+          },
           "status": {
+            "deprecated": true,
             "enum": [
               "ok",
               "unavailable",
@@ -6003,6 +6055,7 @@
           }
         },
         "required": [
+          "state",
           "status"
         ],
         "title": "IssueListResponse",
@@ -8501,19 +8554,71 @@
       },
       "PullListResponse": {
         "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PullSummary"
+            },
+            "title": "Items",
+            "type": "array"
+          },
           "message": {
             "default": "",
+            "deprecated": true,
             "title": "Message",
             "type": "string"
           },
           "pulls": {
+            "deprecated": true,
             "items": {
               "$ref": "#/components/schemas/PullSummary"
             },
             "title": "Pulls",
             "type": "array"
           },
+          "reset_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reset At"
+          },
+          "state": {
+            "enum": [
+              "loaded",
+              "empty",
+              "unknown"
+            ],
+            "title": "State",
+            "type": "string"
+          },
           "status": {
+            "deprecated": true,
             "enum": [
               "ok",
               "unavailable",
@@ -8524,6 +8629,7 @@
           }
         },
         "required": [
+          "state",
           "status"
         ],
         "title": "PullListResponse",
@@ -14011,10 +14117,14 @@
             "type": "string"
           },
           "name": {
+            "maxLength": 120,
+            "minLength": 1,
             "title": "Name",
             "type": "string"
           },
           "publisher": {
+            "maxLength": 120,
+            "minLength": 1,
             "title": "Publisher",
             "type": "string"
           },

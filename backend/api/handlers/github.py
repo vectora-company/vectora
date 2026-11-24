@@ -1,8 +1,7 @@
 """Pull requests e issues do repositório do workspace, para a aba GitHub.
 
-Lê pelo `gh` CLI já autenticado do usuário (mesmo helper das tools ``gh_*``);
-só leitura. Cada resposta traz um campo ``status`` para a interface mostrar
-"gh não instalado" ou "não autenticado" em vez de uma lista vazia.
+Usa a API REST pela sessão do `gh` do usuário e ETags para reaproveitar respostas
+inalteradas. Listas distinguem resultados carregados, vazios e desconhecidos.
 """
 
 from __future__ import annotations
@@ -11,10 +10,12 @@ import asyncio
 import json
 import time
 from typing import Annotated, Literal
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException, Path, Query, Request
 from pydantic import BaseModel, Field
 
+from backend.services.github_cli import github_auth_epoch
 from backend.services.github_cli import run_gh_command as _gh_run
 
 router = APIRouter(prefix="/github", tags=["github"])
@@ -45,6 +46,34 @@ _GH_CACHE_TTL_S = 4.0
 _GH_CACHE_MAX = 64
 _gh_cache: dict[tuple, tuple[float, dict]] = {}
 _gh_inflight: dict[tuple, asyncio.Future] = {}
+_etag_cache: dict[tuple, tuple[str, list[dict]]] = {}
+_rate_gate_until: dict[tuple[str | None, str], float] = {}
+
+
+def _rate_gate_result(key: tuple[str | None, str]) -> dict | None:
+    reset_at = _rate_gate_until.get(key)
+    if reset_at is None:
+        return None
+    if reset_at <= time.time():
+        _rate_gate_until.pop(key, None)
+        return None
+    return {
+        "status": "error",
+        "code": "rate_limited",
+        "message": "Limite da API do GitHub atingido.",
+        "reset_at": int(reset_at),
+    }
+
+
+def _remember_rate_limit(result: dict, key: tuple[str | None, str]) -> dict:
+    if result.get("code") != "rate_limited":
+        return result
+    reset_at = result.get("reset_at")
+    if not isinstance(reset_at, (int, float)):
+        reset_at = time.time() + 60
+    _rate_gate_until[key] = max(time.time() + 1, float(reset_at))
+    result["reset_at"] = int(_rate_gate_until[key])
+    return result
 
 
 async def _gh_read(
@@ -55,7 +84,12 @@ async def _gh_read(
     A chave inclui usuário e diretório, então um usuário nunca recebe a
     resposta de outro. Chamadas simultâneas idênticas esperam a mesma execução.
     """
-    key = (user_id, cwd, tuple(args))
+    auth_epoch = await github_auth_epoch(user_id)
+    rate_key = (user_id, auth_epoch)
+    gated = _rate_gate_result(rate_key)
+    if gated is not None:
+        return gated
+    key = (user_id, cwd, auth_epoch, tuple(args))
     now = time.monotonic()
     hit = _gh_cache.get(key)
     if hit and now - hit[0] < _GH_CACHE_TTL_S:
@@ -75,11 +109,123 @@ async def _gh_read(
         future.set_result(result)
     finally:
         _gh_inflight.pop(key, None)
+    result = _remember_rate_limit(result, rate_key)
     if result.get("status") == "ok":
         if len(_gh_cache) >= _GH_CACHE_MAX:
             _gh_cache.pop(next(iter(_gh_cache)))
         _gh_cache[key] = (time.monotonic(), result)
     return result
+
+
+def _github_repository(cwd: str | None) -> str | None:
+    """Resolve the GitHub owner/repository from the workspace's origin URL."""
+    if not cwd:
+        return None
+    try:
+        import git
+
+        repo = git.Repo(cwd, search_parent_directories=True)
+        remote = repo.remote("origin").url
+    except Exception:
+        return None
+    if remote.startswith("git@github.com:"):
+        path = remote.removeprefix("git@github.com:")
+    else:
+        parsed = urlparse(remote)
+        if parsed.hostname != "github.com":
+            return None
+        path = parsed.path.lstrip("/")
+    path = path.removesuffix(".git").strip("/")
+    parts = path.split("/")
+    return "/".join(parts[:2]) if len(parts) == 2 and all(parts) else None
+
+
+def _included_json(output: str) -> object:
+    """Read the JSON payload following the response headers from gh api."""
+    output = output.replace("\r\n", "\n")
+    _headers, separator, body = output.partition("\n\n")
+    return json.loads(body if separator else output)
+
+
+async def _github_api_list(  # noqa: PLR0911
+    endpoint: Literal["pulls", "issues"],
+    state: str,
+    cwd: str | None,
+    user_id: str,
+) -> tuple[list[dict] | None, dict | None]:
+    repository = _github_repository(cwd)
+    if repository is None:
+        return None, {
+            "status": "error",
+            "code": "github_remote_unavailable",
+            "message": "O workspace não tem um remote origin do GitHub válido.",
+        }
+    epoch = await github_auth_epoch(user_id)
+    rate_key = (user_id, epoch)
+    gated = _rate_gate_result(rate_key)
+    if gated is not None:
+        return None, gated
+    cache_key = (user_id, cwd, epoch, endpoint, state)
+    cached = _etag_cache.get(cache_key)
+    list_state = "closed" if state == "merged" else state
+    resource = "pulls" if endpoint == "pulls" else "search/issues"
+    args = [
+        "api",
+        "--include",
+        f"repos/{repository}/{resource}" if endpoint == "pulls" else resource,
+        "--method",
+        "GET",
+    ]
+    if endpoint == "pulls":
+        args.extend(["-f", f"state={list_state}"])
+    else:
+        query = f"repo:{repository} is:issue"
+        if state in {"open", "closed"}:
+            query += f" state:{state}"
+        args.extend(["-f", f"q={query}", "-f", "sort=updated"])
+    args.extend(["-F", "per_page=100"])
+    if cached is not None:
+        args.extend(["--header", f"If-None-Match: {cached[0]}"])
+    result = await _gh_run(args, cwd=cwd, user_id=user_id)
+    result = _remember_rate_limit(result, rate_key)
+    if result.get("http_status") == 304 and cached is not None:
+        return cached[1], None
+    if result.get("status") != "ok":
+        return None, result
+    if result.get("http_status") == 304:
+        return None, {
+            "status": "error",
+            "code": "invalid_cache_response",
+            "message": "GitHub retornou 304 sem uma cópia local para validar.",
+        }
+    try:
+        raw = _included_json(str(result.get("output", "")))
+    except json.JSONDecodeError:
+        return None, {
+            "status": "error",
+            "code": "invalid_response",
+            "message": "Resposta inválida da API do GitHub.",
+        }
+    if endpoint == "issues" and isinstance(raw, dict):
+        raw = raw.get("items")
+    if not isinstance(raw, list) or any(not isinstance(item, dict) for item in raw):
+        return None, {
+            "status": "error",
+            "code": "invalid_response",
+            "message": "Resposta inválida da API do GitHub.",
+        }
+    items = raw
+    if endpoint == "pulls" and state == "merged":
+        items = [item for item in items if item.get("merged_at")]
+    if endpoint == "issues":
+        items = [item for item in items if "pull_request" not in item]
+    items = items[:_LIST_LIMIT]
+    etag = str(result.get("etag") or "")
+    if etag:
+        if len(_etag_cache) >= _GH_CACHE_MAX and cache_key not in _etag_cache:
+            _etag_cache.pop(next(iter(_etag_cache)))
+        _etag_cache[cache_key] = (etag, items)
+    return items, None
 
 
 class PullChecks(BaseModel):
@@ -116,15 +262,33 @@ class IssueSummary(BaseModel):
 
 
 class PullListResponse(BaseModel):
-    status: Literal["ok", "unavailable", "error"]
-    message: str = ""
-    pulls: list[PullSummary] = Field(default_factory=list)
+    state: Literal["loaded", "empty", "unknown"]
+    items: list[PullSummary] = Field(default_factory=list)
+    error: str | None = None
+    code: str | None = None
+    reset_at: int | None = None
+    status: Literal["ok", "unavailable", "error"] = Field(
+        json_schema_extra={"deprecated": True}
+    )
+    message: str = Field(default="", json_schema_extra={"deprecated": True})
+    pulls: list[PullSummary] = Field(
+        default_factory=list, json_schema_extra={"deprecated": True}
+    )
 
 
 class IssueListResponse(BaseModel):
-    status: Literal["ok", "unavailable", "error"]
-    message: str = ""
-    issues: list[IssueSummary] = Field(default_factory=list)
+    state: Literal["loaded", "empty", "unknown"]
+    items: list[IssueSummary] = Field(default_factory=list)
+    error: str | None = None
+    code: str | None = None
+    reset_at: int | None = None
+    status: Literal["ok", "unavailable", "error"] = Field(
+        json_schema_extra={"deprecated": True}
+    )
+    message: str = Field(default="", json_schema_extra={"deprecated": True})
+    issues: list[IssueSummary] = Field(
+        default_factory=list, json_schema_extra={"deprecated": True}
+    )
 
 
 class GithubComment(BaseModel):
@@ -262,7 +426,22 @@ def _failure(result: dict) -> tuple[Literal["unavailable", "error"], str]:
         "not found in path" in lowered or "auth" in lowered
     ):
         return "unavailable", message
+    if result.get("code") == "rate_limited":
+        return "error", "rate_limited"
     return "error", message
+
+
+def _list_error(result: dict) -> dict:
+    status, message = _failure(result)
+    return {
+        "state": "unknown",
+        "items": [],
+        "error": message,
+        "code": result.get("code", status),
+        "reset_at": result.get("reset_at"),
+        "status": status,
+        "message": message,
+    }
 
 
 @router.get("/pulls", response_model=PullListResponse)
@@ -277,44 +456,32 @@ async def list_pulls(
     consulta. O resumo continua no detalhe de cada PR.
     """
     user_id = _require_user(request)
-    result = await _gh_read(
-        [
-            "pr",
-            "list",
-            "--state",
-            state,
-            "--limit",
-            str(_LIST_LIMIT),
-            "--json",
-            _PR_FIELDS,
-        ],
-        cwd=_workspace_cwd(workspace_id),
-        user_id=user_id,
+    raw, error = await _github_api_list(
+        "pulls", state, _workspace_cwd(workspace_id), user_id
     )
-    if result["status"] != "ok":
-        status, message = _failure(result)
-        return PullListResponse(status=status, message=message)
-    try:
-        raw = json.loads(result["output"])
-    except json.JSONDecodeError:
-        return PullListResponse(status="error", message="Resposta inválida do gh.")
+    if error is not None or raw is None:
+        return PullListResponse(**_list_error(error or {}))
     pulls = [
         PullSummary(
             number=int(item["number"]),
             title=str(item.get("title", "")),
-            state=str(item.get("state", "")),
-            is_draft=bool(item.get("isDraft", False)),
-            author=_author(item.get("author")),
-            head_ref=str(item.get("headRefName", "")),
-            base_ref=str(item.get("baseRefName", "")),
-            updated_at=str(item.get("updatedAt", "")),
-            url=str(item.get("url", "")),
-            review_decision=str(item.get("reviewDecision") or ""),
+            state=str(item.get("state", "")).upper(),
+            is_draft=bool(item.get("draft", False)),
+            author=_author(item.get("user")),
+            head_ref=str((item.get("head") or {}).get("ref", "")),
+            base_ref=str((item.get("base") or {}).get("ref", "")),
+            updated_at=str(item.get("updated_at", "")),
+            url=str(item.get("html_url", "")),
         )
         for item in raw
         if isinstance(item, dict) and "number" in item
     ]
-    return PullListResponse(status="ok", pulls=pulls)
+    return PullListResponse(
+        state="loaded" if pulls else "empty",
+        items=pulls,
+        status="ok",
+        pulls=pulls,
+    )
 
 
 @router.get("/issues", response_model=IssueListResponse)
@@ -325,46 +492,35 @@ async def list_issues(
 ) -> IssueListResponse:
     """Issues do repositório do workspace."""
     user_id = _require_user(request)
-    result = await _gh_read(
-        [
-            "issue",
-            "list",
-            "--state",
-            state,
-            "--limit",
-            str(_LIST_LIMIT),
-            "--json",
-            _ISSUE_FIELDS,
-        ],
-        cwd=_workspace_cwd(workspace_id),
-        user_id=user_id,
+    raw, error = await _github_api_list(
+        "issues", state, _workspace_cwd(workspace_id), user_id
     )
-    if result["status"] != "ok":
-        status, message = _failure(result)
-        return IssueListResponse(status=status, message=message)
-    try:
-        raw = json.loads(result["output"])
-    except json.JSONDecodeError:
-        return IssueListResponse(status="error", message="Resposta inválida do gh.")
+    if error is not None or raw is None:
+        return IssueListResponse(**_list_error(error or {}))
     issues = [
         IssueSummary(
             number=int(item["number"]),
             title=str(item.get("title", "")),
-            state=str(item.get("state", "")),
-            author=_author(item.get("author")),
+            state=str(item.get("state", "")).upper(),
+            author=_author(item.get("user")),
             labels=[
                 str(label.get("name", ""))
                 for label in item.get("labels") or []
                 if isinstance(label, dict)
             ],
-            updated_at=str(item.get("updatedAt", "")),
-            url=str(item.get("url", "")),
-            comments=len(item.get("comments") or []),
+            updated_at=str(item.get("updated_at", "")),
+            url=str(item.get("html_url", "")),
+            comments=int(item.get("comments") or 0),
         )
         for item in raw
         if isinstance(item, dict) and "number" in item
     ]
-    return IssueListResponse(status="ok", issues=issues)
+    return IssueListResponse(
+        state="loaded" if issues else "empty",
+        items=issues,
+        status="ok",
+        issues=issues,
+    )
 
 
 def _names(items: object, *keys: str) -> list[str]:

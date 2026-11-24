@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from typing import override
 
 logger = logging.getLogger(__name__)
 
@@ -32,11 +33,13 @@ class _TCPSide(asyncio.Protocol):
     def __init__(self, pipe_side: _PipeSide) -> None:
         self._pipe = pipe_side
 
+    @override
     def data_received(self, data: bytes) -> None:
         transport = self._pipe._transport
         if isinstance(transport, asyncio.WriteTransport) and not transport.is_closing():
             transport.write(data)
 
+    @override
     def connection_lost(self, exc: BaseException | None) -> None:
         transport = self._pipe._transport
         if transport and not transport.is_closing():
@@ -59,6 +62,7 @@ class _PipeSide(asyncio.Protocol):
         self._connect_task: asyncio.Task[None] | None = None
         self._closed = False
 
+    @override
     def connection_made(self, transport: asyncio.BaseTransport) -> None:
         self._transport = transport
         self._connect_task = asyncio.ensure_future(self._connect_tcp())
@@ -97,12 +101,14 @@ class _PipeSide(asyncio.Protocol):
             self._tcp_transport.write(chunk)
         self._pending.clear()
 
+    @override
     def data_received(self, data: bytes) -> None:
         if self._tcp_transport:
             self._tcp_transport.write(data)
         else:
             self._pending.append(data)
 
+    @override
     def connection_lost(self, exc: BaseException | None) -> None:
         self._closed = True
         if self._connect_task is not None and not self._connect_task.done():

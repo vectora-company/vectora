@@ -60,8 +60,8 @@ const OTHER_RUN =
 const JOB_WITH_STEPS = RUN.jobs.find((job) => job.steps.length > 0)!;
 const JOB_TO_FAIL = RUN.jobs.findLast((job) => job.steps.length > 0)!;
 const SKIPPED_JOB = RUN.jobs.find((job) => job.conclusion === "skipped")!;
-const PULL = pullsFixture.pulls[0]!;
-const ISSUE = issuesFixture.issues[0]!;
+const PULL = pullsFixture.items[0]!;
+const ISSUE = issuesFixture.items[0]!;
 
 type Variant = "real" | "failed";
 let variant: Variant = "real";

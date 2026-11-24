@@ -67,9 +67,13 @@ def _limpa_cache_de_leituras_do_gh():
 
     github._gh_cache.clear()
     github._gh_inflight.clear()
+    github._etag_cache.clear()
+    github._rate_gate_until.clear()
     yield
     github._gh_cache.clear()
     github._gh_inflight.clear()
+    github._etag_cache.clear()
+    github._rate_gate_until.clear()
 
 
 @pytest.fixture(autouse=True)

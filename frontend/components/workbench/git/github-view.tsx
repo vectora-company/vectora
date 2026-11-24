@@ -57,7 +57,7 @@ type StateFilter = "open" | "closed" | "all";
 type Loaded =
   | { status: "loading" }
   | { status: "unavailable" | "error"; message: string }
-  | { status: "ok"; pulls: GithubPull[]; issues: GithubIssue[] };
+  | { status: "loaded" | "empty"; pulls: GithubPull[]; issues: GithubIssue[] };
 
 const STATE_FILTERS: StateFilter[] = ["open", "closed", "all"];
 
@@ -320,19 +320,30 @@ export function GithubView({
           return;
         }
         const data = (await res.json()) as {
-          status: "ok" | "unavailable" | "error";
+          status?: "ok" | "unavailable" | "error";
           message?: string;
-          pulls?: GithubPull[];
-          issues?: GithubIssue[];
+          state: "loaded" | "empty" | "unknown";
+          error?: string;
+          code?: string;
+          items?: GithubPull[] | GithubIssue[];
         };
-        if (data.status !== "ok") {
-          setLoaded({ status: data.status, message: data.message ?? "" });
+        if (data.state === "unknown" || !data.state) {
+          setLoaded({
+            status:
+              data.status === "unavailable" ||
+              data.code === "gh_unavailable" ||
+              data.code === "gh_unauthenticated"
+                ? "unavailable"
+                : "error",
+            message: data.error ?? data.message ?? m.workbench_github_error(),
+          });
           return;
         }
+        const items = data.items ?? [];
         setLoaded({
-          status: "ok",
-          pulls: data.pulls ?? [],
-          issues: data.issues ?? [],
+          status: data.state,
+          pulls: kind === "pulls" ? (items as GithubPull[]) : [],
+          issues: kind === "issues" ? (items as GithubIssue[]) : [],
         });
       } catch (error) {
         if ((error as { name?: string }).name === "AbortError") return;
@@ -395,12 +406,18 @@ export function GithubView({
             {m.workbench_github_error()} {loaded.message}
           </WorkbenchError>
         )}
-        {loaded.status === "ok" && kind === "pulls" && (
-          <PullList pulls={loaded.pulls} query={query} onOpen={onOpenItem} />
-        )}
-        {loaded.status === "ok" && kind === "issues" && (
-          <IssueList issues={loaded.issues} query={query} onOpen={onOpenItem} />
-        )}
+        {(loaded.status === "loaded" || loaded.status === "empty") &&
+          kind === "pulls" && (
+            <PullList pulls={loaded.pulls} query={query} onOpen={onOpenItem} />
+          )}
+        {(loaded.status === "loaded" || loaded.status === "empty") &&
+          kind === "issues" && (
+            <IssueList
+              issues={loaded.issues}
+              query={query}
+              onOpen={onOpenItem}
+            />
+          )}
       </div>
     </div>
   );

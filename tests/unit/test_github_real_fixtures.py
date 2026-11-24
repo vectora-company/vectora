@@ -38,6 +38,7 @@ READ_ONLY = {
     ("pr", "view"),
     ("issue", "list"),
     ("issue", "view"),
+    ("api", "--include"),
 }
 
 
@@ -62,6 +63,41 @@ def gh_output(monkeypatch: pytest.MonkeyPatch):
     async def fake(args, cwd=None, input_data=None, user_id=None):
         calls.append(list(args))
         assert tuple(args[:2]) in READ_ONLY, f"operação fora da leitura: {args}"
+        if args[:2] == ["api", "--include"]:
+            endpoint = args[2].rsplit("/", 1)[-1]
+            fixture = "gh_pr_list.json" if endpoint == "pulls" else "gh_issue_list.json"
+            raw_items = json.loads(_raw(fixture))
+            output_items = []
+            for item in raw_items:
+                if endpoint == "pulls":
+                    output_items.append(
+                        {
+                            "number": item["number"],
+                            "title": item.get("title", ""),
+                            "state": str(item.get("state", "")).lower(),
+                            "draft": item.get("isDraft", False),
+                            "user": item.get("author", {}),
+                            "head": {"ref": item.get("headRefName", "")},
+                            "base": {"ref": item.get("baseRefName", "")},
+                            "updated_at": item.get("updatedAt", ""),
+                            "html_url": item.get("url", ""),
+                            "merged_at": item.get("mergedAt"),
+                        }
+                    )
+                elif "pullRequest" not in item:
+                    output_items.append(
+                        {
+                            "number": item["number"],
+                            "title": item.get("title", ""),
+                            "state": str(item.get("state", "")).lower(),
+                            "user": item.get("author", {}),
+                            "labels": item.get("labels", []),
+                            "updated_at": item.get("updatedAt", ""),
+                            "html_url": item.get("url", ""),
+                            "comments": len(item.get("comments", [])),
+                        }
+                    )
+            return {"status": "ok", "output": json.dumps(output_items)}
         return {"status": "ok", "output": state["output"]}
 
     monkeypatch.setattr(github, "_gh_run", fake)
@@ -151,8 +187,8 @@ async def test_pull_list_real_without_checks_payload(gh_output) -> None:
 
     response = await github.list_pulls(_request(), "all", None)
 
-    assert response.status == "ok" and response.pulls
-    pull = response.pulls[0]
+    assert response.state == "loaded" and response.items
+    pull = response.items[0]
     assert pull.author and pull.head_ref and pull.base_ref
     # A lista não pede o rollup de checks (payload pesado); só o detalhe pede.
     assert (
@@ -182,8 +218,8 @@ async def test_pull_detail_real_maps_commits_files_comments_and_milestone(
 async def test_issue_list_and_detail_real(gh_output) -> None:
     gh_output("gh_issue_list.json")
     listed = await github.list_issues(_request(), "all", None)
-    assert listed.status == "ok" and listed.issues
-    assert listed.issues[0].author
+    assert listed.state == "loaded" and listed.items
+    assert listed.items[0].author
 
     gh_output("gh_issue_view.json")
     number = json.loads(_raw("gh_issue_view.json"))["number"]
